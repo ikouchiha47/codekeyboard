@@ -54,6 +54,14 @@ jobs:
         working-directory: CodeKeyboard
         run: npm ci
 
+      - name: Run unit tests
+        working-directory: CodeKeyboard
+        run: node --test __tests__/*.test.js
+
+      - name: TypeScript check
+        working-directory: CodeKeyboard
+        run: npx tsc --noEmit
+
       - name: Build Android APK (release)
         working-directory: CodeKeyboard/android
         run: ./gradlew assembleRelease

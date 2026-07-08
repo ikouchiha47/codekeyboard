@@ -39,3 +39,35 @@ export function effective(s: ModState) {
     fn: s.fn !== L.NONE,
   };
 }
+
+// ---- Layer state (LWR/RSE/ADJ/FUNC) ----
+
+export interface LayerState {
+  active: string;
+  latch: string | null;
+  lock: string | null;
+}
+
+export function createLayerState(): LayerState {
+  return { active: 'base', latch: null, lock: null };
+}
+
+export function toggleLayer(s: LayerState, layer: string): LayerState {
+  if (s.active === layer) {
+    if (s.lock === layer) {
+      return { active: 'base', latch: null, lock: null };
+    }
+    return { active: layer, latch: null, lock: layer };
+  }
+  if (s.lock !== null) {
+    return { active: layer, latch: null, lock: null };
+  }
+  return { active: layer, latch: layer, lock: null };
+}
+
+export function layerAfterKey(s: LayerState): LayerState {
+  if (s.latch !== null) {
+    return { active: 'base', latch: null, lock: s.lock };
+  }
+  return s;
+}

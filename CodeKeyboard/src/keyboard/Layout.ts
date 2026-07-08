@@ -4,31 +4,59 @@ export interface KeySpec {
   shift?: string;
   alt?: string;
   fn?: string;
+  c?: string;
   width: number;
-  /** Vertical stagger offset in row-height units (for column-staggered ergo layouts) */
   stagger?: number;
 }
 
-export interface LayoutDef {
-  name: string;
+export interface StandardLayer {
   rows: KeySpec[][];
-  /** Column index before which a split gap is rendered (for split ergo layouts) */
-  splitAfter?: number;
 }
 
-/** A split ergonomic layout with two independent halves */
-export interface SplitLayoutDef {
-  name: string;
-  split: true;
+export interface SplitLayer {
   left: KeySpec[][];
   right: KeySpec[][];
-  /** Column stagger per side (in row-height units) */
+}
+
+export interface StandardLayout {
+  type: 'standard';
+  name: string;
+  layers: Record<string, StandardLayer>;
+}
+
+export interface SplitLayout {
+  type: 'split';
+  name: string;
+  layers: Record<string, SplitLayer>;
   stagger: {left: number[]; right: number[]};
 }
 
-export const LAYOUT_QWERTY: LayoutDef = {
-  name: 'QWERTY',
-  splitAfter: undefined,
+export type KeyboardLayout = StandardLayout | SplitLayout;
+
+export const LAYER_NAMES = ['base', 'lower', 'raise', 'adj', 'func'] as const;
+export type LayerName = (typeof LAYER_NAMES)[number];
+
+export function isSplit(l: KeyboardLayout): l is SplitLayout {
+  return l.type === 'split';
+}
+
+export function isModifier(a: string): boolean {
+  return MODIFIERS.has(a);
+}
+
+export function isLayerAction(a: string): boolean {
+  return a === 'lower' || a === 'raise' || a === 'adj' || a === 'func';
+}
+
+export function isLetter(c: string): boolean {
+  return /^[a-zA-Z]$/.test(c);
+}
+
+export const MODIFIERS = new Set(['ctrl','alt','shift','caps','fn']);
+
+// ---- Standard QWERTY ----
+
+const LAYER_QWERTY_BASE: StandardLayer = {
   rows: [
     [
       {label:'Esc',  action:'escape', width:1},
@@ -87,82 +115,259 @@ export const LAYOUT_QWERTY: LayoutDef = {
   ],
 };
 
-/**
- * Sofle Choc v2 — true split ergonomic layout.
- * Two independent halves with column stagger, wide split gap, and thumb clusters.
- */
-const SOFLE_STAGGER = {left: [0, 0.25, 0.5, 0.75, 1.0, 1.0], right: [1.0, 0.75, 0.5, 0.25, 0, 0, 0]};
+export const LAYOUT_QWERTY: StandardLayout = {
+  type: 'standard',
+  name: 'QWERTY',
+  layers: {base: LAYER_QWERTY_BASE},
+};
 
-function s(label: string, col: number, staggerArr: number[], opts?: Partial<KeySpec>): KeySpec {
-  return {label, width: 1, stagger: staggerArr[col] ?? 0, ...opts};
+// ---- Sofle Choc v2 helper ----
+
+const SOFLE_STAGGER = {
+  left: [0, 0.25, 0.5, 0.75, 1.0, 1.0],
+  right: [1.0, 0.75, 0.5, 0.25, 0, 0, 0],
+};
+
+function k(label: string, col: number, stagger: number[], opts?: Partial<KeySpec>): KeySpec {
+  return {label, width: 1, stagger: stagger[col] ?? 0, ...opts};
 }
 
-export const LAYOUT_SOFLE: SplitLayoutDef = {
-  name: 'Sofle Choc v2',
-  split: true,
-  stagger: SOFLE_STAGGER,
+// ---- Sofle layer definitions ----
+
+const SOFLE_TARGET: Record<string, string> = {
+  Br:  'brightness',
+  Vol: 'volume',
+  Prev:'media-prev', Play:'media-play', Next:'media-next',
+  BT:  'bt', WiFi:'wifi',
+  Undo:'undo', Redo:'redo',
+  Cut: 'cut', Copy:'copy', Paste:'paste',
+  SelAll:'select-all',  Save:'save', Find:'find',
+  Repl:'replace',  Cmnt:'comment', Dup:'duplicate',
+  Fmt: 'format',
+};
+
+const THUMB_R = (stagger: number[]) => [
+  k('RSE', 0, stagger, {action:'raise', c:'layer-key'}),
+  k('Spc', 1, stagger, {action:'space', c:'thumb'}),
+  k('Spc', 2, stagger, {action:'space', c:'thumb'}),
+  k('ADJ', 3, stagger, {action:'adj', c:'layer-key'}),
+  k('FUNC',4, stagger, {action:'func', c:'func'}),
+  k('←',   5, stagger, {action:'arrow-left'}),
+  k('→',   6, stagger, {action:'arrow-right'}),
+];
+
+const THUMB_L = (stagger: number[]) => [
+  k('Ctrl', 0, stagger, {action:'ctrl', c:'thumb'}),
+  k('Alt',  1, stagger, {action:'alt', c:'thumb'}),
+  k('Spc',  2, stagger, {action:'space', c:'thumb'}),
+  k('LWR',  3, stagger, {action:'lower', c:'layer-key'}),
+  k('Cmd',  4, stagger, {}),
+];
+
+const THUMB_L_EMPTY = (stagger: number[]) => [
+  k('Ctrl', 0, stagger, {action:'ctrl', c:'thumb'}),
+  k('Alt',  1, stagger, {action:'alt', c:'thumb'}),
+  k('Spc',  2, stagger, {action:'space', c:'thumb'}),
+  k('LWR',  3, stagger, {action:'lower', c:'layer-key'}),
+  k('',     4, stagger, {}),
+];
+
+const LEFT_THUMB = (base: boolean, stagger: number[]) => base ? THUMB_L(stagger) : THUMB_L_EMPTY(stagger);
+
+const SOFLE_BASE: SplitLayer = {
   left: [
-    [s('Esc', 0, SOFLE_STAGGER.left, {action:'escape'}),
-     s('1', 1, SOFLE_STAGGER.left, {shift:'!', fn:'F1'}),
-     s('2', 2, SOFLE_STAGGER.left, {shift:'@', fn:'F2'}),
-     s('3', 3, SOFLE_STAGGER.left, {shift:'#', fn:'F3'}),
-     s('4', 4, SOFLE_STAGGER.left, {shift:'$', fn:'F4'}),
-     s('5', 5, SOFLE_STAGGER.left, {shift:'%', fn:'F5'})],
-    [s('Tab', 0, SOFLE_STAGGER.left, {action:'tab'}),
-     s('q', 1, SOFLE_STAGGER.left), s('w', 2, SOFLE_STAGGER.left),
-     s('e', 3, SOFLE_STAGGER.left), s('r', 4, SOFLE_STAGGER.left),
-     s('t', 5, SOFLE_STAGGER.left)],
-    [s('Caps', 0, SOFLE_STAGGER.left, {action:'caps'}),
-     s('a', 1, SOFLE_STAGGER.left), s('s', 2, SOFLE_STAGGER.left),
-     s('d', 3, SOFLE_STAGGER.left), s('f', 4, SOFLE_STAGGER.left),
-     s('g', 5, SOFLE_STAGGER.left)],
-    [s('Shift', 0, SOFLE_STAGGER.left, {action:'shift'}),
-     s('z', 1, SOFLE_STAGGER.left), s('x', 2, SOFLE_STAGGER.left),
-     s('c', 3, SOFLE_STAGGER.left), s('v', 4, SOFLE_STAGGER.left),
-     s('b', 5, SOFLE_STAGGER.left)],
-    [s('Ctrl', 0, SOFLE_STAGGER.left, {action:'ctrl'}),
-     s('Alt', 1, SOFLE_STAGGER.left, {action:'alt'}),
-     s('Cmd', 3, SOFLE_STAGGER.left, {action:'meta'}),
-     s('Spc', 4, SOFLE_STAGGER.left, {action:'space'}),
-     s('Spc', 5, SOFLE_STAGGER.left, {action:'space'})],
+    [k('Tab', 0, SOFLE_STAGGER.left, {action:'tab'}),
+     k('q', 1, SOFLE_STAGGER.left), k('w', 2, SOFLE_STAGGER.left),
+     k('e', 3, SOFLE_STAGGER.left), k('r', 4, SOFLE_STAGGER.left),
+     k('t', 5, SOFLE_STAGGER.left)],
+    [k('Caps',0, SOFLE_STAGGER.left, {action:'caps'}),
+     k('a', 1, SOFLE_STAGGER.left), k('s', 2, SOFLE_STAGGER.left),
+     k('d', 3, SOFLE_STAGGER.left), k('f', 4, SOFLE_STAGGER.left),
+     k('g', 5, SOFLE_STAGGER.left)],
+    [k('Shift',0, SOFLE_STAGGER.left, {action:'shift'}),
+     k('z', 1, SOFLE_STAGGER.left), k('x', 2, SOFLE_STAGGER.left),
+     k('c', 3, SOFLE_STAGGER.left), k('v', 4, SOFLE_STAGGER.left),
+     k('b', 5, SOFLE_STAGGER.left)],
+    LEFT_THUMB(true, SOFLE_STAGGER.left),
   ],
   right: [
-    [s('6', 0, SOFLE_STAGGER.right, {shift:'^', fn:'F6'}),
-     s('7', 1, SOFLE_STAGGER.right, {shift:'&', fn:'F7'}),
-     s('8', 2, SOFLE_STAGGER.right, {shift:'*', fn:'F8'}),
-     s('9', 3, SOFLE_STAGGER.right, {shift:'(', fn:'F9'}),
-     s('0', 4, SOFLE_STAGGER.right, {shift:')', fn:'F10'}),
-     s('-', 5, SOFLE_STAGGER.right, {shift:'_', fn:'F11'}),
-     s('=', 6, SOFLE_STAGGER.right, {shift:'+', fn:'F12'})],
-    [s('y', 0, SOFLE_STAGGER.right), s('u', 1, SOFLE_STAGGER.right),
-     s('i', 2, SOFLE_STAGGER.right), s('o', 3, SOFLE_STAGGER.right),
-     s('p', 4, SOFLE_STAGGER.right),
-     s('[', 5, SOFLE_STAGGER.right, {shift:'{'}), s(']', 6, SOFLE_STAGGER.right, {shift:'}'})],
-    [s('h', 0, SOFLE_STAGGER.right), s('j', 1, SOFLE_STAGGER.right),
-     s('k', 2, SOFLE_STAGGER.right), s('l', 3, SOFLE_STAGGER.right),
-     s(';', 4, SOFLE_STAGGER.right, {shift:':'}), s("'", 5, SOFLE_STAGGER.right, {shift:'"'}),
-     s('Enter', 6, SOFLE_STAGGER.right, {action:'enter'})],
-    [s('n', 0, SOFLE_STAGGER.right), s('m', 1, SOFLE_STAGGER.right),
-     s(',', 2, SOFLE_STAGGER.right, {shift:'<'}), s('.', 3, SOFLE_STAGGER.right, {shift:'>'}),
-     s('/', 4, SOFLE_STAGGER.right, {shift:'?'}),
-     s('Shift', 5, SOFLE_STAGGER.right, {action:'shift'}),
-     s('Bksp', 6, SOFLE_STAGGER.right, {action:'backspace'})],
-    [s('Spc', 0, SOFLE_STAGGER.right, {action:'space'}),
-     s('Spc', 1, SOFLE_STAGGER.right, {action:'space'}),
-     s('Fn', 2, SOFLE_STAGGER.right, {action:'fn'}),
-     s('Alt', 3, SOFLE_STAGGER.right, {action:'alt'}),
-     s('Ctrl', 4, SOFLE_STAGGER.right, {action:'ctrl'}),
-     s('←', 5, SOFLE_STAGGER.right, {action:'arrow-left'}),
-     s('→', 6, SOFLE_STAGGER.right, {action:'arrow-right'})],
+    [k('y', 0, SOFLE_STAGGER.right), k('u', 1, SOFLE_STAGGER.right),
+     k('i', 2, SOFLE_STAGGER.right), k('o', 3, SOFLE_STAGGER.right),
+     k('p', 4, SOFLE_STAGGER.right),
+     k('[', 5, SOFLE_STAGGER.right, {shift:'{'}), k(']', 6, SOFLE_STAGGER.right, {shift:'}'})],
+    [k('h', 0, SOFLE_STAGGER.right), k('j', 1, SOFLE_STAGGER.right),
+     k('k', 2, SOFLE_STAGGER.right), k('l', 3, SOFLE_STAGGER.right),
+     k(';', 4, SOFLE_STAGGER.right, {shift:':'}), k("'", 5, SOFLE_STAGGER.right, {shift:'"'}),
+     k('Enter',6, SOFLE_STAGGER.right, {action:'enter'})],
+    [k('n', 0, SOFLE_STAGGER.right), k('m', 1, SOFLE_STAGGER.right),
+     k(',', 2, SOFLE_STAGGER.right, {shift:'<'}), k('.', 3, SOFLE_STAGGER.right, {shift:'>'}),
+     k('/', 4, SOFLE_STAGGER.right, {shift:'?'}),
+     k('Shift',5, SOFLE_STAGGER.right, {action:'shift'}),
+     k('Bksp', 6, SOFLE_STAGGER.right, {action:'backspace'})],
+    THUMB_R(SOFLE_STAGGER.right),
   ],
 };
 
-export const MODIFIERS = new Set(['ctrl','alt','shift','caps','fn']);
+const SOFLE_LOWER: SplitLayer = {
+  left: [
+    [k('Esc',0, SOFLE_STAGGER.left, {action:'escape'}),
+     k('1', 1, SOFLE_STAGGER.left, {shift:'!'}),
+     k('2', 2, SOFLE_STAGGER.left, {shift:'@'}),
+     k('3', 3, SOFLE_STAGGER.left, {shift:'#'}),
+     k('4', 4, SOFLE_STAGGER.left, {shift:'$'}),
+     k('5', 5, SOFLE_STAGGER.left, {shift:'%'})],
+    [k('`', 0, SOFLE_STAGGER.left), k('-', 1, SOFLE_STAGGER.left),
+     k('=', 2, SOFLE_STAGGER.left), k('[', 3, SOFLE_STAGGER.left),
+     k(']', 4, SOFLE_STAGGER.left), k('\\',5, SOFLE_STAGGER.left)],
+    [k('~', 0, SOFLE_STAGGER.left), k('_', 1, SOFLE_STAGGER.left),
+     k('+', 2, SOFLE_STAGGER.left), k('{', 3, SOFLE_STAGGER.left),
+     k('}', 4, SOFLE_STAGGER.left), k('|', 5, SOFLE_STAGGER.left)],
+    LEFT_THUMB(false, SOFLE_STAGGER.left),
+  ],
+  right: [
+    [k('6', 0, SOFLE_STAGGER.right, {shift:'^'}),
+     k('7', 1, SOFLE_STAGGER.right, {shift:'&'}),
+     k('8', 2, SOFLE_STAGGER.right, {shift:'*'}),
+     k('9', 3, SOFLE_STAGGER.right, {shift:'('}),
+     k('0', 4, SOFLE_STAGGER.right, {shift:')'}),
+     k('-', 5, SOFLE_STAGGER.right), k('=', 6, SOFLE_STAGGER.right)],
+    [k('^', 0, SOFLE_STAGGER.right), k('&', 1, SOFLE_STAGGER.right),
+     k('*', 2, SOFLE_STAGGER.right), k('(', 3, SOFLE_STAGGER.right),
+     k(')', 4, SOFLE_STAGGER.right),
+     k('_', 5, SOFLE_STAGGER.right), k('+', 6, SOFLE_STAGGER.right)],
+    [k('!', 0, SOFLE_STAGGER.right), k('@', 1, SOFLE_STAGGER.right),
+     k('#', 2, SOFLE_STAGGER.right), k('$', 3, SOFLE_STAGGER.right),
+     k('%', 4, SOFLE_STAGGER.right),
+     k('Bksp',5, SOFLE_STAGGER.right, {action:'backspace'}),
+     k('Del', 6, SOFLE_STAGGER.right, {action:'delete'})],
+    THUMB_R(SOFLE_STAGGER.right),
+  ],
+};
 
-export function isModifier(a: string): boolean {
-  return MODIFIERS.has(a);
-}
+const SOFLE_RAISE: SplitLayer = {
+  left: [
+    [k('F1', 0, SOFLE_STAGGER.left), k('F2',1, SOFLE_STAGGER.left),
+     k('F3', 2, SOFLE_STAGGER.left), k('F4',3, SOFLE_STAGGER.left),
+     k('F5', 4, SOFLE_STAGGER.left), k('F6',5, SOFLE_STAGGER.left)],
+    [k('F7', 0, SOFLE_STAGGER.left), k('F8',1, SOFLE_STAGGER.left),
+     k('F9', 2, SOFLE_STAGGER.left), k('F10',3, SOFLE_STAGGER.left),
+     k('F11',4, SOFLE_STAGGER.left), k('F12',5, SOFLE_STAGGER.left)],
+    [k('PrtSc',0, SOFLE_STAGGER.left), k('ScrLk',1, SOFLE_STAGGER.left),
+     k('Pause',2, SOFLE_STAGGER.left), k('Ins',3, SOFLE_STAGGER.left),
+     k('Home',4, SOFLE_STAGGER.left), k('PgUp',5, SOFLE_STAGGER.left)],
+    LEFT_THUMB(false, SOFLE_STAGGER.left),
+  ],
+  right: [
+    [k('←', 0, SOFLE_STAGGER.right, {action:'arrow-left'}),
+     k('↓', 1, SOFLE_STAGGER.right, {action:'arrow-down'}),
+     k('↑', 2, SOFLE_STAGGER.right, {action:'arrow-up'}),
+     k('→', 3, SOFLE_STAGGER.right, {action:'arrow-right'}),
+     k('',  4, SOFLE_STAGGER.right), k('',5, SOFLE_STAGGER.right), k('',6, SOFLE_STAGGER.right)],
+    [k('Home',0, SOFLE_STAGGER.right), k('End',1, SOFLE_STAGGER.right),
+     k('PgUp',2, SOFLE_STAGGER.right), k('PgDn',3, SOFLE_STAGGER.right),
+     k('',    4, SOFLE_STAGGER.right), k('',5, SOFLE_STAGGER.right), k('',6, SOFLE_STAGGER.right)],
+    [k('Cut', 0, SOFLE_STAGGER.right, {action:'cut'}),
+     k('Copy',1, SOFLE_STAGGER.right, {action:'copy'}),
+     k('Paste',2, SOFLE_STAGGER.right, {action:'paste'}),
+     k('',    3, SOFLE_STAGGER.right), k('',4, SOFLE_STAGGER.right),
+     k('Del', 5, SOFLE_STAGGER.right, {action:'delete'}),
+     k('Bksp',6, SOFLE_STAGGER.right, {action:'backspace'})],
+    THUMB_R(SOFLE_STAGGER.right),
+  ],
+};
 
-export function isLetter(c: string): boolean {
-  return /^[a-zA-Z]$/.test(c);
+const SOFLE_ADJ: SplitLayer = {
+  left: [
+    [k('Esc',0, SOFLE_STAGGER.left, {action:'escape'}),
+     k('Br-',1, SOFLE_STAGGER.left, {action:'brightness-down'}),
+     k('Br+',2, SOFLE_STAGGER.left, {action:'brightness-up'}),
+     k('Mute',3, SOFLE_STAGGER.left, {action:'volume-mute'}),
+     k('Vol-',4, SOFLE_STAGGER.left, {action:'volume-down'}),
+     k('Vol+',5, SOFLE_STAGGER.left, {action:'volume-up'})],
+    [k('Prev',0, SOFLE_STAGGER.left, {action:'media-prev'}),
+     k('Play',1, SOFLE_STAGGER.left, {action:'media-play'}),
+     k('Next',2, SOFLE_STAGGER.left, {action:'media-next'}),
+     k('',   3, SOFLE_STAGGER.left), k('',4, SOFLE_STAGGER.left), k('',5, SOFLE_STAGGER.left)],
+    [k('', 0, SOFLE_STAGGER.left), k('',1, SOFLE_STAGGER.left),
+     k('', 2, SOFLE_STAGGER.left), k('',3, SOFLE_STAGGER.left),
+     k('', 4, SOFLE_STAGGER.left), k('',5, SOFLE_STAGGER.left)],
+    LEFT_THUMB(false, SOFLE_STAGGER.left),
+  ],
+  right: [
+    [k('', 0, SOFLE_STAGGER.right), k('',1, SOFLE_STAGGER.right),
+     k('', 2, SOFLE_STAGGER.right), k('',3, SOFLE_STAGGER.right),
+     k('', 4, SOFLE_STAGGER.right), k('',5, SOFLE_STAGGER.right), k('',6, SOFLE_STAGGER.right)],
+    [k('BT',0, SOFLE_STAGGER.right, {action:'bt'}),
+     k('WiFi',1, SOFLE_STAGGER.right, {action:'wifi'}),
+     k('',  2, SOFLE_STAGGER.right), k('',3, SOFLE_STAGGER.right),
+     k('',  4, SOFLE_STAGGER.right), k('',5, SOFLE_STAGGER.right), k('',6, SOFLE_STAGGER.right)],
+    [k('', 0, SOFLE_STAGGER.right), k('',1, SOFLE_STAGGER.right),
+     k('', 2, SOFLE_STAGGER.right), k('',3, SOFLE_STAGGER.right),
+     k('', 4, SOFLE_STAGGER.right),
+     k('Bksp',5, SOFLE_STAGGER.right, {action:'backspace'}),
+     k('Del', 6, SOFLE_STAGGER.right, {action:'delete'})],
+    THUMB_R(SOFLE_STAGGER.right),
+  ],
+};
+
+const SOFLE_FUNC: SplitLayer = {
+  left: [
+    [k('Undo',0, SOFLE_STAGGER.left, {action:'undo'}),
+     k('Redo',1, SOFLE_STAGGER.left, {action:'redo'}),
+     k('Cut', 2, SOFLE_STAGGER.left, {action:'cut'}),
+     k('Copy',3, SOFLE_STAGGER.left, {action:'copy'}),
+     k('Paste',4, SOFLE_STAGGER.left, {action:'paste'}),
+     k('SelAll',5, SOFLE_STAGGER.left, {action:'select-all'})],
+    [k('Save',0, SOFLE_STAGGER.left, {action:'save'}),
+     k('Find',1, SOFLE_STAGGER.left, {action:'find'}),
+     k('Repl',2, SOFLE_STAGGER.left, {action:'replace'}),
+     k('Cmnt',3, SOFLE_STAGGER.left, {action:'comment'}),
+     k('Dup', 4, SOFLE_STAGGER.left, {action:'duplicate'}),
+     k('Fmt', 5, SOFLE_STAGGER.left, {action:'format'})],
+    [k('Tab',0, SOFLE_STAGGER.left, {action:'tab'}),
+     k('Spc',1, SOFLE_STAGGER.left, {action:'space'}),
+     k('Ent',2, SOFLE_STAGGER.left, {action:'enter'}),
+     k('Esc',3, SOFLE_STAGGER.left, {action:'escape'}),
+     k('',   4, SOFLE_STAGGER.left), k('',5, SOFLE_STAGGER.left)],
+    LEFT_THUMB(false, SOFLE_STAGGER.left),
+  ],
+  right: [
+    [k('', 0, SOFLE_STAGGER.right), k('',1, SOFLE_STAGGER.right),
+     k('', 2, SOFLE_STAGGER.right), k('',3, SOFLE_STAGGER.right),
+     k('', 4, SOFLE_STAGGER.right), k('',5, SOFLE_STAGGER.right), k('',6, SOFLE_STAGGER.right)],
+    [k('', 0, SOFLE_STAGGER.right), k('',1, SOFLE_STAGGER.right),
+     k('', 2, SOFLE_STAGGER.right), k('',3, SOFLE_STAGGER.right),
+     k('', 4, SOFLE_STAGGER.right), k('',5, SOFLE_STAGGER.right), k('',6, SOFLE_STAGGER.right)],
+    [k('', 0, SOFLE_STAGGER.right), k('',1, SOFLE_STAGGER.right),
+     k('', 2, SOFLE_STAGGER.right), k('',3, SOFLE_STAGGER.right),
+     k('', 4, SOFLE_STAGGER.right),
+     k('Bksp',5, SOFLE_STAGGER.right, {action:'backspace'}),
+     k('Del', 6, SOFLE_STAGGER.right, {action:'delete'})],
+    THUMB_R(SOFLE_STAGGER.right),
+  ],
+};
+
+export const LAYOUT_SOFLE: SplitLayout = {
+  type: 'split',
+  name: 'Sofle Choc v2',
+  stagger: SOFLE_STAGGER,
+  layers: {
+    base: SOFLE_BASE,
+    lower: SOFLE_LOWER,
+    raise: SOFLE_RAISE,
+    adj: SOFLE_ADJ,
+    func: SOFLE_FUNC,
+  },
+};
+
+// Pluggable layout registry – add new layouts here
+export const LAYOUTS: Record<string, KeyboardLayout> = {
+  qwerty: LAYOUT_QWERTY,
+  sofle: LAYOUT_SOFLE,
+};
+
+export function getLayer(layout: KeyboardLayout, name: string): StandardLayer | SplitLayer {
+  const l = layout.layers[name];
+  if (!l) throw new Error(`Unknown layer "${name}" in layout "${layout.name}"`);
+  return l;
 }

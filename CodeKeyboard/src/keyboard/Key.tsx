@@ -5,7 +5,7 @@ import {
   Pressable,
   Animated,
 } from 'react-native';
-import {KeySpec, isModifier} from './Layout';
+import {KeySpec, isModifier, isLayerAction} from './Layout';
 
 interface Props {
   spec: KeySpec;
@@ -14,8 +14,10 @@ interface Props {
   onPress: (spec: KeySpec) => void;
 }
 
+const SPACE_CHAR = '\u2423';
+
 function displayLabel(s: string): string {
-  if (s === ' ') return '\u2423';
+  if (s === ' ') return SPACE_CHAR;
   return s;
 }
 
@@ -26,7 +28,9 @@ export const Key = React.memo(function Key({
   onPress,
 }: Props) {
   const scale = useRef(new Animated.Value(1)).current;
-  const isMod = isModifier(spec.action ?? '');
+  const action = spec.action ?? '';
+  const isMod = isModifier(action);
+  const isLayer = isLayerAction(action);
 
   const handlePressIn = useCallback(() => {
     Animated.spring(scale, {
@@ -42,6 +46,16 @@ export const Key = React.memo(function Key({
     }).start();
   }, [scale]);
 
+  const bg = locked
+    ? '#2d6b3f'
+    : latched
+    ? '#1e4a2f'
+    : isLayer
+    ? '#1a3a2a'
+    : isMod
+    ? '#252525'
+    : '#2c2c2c';
+
   return (
     <Pressable
       onPress={() => onPress(spec)}
@@ -55,17 +69,9 @@ export const Key = React.memo(function Key({
       <Animated.View
         style={[
           styles.inner,
-          {
-            transform: [{scale}],
-            backgroundColor: locked
-              ? '#264f78'
-              : latched
-              ? '#1e3a5f'
-              : isMod
-              ? '#252525'
-              : '#2c2c2c',
-          },
+          {backgroundColor: bg, transform: [{scale}]},
           latched && !locked && styles.latched,
+          isLayer && styles.layerKey,
         ]}>
         <Text style={styles.label}>{displayLabel(spec.label)}</Text>
         {spec.shift ? (
@@ -97,6 +103,9 @@ const styles = StyleSheet.create({
     borderColor: '#4a9eff',
   },
   locked: {},
+  layerKey: {
+    borderColor: '#2d6b3f',
+  },
   label: {
     color: '#e0e0e0',
     fontSize: 12,

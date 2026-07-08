@@ -1,27 +1,117 @@
 import React, {useState, useCallback, useRef} from 'react';
 import {View, TextInput, StyleSheet} from 'react-native';
-import {LayoutDef, SplitLayoutDef, KeySpec, isModifier, isLetter, LAYOUT_QWERTY, LAYOUT_SOFLE} from './Layout';
-import {ModState, L, createModState, toggleMod, clearLatched, effective} from './ModifierState';
+import {
+  KeyboardLayout, KeySpec, isModifier, isLetter, isLayerAction,
+  LAYOUT_SOFLE, isSplit, SplitLayout, StandardLayout, StandardLayer,
+  getLayer,
+} from './Layout';
+import {
+  ModState, L, createModState, toggleMod, clearLatched, effective,
+  LayerState, createLayerState, toggleLayer, layerAfterKey,
+} from './ModifierState';
 import {getSuggestions} from './Dictionary';
 import {Key} from './Key';
 import {SuggestionBar} from './SuggestionBar';
 
-type AnyLayout = LayoutDef | SplitLayoutDef;
-
-interface Props {
-  layout?: AnyLayout;
+interface ActionCtx {
+  text: string;
+  selStart: number;
+  mods: ModState;
+  layer: LayerState;
+  setText: (v: React.SetStateAction<string>) => void;
+  setSelStart: (v: React.SetStateAction<number>) => void;
+  setMods: (v: React.SetStateAction<ModState>) => void;
+  setLayer: (v: React.SetStateAction<LayerState>) => void;
+  setSuggestions: (v: React.SetStateAction<string[]>) => void;
+  inputRef: React.RefObject<TextInput | null>;
+  updateSuggestions: (val: string, pos: number) => void;
+  insertText: (t: string) => void;
+  moveCursor: (dir: number) => void;
 }
 
-function isSplit(l: AnyLayout): l is SplitLayoutDef {
-  return (l as SplitLayoutDef).split === true;
+type ActionHandler = (ctx: ActionCtx, spec: KeySpec) => void;
+
+const ACTION_REGISTRY: Record<string, ActionHandler> = {
+  backspace: ({text, selStart, setText, setSelStart, updateSuggestions}) => {
+    if (selStart <= 0) return;
+    setText(prev => {
+      const next = prev.substring(0, selStart - 1) + prev.substring(selStart);
+      setSelStart(selStart - 1);
+      updateSuggestions(next, selStart - 1);
+      return next;
+    });
+  },
+  delete: ({text, selStart, setText, setSelStart, updateSuggestions}) => {
+    if (selStart >= text.length) return;
+    setText(prev => {
+      const next = prev.substring(0, selStart) + prev.substring(selStart + 1);
+      updateSuggestions(next, selStart);
+      return next;
+    });
+  },
+  enter: ({selStart, setText, setSelStart, updateSuggestions}) => {
+    setText(prev => {
+      const next = prev.substring(0, selStart) + '\n' + prev.substring(selStart);
+      setSelStart(selStart + 1);
+      updateSuggestions(next, selStart + 1);
+      return next;
+    });
+  },
+  tab: ({insertText}) => insertText('    '),
+  space: ({insertText}) => insertText(' '),
+  escape: ({inputRef}) => inputRef.current?.blur(),
+  'arrow-left': ({moveCursor}) => moveCursor(-1),
+  'arrow-right': ({moveCursor}) => moveCursor(1),
+  'arrow-up': ({moveCursor}) => moveCursor(-10),
+  'arrow-down': ({moveCursor}) => moveCursor(10),
+};
+
+interface Props {
+  layout?: KeyboardLayout;
+}
+
+const ROW_HEIGHT = 48;
+const STAGGER_UNIT = 0.25;
+
+function renderRows(
+  inputRows: KeySpec[][],
+  prefix: string,
+  stagger: number[] | undefined,
+  mods: ModState,
+  layer: LayerState,
+  onPress: (spec: KeySpec) => void,
+) {
+  return inputRows.map((row, ri) => (
+    <View key={prefix + ri} style={styles.row}>
+      {row.filter(s => s.label !== '').map((spec, ci) => {
+        const action = spec.action ?? '';
+        const mod = action as keyof ModState;
+        const isMod = isModifier(action);
+        const isLayer = isLayerAction(action);
+        const latched = (isMod && mods[mod] === L.LATCHED) || (isLayer && layer.latch === action);
+        const locked = (isMod && mods[mod] === L.LOCKED) || (isLayer && layer.lock === action);
+        const staggerPx = stagger ? (stagger[ci] ?? 0) * ROW_HEIGHT * STAGGER_UNIT : 0;
+        return (
+          <View key={prefix + ri + '-' + ci} style={[styles.keyWrap, {marginTop: staggerPx}]}>
+            {spec.label !== '' && (
+              <Key spec={spec} latched={latched} locked={locked} onPress={onPress} />
+            )}
+          </View>
+        );
+      })}
+    </View>
+  ));
 }
 
 export function Keyboard({layout = LAYOUT_SOFLE}: Props) {
   const [mods, setMods] = useState<ModState>(createModState());
+  const [layer, setLayer] = useState<LayerState>(createLayerState());
   const [text, setText] = useState('');
   const [selStart, setSelStart] = useState(0);
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const inputRef = useRef<TextInput>(null);
+
+  const ctxRef = useRef<ActionCtx>(null!);
 
   const updateSuggestions = useCallback((val: string, pos: number) => {
     let start = pos;
@@ -37,9 +127,7 @@ export function Keyboard({layout = LAYOUT_SOFLE}: Props) {
         const after = prev.substring(selStart);
         const next = before + t + after;
         const newPos = selStart + t.length;
-        setTimeout(() => {
-          inputRef.current?.focus();
-        }, 0);
+        setTimeout(() => inputRef.current?.focus(), 0);
         setSelStart(newPos);
         updateSuggestions(next, newPos);
         return next;
@@ -47,18 +135,6 @@ export function Keyboard({layout = LAYOUT_SOFLE}: Props) {
     },
     [selStart, updateSuggestions],
   );
-
-  const backspace = useCallback(() => {
-    setText(prev => {
-      if (selStart <= 0) return prev;
-      const before = prev.substring(0, selStart - 1);
-      const after = prev.substring(selStart);
-      const next = before + after;
-      setSelStart(selStart - 1);
-      updateSuggestions(next, selStart - 1);
-      return next;
-    });
-  }, [selStart, updateSuggestions]);
 
   const moveCursor = useCallback(
     (dir: number) => {
@@ -105,49 +181,61 @@ export function Keyboard({layout = LAYOUT_SOFLE}: Props) {
       }),
   };
 
-  const handleKeyPress = useCallback(
-    (spec: KeySpec) => {
-      const action = spec.action ?? '';
+  const ctx: ActionCtx = {
+    text, selStart, mods, layer,
+    setText, setSelStart, setMods, setLayer, setSuggestions,
+    inputRef, updateSuggestions, insertText, moveCursor,
+  };
+  ctxRef.current = ctx;
 
-      if (isModifier(action)) {
-        setMods(prev => toggleMod(prev, action as keyof ModState));
-        return;
-      }
+  const handleKeyPress = useCallback((spec: KeySpec) => {
+    const c = ctxRef.current;
+    const action = spec.action ?? '';
 
-      const ef = effective(mods);
+    if (isModifier(action)) {
+      c.setMods(prev => toggleMod(prev, action as keyof ModState));
+      return;
+    }
 
-      if (action === 'backspace') { backspace(); return; }
-      if (action === 'enter') { insertText('\n'); return; }
-      if (action === 'tab') { insertText('    '); return; }
-      if (action === 'space') { insertText(' '); return; }
-      if (action === 'escape') { inputRef.current?.blur(); return; }
-      if (action === 'arrow-left') { moveCursor(-1); return; }
-      if (action === 'arrow-right') { moveCursor(1); return; }
-      if (action === 'arrow-up') { moveCursor(-10); return; }
-      if (action === 'arrow-down') { moveCursor(10); return; }
+    if (isLayerAction(action)) {
+      c.setLayer(prev => toggleLayer(prev, action));
+      return;
+    }
 
-      if (ef.ctrl) {
-        const fn = comboActions[spec.label.toLowerCase()];
-        if (fn) fn();
-        setMods(prev => clearLatched(prev));
-        return;
-      }
+    const handler = ACTION_REGISTRY[action];
+    if (handler) {
+      handler(c, spec);
+      c.setMods(prev => clearLatched(prev));
+      c.setLayer(prev => layerAfterKey(prev));
+      return;
+    }
 
-      let ch = spec.label;
-      if (ef.fn && spec.fn) ch = spec.fn;
-      else if (ef.alt && spec.alt) ch = spec.alt;
-      else if (ef.shift && spec.shift) ch = spec.shift;
+    const ef = effective(c.mods);
 
-      if (isLetter(ch)) {
-        const upper = (ef.shift && !ef.caps) || (!ef.shift && ef.caps);
-        ch = upper ? ch.toUpperCase() : ch.toLowerCase();
-      }
+    if (ef.ctrl) {
+      const fn = comboActions[spec.label.toLowerCase()];
+      if (fn) fn();
+      c.setMods(prev => clearLatched(prev));
+      return;
+    }
 
-      insertText(ch);
-      setMods(prev => clearLatched(prev));
-    },
-    [mods, insertText, backspace, moveCursor],
-  );
+    let ch = spec.label;
+    if (ef.fn && spec.fn) ch = spec.fn;
+    else if (ef.alt && spec.alt) ch = spec.alt;
+    else if (ef.shift && spec.shift) ch = spec.shift;
+
+    if (isLetter(ch)) {
+      const upper = (ef.shift && !ef.caps) || (!ef.shift && ef.caps);
+      ch = upper ? ch.toUpperCase() : ch.toLowerCase();
+    }
+
+    c.insertText(ch);
+    c.setMods(prev => clearLatched(prev));
+    c.setLayer(prev => layerAfterKey(prev));
+  }, []);
+
+  const layerName = layer.active;
+  const layerData = getLayer(layout, layerName);
 
   return (
     <View style={styles.container}>
@@ -174,14 +262,30 @@ export function Keyboard({layout = LAYOUT_SOFLE}: Props) {
         {isSplit(layout) ? (
           <View style={styles.splitContainer}>
             <View style={styles.half}>
-              {renderRows(layout.left, 'L')}
+              {renderRows(
+                (layerData as SplitLayout['layers'][string]).left,
+                'L',
+                (layout as SplitLayout).stagger.left,
+                mods, layer, handleKeyPress,
+              )}
             </View>
+            <View style={styles.gap} />
             <View style={styles.half}>
-              {renderRows(layout.right, 'R')}
+              {renderRows(
+                (layerData as SplitLayout['layers'][string]).right,
+                'R',
+                (layout as SplitLayout).stagger.right,
+                mods, layer, handleKeyPress,
+              )}
             </View>
           </View>
         ) : (
-          renderRows(layout.rows, '')
+          renderRows(
+            (layerData as StandardLayer).rows,
+            '',
+            undefined,
+            mods, layer, handleKeyPress,
+          )
         )}
       </View>
     </View>
@@ -219,11 +323,21 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: '#333',
   },
+  splitContainer: {
+    flexDirection: 'row',
+  },
+  half: {
+    flex: 1,
+  },
+  gap: {
+    width: 16,
+  },
   row: {
     flexDirection: 'row',
-    gap: 4,
+    gap: 3,
   },
   keyWrap: {
-    height: 48,
+    height: ROW_HEIGHT,
+    flex: 1,
   },
 });
