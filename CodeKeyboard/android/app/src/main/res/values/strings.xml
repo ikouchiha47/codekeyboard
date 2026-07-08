@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">CodeKeyboard</string>
+    <string name="ime_name">CodeKeyboard</string>
 </resources>

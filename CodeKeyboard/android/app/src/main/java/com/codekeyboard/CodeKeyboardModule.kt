@@ -12,6 +12,10 @@ class CodeKeyboardModule(reactContext: ReactApplicationContext) :
 
   var inputConnection: InputConnection? = null
 
+  init {
+    CodeKeyboardModuleHolder.module = this
+  }
+
   override fun getName(): String = "CodeKeyboardModule"
 
   @ReactMethod
@@ -21,12 +25,12 @@ class CodeKeyboardModule(reactContext: ReactApplicationContext) :
 
   @ReactMethod
   fun deleteBackward() {
-    inputConnection?.deleteSurrounding(1, 0)
+    inputConnection?.deleteSurroundingText(1, 0)
   }
 
   @ReactMethod
   fun deleteForward() {
-    inputConnection?.deleteSurrounding(0, 1)
+    inputConnection?.deleteSurroundingText(0, 1)
   }
 
   @ReactMethod

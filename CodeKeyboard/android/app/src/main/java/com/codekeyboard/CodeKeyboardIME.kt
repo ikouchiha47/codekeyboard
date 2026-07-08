@@ -26,13 +26,7 @@ class CodeKeyboardIME : InputMethodService() {
 
   override fun onStartInput(editorInfo: EditorInfo?, restarting: Boolean) {
     super.onStartInput(editorInfo, restarting)
-    val module = currentInputConnection?.let {
-      try {
-        val reactContext = (applicationContext as ReactApplication)
-          .reactHost
-        CodeKeyboardModuleHolder.module?.inputConnection = currentInputConnection
-      } catch (_: Exception) {}
-    }
+    CodeKeyboardModuleHolder.module?.inputConnection = currentInputConnection
   }
 
   override fun onDestroy() {
