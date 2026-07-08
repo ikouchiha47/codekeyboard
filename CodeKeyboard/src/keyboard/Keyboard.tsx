@@ -298,7 +298,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#111',
   },
   outputArea: {
-    height: 100,
+    flex: 1,
     margin: 6,
     borderRadius: 8,
     overflow: 'hidden',
