@@ -1,0 +1,772 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Codeboard Prototype</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    height: 100%; overflow: hidden;
+    background: #111; color: #ddd;
+    font-family: -apple-system, 'Segoe UI', Roboto, sans-serif;
+    -webkit-user-select: none; user-select: none;
+    touch-action: manipulation;
+  }
+  #app {
+    display: flex; flex-direction: column;
+    height: 100%; max-width: 700px; margin: 0 auto;
+    padding: 6px;
+  }
+  #output-area {
+    flex: 0 0 auto; height: 100px;
+    margin-bottom: 6px; border-radius: 8px; overflow: hidden;
+  }
+  #output-area textarea {
+    width: 100%; height: 100%;
+    background: #1a1a1a; color: #d4d4d4;
+    border: 1px solid #333; border-radius: 8px;
+    padding: 10px; font-size: 15px; font-family: 'Cascadia Code', 'Fira Code', 'JetBrains Mono', 'Consolas', monospace;
+    resize: none; outline: none; tab-size: 4;
+    line-height: 1.5;
+  }
+  #output-area textarea::selection { background: #264f78; }
+
+  #keyboard {
+    display: flex; flex-direction: column; gap: 5px;
+    padding: 6px; background: #1a1a1a; border-radius: 10px;
+    border: 1px solid #333;
+  }
+  .kb-row {
+    display: flex; gap: 4px;
+  }
+  .key {
+    display: flex; align-items: center; justify-content: center;
+    height: 46px; min-width: 0;
+    padding: 0 3px;
+    background: #2c2c2c; color: #e0e0e0;
+    border: none; border-radius: 6px;
+    font-size: 12px; font-weight: 500;
+    font-family: inherit;
+    cursor: pointer; position: relative;
+    transition: background 0.06s, transform 0.06s, box-shadow 0.06s;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.3);
+    outline: none;
+    flex: 1 1 0;
+  }
+  .key:active, .key.pressed {
+    background: #3a3a3a !important;
+    transform: scale(0.94);
+  }
+  .key.special {
+    background: #252525;
+    color: #4a9eff;
+  }
+  .key.special:active, .key.special.pressed {
+    background: #333 !important;
+  }
+
+  .key.latched {
+    box-shadow: 0 0 0 2px #4a9eff, 0 1px 2px rgba(0,0,0,0.3);
+  }
+  .key.locked {
+    background: #264f78 !important;
+    box-shadow: 0 0 0 2px #4a9eff;
+  }
+  .key.locked.special {
+    background: #1a3a5c !important;
+  }
+
+  .key .label { pointer-events: none; line-height: 1; }
+  .key .sub-label {
+    position: absolute; top: 2px; right: 4px;
+    font-size: 8px; color: #777;
+    pointer-events: none;
+  }
+
+  .key.w0 { flex: 0 0 0; padding: 0; margin: 0; overflow: hidden; height: 0; border: none; }
+  .key.w1 { flex: 1 1 0; }
+  .key.w1-25 { flex: 1.25 1 0; }
+  .key.w1-5 { flex: 1.5 1 0; }
+  .key.w1-75 { flex: 1.75 1 0; }
+  .key.w2 { flex: 2 1 0; }
+  .key.w2-5 { flex: 2.5 1 0; }
+  .key.w3 { flex: 3 1 0; }
+  .key.w4 { flex: 4 1 0; }
+  .key.w5 { flex: 5 1 0; }
+
+  .key.popup-show::after {
+    content: attr(data-popup);
+    position: absolute; bottom: calc(100% + 8px);
+    left: 50%; transform: translateX(-50%);
+    background: #333; color: #fff;
+    padding: 4px 10px; border-radius: 4px;
+    font-size: 18px; font-weight: 600;
+    white-space: nowrap;
+    pointer-events: none;
+    animation: popup-fade 0.2s ease-out;
+    z-index: 10;
+  }
+  @keyframes popup-fade {
+    from { opacity: 0; transform: translateX(-50%) scale(0.6); }
+    to { opacity: 1; transform: translateX(-50%) scale(1); }
+  }
+
+  #suggestions {
+    display: flex; gap: 6px; align-items: center;
+    padding: 4px 8px; margin-bottom: 4px;
+    min-height: 32px;
+    background: #1e1e1e; border-radius: 6px;
+    border: 1px solid #333;
+  }
+  #suggestions .sug {
+    flex: 1; text-align: center;
+    padding: 4px 8px; border-radius: 4px;
+    font-size: 13px; font-family: 'Consolas', monospace;
+    color: #999; background: transparent;
+    cursor: pointer; border: none; outline: none;
+    transition: background 0.08s, color 0.08s;
+  }
+  #suggestions .sug:active {
+    background: #333; color: #fff;
+  }
+  #suggestions .sug.match {
+    color: #d4d4d4;
+  }
+  #suggestions .sug.best {
+    color: #4a9eff; font-weight: 600;
+  }
+
+  #status-bar {
+    display: flex; gap: 10px; align-items: center;
+    padding: 3px 6px; margin-bottom: 3px;
+    font-size: 10px; color: #666;
+  }
+  #status-bar .mod-indicator {
+    padding: 2px 6px; border-radius: 3px;
+    font-weight: 600; font-size: 9px;
+    background: #222; color: #555;
+  }
+  #status-bar .mod-indicator.active {
+    background: #264f78; color: #7ab8ff;
+  }
+
+  @media (min-width: 500px) {
+    #app { padding: 10px; }
+    .key { height: 50px; font-size: 13px; border-radius: 7px; }
+    #keyboard { padding: 8px; gap: 5px; }
+    .kb-row { gap: 5px; }
+    .key .sub-label { font-size: 9px; top: 3px; right: 5px; }
+  }
+  @media (max-height: 600px) {
+    .key { height: 38px; font-size: 11px; }
+    #keyboard { gap: 3px; padding: 4px; }
+    .kb-row { gap: 3px; }
+    #output-area { height: 60px; }
+    #output-area textarea { font-size: 13px; }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="status-bar">
+    <span class="mod-indicator" id="ind-ctrl">Ctrl</span>
+    <span class="mod-indicator" id="ind-alt">Alt</span>
+    <span class="mod-indicator" id="ind-shift">Shift</span>
+    <span class="mod-indicator" id="ind-caps">Caps</span>
+    <span class="mod-indicator" id="ind-fn">Fn</span>
+  </div>
+  <div id="output-area">
+    <textarea id="input" placeholder="Type here..." autofocus></textarea>
+  </div>
+  <div id="suggestions">
+    <button class="sug" id="sug0"></button>
+    <button class="sug" id="sug1"></button>
+    <button class="sug" id="sug2"></button>
+  </div>
+  <div id="keyboard"></div>
+</div>
+
+<script>
+const L = { NONE:0, LATCHED:1, LOCKED:2 };
+
+const state = {
+  ctrl: L.NONE, alt: L.NONE, shift: L.NONE, caps: L.NONE, fn: L.NONE,
+  held: new Set(),
+  _lastTap: {},
+};
+
+function isLetter(c) { return /^[a-zA-Z]$/.test(c); }
+
+// Sofle v2 column-staggered layout
+// Stagger offset (in key-height units) per column
+const STAGGER = [0, 0.25, 0.5, 0.75, 1.0, 1.0, 1.0, 0.75, 0.5, 0.25, 0, 0, 0, 0];
+const SPLIT_AFTER = 6; // split gap after this column index
+
+function s(label, col, opts) {
+  return {k: label, stagger: STAGGER[col] || 0, w: 'w1', ...opts};
+}
+
+const ROWS = [
+  // Row 0 — Numbers
+  [
+    s('Esc', 0, {a:'escape'}),
+    s('`', 0, {s:'~', w:'w0'}),
+    s('1', 1, {s:'!', alt:'α', fn:'F1'}),
+    s('2', 2, {s:'@', alt:'β', fn:'F2'}),
+    s('3', 3, {s:'#', alt:'γ', fn:'F3'}),
+    s('4', 4, {s:'$', alt:'δ', fn:'F4'}),
+    s('5', 5, {s:'%', alt:'ε', fn:'F5'}),
+    s('6', 6, {s:'^', alt:'ζ', fn:'F6'}),
+    s('7', 7, {s:'&', alt:'η', fn:'F7'}),
+    s('8', 8, {s:'*', alt:'θ', fn:'F8'}),
+    s('9', 9, {s:'(', alt:'ι', fn:'F9'}),
+    s('0', 10, {s:')', alt:'κ', fn:'F10'}),
+    s('-', 11, {s:'_', alt:'–', fn:'F11'}),
+    s('=', 12, {s:'+', alt:'≈', fn:'F12'}),
+    s('Bksp', 13, {a:'backspace', w:'w1-5'}),
+  ],
+  // Row 1 — Top alpha
+  [
+    s('Tab', 0, {a:'tab'}),
+    s('q', 1), s('w', 2), s('e', 3), s('r', 4), s('t', 5),
+    s('y', 6), s('u', 7), s('i', 8), s('o', 9), s('p', 10),
+    s('[', 11, {s:'{'}), s(']', 12, {s:'}'}),
+    s('\\', 13, {s:'|'}),
+  ],
+  // Row 2 — Home row
+  [
+    s('Caps', 0, {a:'caps'}),
+    s('a', 1), s('s', 2), s('d', 3), s('f', 4), s('g', 5),
+    s('h', 6), s('j', 7), s('k', 8), s('l', 9),
+    s(';', 10, {s:':'}), s("'", 11, {s:'"'}),
+    s('Enter', 12, {a:'enter', w:'w1-5'}),
+    s('', 13, {w:'w0'}),
+  ],
+  // Row 3 — Bottom alpha
+  [
+    s('Shift', 0, {a:'shift'}),
+    s('z', 1), s('x', 2), s('c', 3), s('v', 4), s('b', 5),
+    s('n', 6), s('m', 7),
+    s(',', 8, {s:'<', alt:'≤'}),
+    s('.', 9, {s:'>', alt:'≥'}),
+    s('/', 10, {s:'?', alt:'÷'}),
+    s('Shift', 11, {a:'shift', w:'w1-5'}),
+    s('', 12, {w:'w0'}),
+    s('', 13, {w:'w0'}),
+  ],
+  // Row 4 — Thumb cluster + modifiers + arrows
+  [
+    s('Ctrl', 0, {a:'ctrl'}),
+    s('Alt', 1, {a:'alt'}),
+    s('Cmd', 2, {a:'meta'}),
+    s('Space', 3, {a:'space', w:'w3'}),
+    s('', 4, {w:'w0'}),
+    s('', 5, {w:'w0'}),
+    s('Fn', 6, {a:'fn'}),
+    s('Space', 7, {a:'space', w:'w3'}),
+    s('', 8, {w:'w0'}),
+    s('', 9, {w:'w0'}),
+    s('Alt', 10, {a:'alt'}),
+    s('Ctrl', 11, {a:'ctrl'}),
+    s('←', 12, {a:'arrow-left'}),
+    s('↑', 13, {a:'arrow-up'}),
+    s('↓', 14, {a:'arrow-down'}),
+    s('→', 15, {a:'arrow-right'}),
+  ],
+];
+
+const textarea = document.getElementById('input');
+const keyboardEl = document.getElementById('keyboard');
+
+function displayChar(plain) {
+  if (plain === ' ') return '\u2423';
+  if (plain === 'Tab') return '\u21B9';
+  if (plain === 'Enter') return '\u23CE';
+  return plain;
+}
+
+const W_CLASSES = {
+  'w1': 'w1', 'w1-25': 'w1-25', 'w1-5': 'w1-5', 'w1-75': 'w1-75',
+  'w2': 'w2', 'w2-5': 'w2-5', 'w3': 'w3', 'w4': 'w4', 'w5': 'w5',
+};
+
+function buildKeyboard() {
+  const keyH = 46; // key height in px
+  for (const row of ROWS) {
+    const rowEl = document.createElement('div');
+    rowEl.className = 'kb-row';
+
+    let colIdx = 0;
+    for (const spec of row) {
+      const kH = keyH * ((spec.stagger || 0) + (spec.w === 'w0' ? 0 : 1));
+      const key = document.createElement('button');
+      key.className = 'key';
+      key.classList.add(W_CLASSES[spec.w] || 'w1');
+
+      if (spec.stagger) {
+        key.style.marginTop = (spec.stagger * keyH) + 'px';
+      }
+
+      if (colIdx === SPLIT_AFTER) {
+        key.style.marginLeft = '16px';
+      }
+
+      const isMod = ['ctrl','alt','shift','caps','fn'].includes(spec.a);
+      if (isMod) key.classList.add('special');
+
+      const label = document.createElement('span');
+      label.className = 'label';
+      label.textContent = displayChar(spec.k);
+      key.appendChild(label);
+
+      if ((spec.s && spec.s !== spec.k.toUpperCase()) || spec.alt) {
+        const sub = document.createElement('span');
+        sub.className = 'sub-label';
+        sub.textContent = spec.s || '';
+        key.appendChild(sub);
+      }
+
+      key.dataset.key = spec.k;
+      key.dataset.action = spec.a || '';
+      if (spec.s) key.dataset.shift = spec.s;
+      if (spec.alt) key.dataset.alt = spec.alt;
+      if (spec.fn) key.dataset.fn = spec.fn;
+
+      key.addEventListener('pointerdown', onKeyDown);
+      key.addEventListener('pointerup', onKeyUp);
+      key.addEventListener('pointerleave', onKeyLeave);
+
+      rowEl.appendChild(key);
+      colIdx++;
+    }
+    keyboardEl.appendChild(rowEl);
+  }
+}
+
+let repeatTimer = null;
+let repeatKey = null;
+
+function onKeyDown(e) {
+  e.preventDefault();
+  const key = e.currentTarget;
+  key.setPointerCapture(e.pointerId);
+
+  const action = key.dataset.action;
+
+  if (isModifier(action)) {
+    handleModifierDown(key, action);
+    return;
+  }
+
+  key.classList.add('pressed');
+  showPopup(key);
+
+  executeKey(key);
+  clearLatchedModifiers();
+
+  if (['backspace','arrow-left','arrow-right','arrow-up','arrow-down'].includes(action)) {
+    repeatKey = key;
+    repeatTimer = setTimeout(() => {
+      repeatTimer = setInterval(() => {
+        if (repeatKey) executeKey(repeatKey);
+      }, 50);
+    }, 250);
+  }
+}
+
+function onKeyUp(e) {
+  const key = e.currentTarget;
+  try { key.releasePointerCapture(e.pointerId); } catch(_) {}
+  key.classList.remove('pressed');
+
+  const action = key.dataset.action;
+  if (isModifier(action)) {
+    handleModifierUp(key, action);
+    return;
+  }
+
+  if (repeatTimer) {
+    clearInterval(repeatTimer);
+    clearTimeout(repeatTimer);
+    repeatTimer = null; repeatKey = null;
+  }
+}
+
+function onKeyLeave(e) {
+  const key = e.currentTarget;
+  key.classList.remove('pressed');
+  try { key.releasePointerCapture(e.pointerId); } catch(_) {}
+  if (repeatTimer) {
+    clearInterval(repeatTimer);
+    clearTimeout(repeatTimer);
+    repeatTimer = null; repeatKey = null;
+  }
+}
+
+function isModifier(a) {
+  return ['ctrl','alt','shift','caps','fn'].includes(a);
+}
+
+function handleModifierDown(key, action) {
+  state.held.add(action);
+  const wasLatched = state[action] === L.LATCHED;
+  if (state[action] === L.NONE) state[action] = L.LATCHED;
+  else if (state[action] === L.LATCHED) state[action] = L.LOCKED;
+  else if (state[action] === L.LOCKED) state[action] = L.NONE;
+  updateModUI();
+}
+
+function handleModifierUp(key, action) {
+  state.held.delete(action);
+  updateModUI();
+}
+
+function clearLatchedModifiers() {
+  for (const m of ['ctrl','alt','shift','caps']) {
+    if (state[m] === L.LATCHED) state[m] = L.NONE;
+  }
+  updateModUI();
+}
+
+function getEffectiveModifiers() {
+  return {
+    ctrl: state.ctrl !== L.NONE,
+    alt: state.alt !== L.NONE,
+    shift: state.shift !== L.NONE,
+    caps: state.caps !== L.NONE,
+    fn: state.fn !== L.NONE,
+  };
+}
+
+function resolveChar(key) {
+  const mod = getEffectiveModifiers();
+  let ch = key.dataset.key;
+
+  if (mod.fn && key.dataset.fn) return key.dataset.fn;
+  if (mod.alt && key.dataset.alt) return key.dataset.alt;
+  if (mod.shift && key.dataset.shift) ch = key.dataset.shift;
+
+  if (isLetter(ch)) {
+    const upper = (mod.shift && !mod.caps) || (!mod.shift && mod.caps);
+    ch = upper ? ch.toUpperCase() : ch.toLowerCase();
+  }
+  return ch;
+}
+
+function executeKey(key) {
+  const action = key.dataset.action;
+  const mod = getEffectiveModifiers();
+
+  if (action === 'backspace') { backspace(); return; }
+  if (action === 'enter') { insertText('\n'); return; }
+  if (action === 'tab') { insertText('    '); return; }
+  if (action === 'space') { insertText(' '); return; }
+  if (action === 'escape') { textarea.blur(); return; }
+  if (action === 'arrow-left') { moveCursor(-1); return; }
+  if (action === 'arrow-right') { moveCursor(1); return; }
+  if (action === 'arrow-up') { moveLine(-1); return; }
+  if (action === 'arrow-down') { moveLine(1); return; }
+  if (isModifier(action)) return;
+
+  if (mod.ctrl) { handleCtrlCombo(key.dataset.key); return; }
+  insertText(resolveChar(key));
+}
+
+const CTRL_COMBOS = {
+  'a': () => textarea.select(),
+  'c': () => copySelection(),
+  'v': () => pasteClipboard(),
+  'x': () => cutSelection(),
+  'z': () => {},
+  's': () => {},
+  'f': () => {},
+  'd': () => duplicateLine(),
+  '/': () => toggleComment(),
+};
+
+function handleCtrlCombo(baseKey) {
+  const fn = CTRL_COMBOS[baseKey.toLowerCase()];
+  if (fn) fn();
+}
+
+function copySelection() {
+  const sel = textarea.value.substring(textarea.selectionStart, textarea.selectionEnd);
+  if (sel) navigator.clipboard.writeText(sel).catch(() => {});
+}
+
+function cutSelection() {
+  const s = textarea.selectionStart;
+  const e = textarea.selectionEnd;
+  if (s !== e) {
+    const sel = textarea.value.substring(s, e);
+    navigator.clipboard.writeText(sel).catch(() => {});
+    textarea.value = textarea.value.substring(0, s) + textarea.value.substring(e);
+    textarea.selectionStart = textarea.selectionEnd = s;
+  }
+}
+
+function pasteClipboard() {
+  navigator.clipboard.readText().then(t => insertText(t)).catch(() => {});
+}
+
+function duplicateLine() {
+  const val = textarea.value;
+  let start = textarea.selectionStart;
+  let lineStart = val.lastIndexOf('\n', start - 1) + 1;
+  if (lineStart === -1) lineStart = 0;
+  let lineEnd = val.indexOf('\n', start);
+  if (lineEnd === -1) lineEnd = val.length;
+  const line = val.substring(lineStart, lineEnd);
+  textarea.value = val.substring(0, lineEnd) + '\n' + line + val.substring(lineEnd);
+  textarea.selectionStart = textarea.selectionEnd = start + line.length + 1;
+}
+
+function toggleComment() {
+  const val = textarea.value;
+  const start = textarea.selectionStart;
+  let lineStart = val.lastIndexOf('\n', start - 1) + 1;
+  if (lineStart === -1) lineStart = 0;
+  const lineEnd = val.indexOf('\n', start);
+  const end = lineEnd === -1 ? val.length : lineEnd;
+  const line = val.substring(lineStart, end);
+  const trimmed = line.trimStart();
+  const indent = line.substring(0, line.indexOf(trimmed));
+  if (trimmed.startsWith('//')) {
+    textarea.value = val.substring(0, lineStart) + indent + trimmed.substring(2) + val.substring(end);
+    textarea.selectionStart = textarea.selectionEnd = Math.max(lineStart, start - 2);
+  } else {
+    textarea.value = val.substring(0, lineStart) + indent + '//' + trimmed + val.substring(end);
+    textarea.selectionStart = textarea.selectionEnd = start + 2;
+  }
+}
+
+function insertText(t) {
+  const start = textarea.selectionStart;
+  const end = textarea.selectionEnd;
+  const val = textarea.value;
+  textarea.value = val.substring(0, start) + t + val.substring(end);
+  textarea.selectionStart = textarea.selectionEnd = start + t.length;
+  textarea.dispatchEvent(new Event('input', { bubbles: true }));
+  textarea.focus();
+}
+
+function backspace() {
+  const start = textarea.selectionStart;
+  const end = textarea.selectionEnd;
+  if (start !== end) {
+    textarea.value = textarea.value.substring(0, start) + textarea.value.substring(end);
+    textarea.selectionStart = textarea.selectionEnd = start;
+  } else if (start > 0) {
+    textarea.value = textarea.value.substring(0, start - 1) + textarea.value.substring(start);
+    textarea.selectionStart = textarea.selectionEnd = start - 1;
+  }
+  textarea.dispatchEvent(new Event('input', { bubbles: true }));
+  textarea.focus();
+}
+
+function moveCursor(dir) {
+  const pos = textarea.selectionStart + dir;
+  if (pos >= 0 && pos <= textarea.value.length) {
+    textarea.selectionStart = textarea.selectionEnd = pos;
+  }
+  textarea.focus();
+}
+
+function moveLine(dir) {
+  const val = textarea.value;
+  const pos = textarea.selectionStart;
+  let lineStart = 0; let lineIdx = 0;
+  for (let i = 0; i <= pos; i++) {
+    if (val[i] === '\n') { lineStart = i + 1; lineIdx++; }
+  }
+  const col = pos - lineStart;
+  const target = lineIdx + dir;
+  if (target < 0 || target >= val.split('\n').length) return;
+  let targetStart = 0;
+  for (let i = 0; i < target; i++) {
+    targetStart = val.indexOf('\n', targetStart) + 1;
+  }
+  let targetEnd = val.indexOf('\n', targetStart);
+  if (targetEnd === -1) targetEnd = val.length;
+  textarea.selectionStart = textarea.selectionEnd = Math.min(col, targetEnd - targetStart) + targetStart;
+  textarea.focus();
+}
+
+function showPopup(key) {
+  const action = key.dataset.action;
+  if (isModifier(action)) return;
+  const mod = getEffectiveModifiers();
+  let ch;
+  if (mod.ctrl) {
+    ch = 'Ctrl+' + key.dataset.key.toUpperCase();
+  } else {
+    ch = resolveChar(key);
+  }
+  key.dataset.popup = ch;
+  key.classList.add('popup-show');
+  setTimeout(() => key.classList.remove('popup-show'), 200);
+}
+
+function updateModUI() {
+  const names = ['ctrl','alt','shift','caps','fn'];
+  for (const n of names) {
+    const el = document.getElementById('ind-' + n);
+    el.className = 'mod-indicator';
+    if (state[n] === L.LATCHED || state[n] === L.LOCKED) el.classList.add('active');
+    if (state[n] === L.LOCKED) { el.style.background = '#4a9eff'; el.style.color = '#fff'; }
+    else { el.style.background = ''; el.style.color = ''; }
+  }
+
+  const keys = keyboardEl.querySelectorAll('.key');
+  for (const key of keys) {
+    const a = key.dataset.action;
+    key.classList.remove('latched','locked');
+    if (isModifier(a) && state[a] === L.LATCHED) key.classList.add('latched');
+    if (isModifier(a) && state[a] === L.LOCKED) key.classList.add('locked');
+  }
+}
+
+// ── Suggestion Bar ──────────────────────────────────────
+
+const DICT = [
+  // Programming keywords
+  'function','const','let','var','return','import','export','default','class','interface',
+  'type','extends','implements','async','await','if','else','for','while','do','switch',
+  'case','break','continue','try','catch','finally','throw','new','delete','typeof',
+  'instanceof','void','yield','from','of','in','as','is','keyof','readonly','static',
+  'public','private','protected','abstract','enum','module','namespace','declare','get','set',
+  'then','catch','finally','true','false','null','undefined','NaN','this','super',
+  'map','filter','reduce','forEach','find','some','every','includes','push','pop','shift',
+  'unshift','splice','slice','concat','join','split','indexOf','lastIndexOf','toString',
+  'require','module','exports','console','log','error','warn','debug','info',
+  'document','window','global','process','Buffer','__dirname','__filename',
+  'String','Number','Boolean','Array','Object','Date','RegExp','Error','Promise',
+  'JSON','Math','parseInt','parseFloat','isNaN','isFinite','encodeURI','decodeURI',
+  'setTimeout','setInterval','clearTimeout','clearInterval','requestAnimationFrame',
+  'useState','useEffect','useRef','useMemo','useCallback','useContext','useReducer',
+  'useLayoutEffect','useImperativeHandle','useDebugValue',
+  'React','Component','Fragment','createElement','cloneElement','createRef',
+  'useState','useEffect','useRef','useMemo','useCallback',
+  'View','Text','StyleSheet','TouchableOpacity','FlatList','ScrollView',
+  'return','import','from','const','let','function','class','extends',
+  'int','float','double','char','bool','void','string','long','short',
+  'public','static','void','main','args','print','println',
+  'def','self','None','True','False','class','import','from','as',
+  'fn','mut','let','impl','struct','enum','trait','pub','use','mod',
+  'package','main','fmt','println',
+  // English words
+  'the','this','that','and','but','for','not','you','all','can','had','her','was',
+  'one','our','out','has','are','have','been','more','when','what','which','their',
+  'them','some','than','then','also','about','could','would','should','after',
+  'where','while','because','before','between','other','every','still','such',
+  'only','own','same','just','also','very','well','here','there','these','those',
+  'first','last','next','new','old','good','high','low','long','short','small',
+  'large','great','big','little','right','wrong','hard','easy','early','late',
+  'name','time','way','thing','place','year','day','week','month','part','kind',
+  'hand','life','world','work','home','room','door','line','end','start','side',
+  'head','eye','face','body','water','air','light','food','man','woman','child',
+  'word','number','order','power','state','system','group','member','point',
+  'value','level','type','form','area','class','group','field','case','data',
+  'code','text','file','name','line','set','list','type','sort','move','make',
+  'take','give','find','keep','hold','show','tell','ask','need','help','turn',
+  'look','call','use','get','put','set','let','run','go','come','see','know',
+  'think','want','mean','feel','seem','make','take','give','find','keep','hold',
+  'show','tell','ask','need','help','turn','look','call','use','get','put','set',
+  'let','run','go','come','see','know','think','want','mean','feel','seem',
+  'change','follow','start','follow','allow','bring','carry','create','develop',
+  'include','provide','support','accept','allow','begin','consider','continue',
+  'decide','expect','happen','help','increase','lead','learn','leave','live',
+  'move','offer','open','plan','play','produce','reach','read','ready','realize',
+  'remember','return','serve','start','stop','study','talk','travel','try','turn',
+  'understand','use','wait','walk','want','watch','work','worry','write',
+  // Number words
+  'zero','one','two','three','four','five','six','seven','eight','nine','ten',
+  'first','second','third','last','next','previous','current',
+  // Common coding terms
+  'callback','promise','resolve','reject','fulfill','pending','settled',
+  'buffer','stream','chunk','source','destination','pipe','transform',
+  'middleware','handler','route','request','response','header','body','params',
+  'query','session','cookie','token','auth','login','logout','register','user',
+  'admin','config','setting','option','preference','locale','theme','layout',
+  'render','mount','unmount','update','patch','diff','merge','rebase','clone',
+  'fetch','push','pull','commit','branch','tag','release','deploy','build',
+  'compile','transpile','bundle','pack','minify','uglify','lint','format',
+  'test','spec','assert','expect','describe','it','before','after','mock',
+  'spy','stub','fixture','suite','runner','coverage','benchmark',
+  'array','object','string','number','boolean','symbol','null','undefined',
+  'integer','float','decimal','character','byte','bit','binary','hex','octal',
+  'list','tuple','set','map','dictionary','stack','queue','tree','graph',
+  'node','edge','vertex','leaf','root','parent','child','sibling','depth',
+  'width','height','length','size','count','index','key','value','entry',
+  'error','exception','throw','catch','finally','debug','warn','info','trace',
+  'access','modify','update','delete','remove','insert','append','prepend',
+  'sort','search','filter','transform','aggregate','reduce','fold','scan',
+];
+
+const sugEls = [
+  document.getElementById('sug0'),
+  document.getElementById('sug1'),
+  document.getElementById('sug2'),
+];
+
+function getCurrentWord() {
+  const val = textarea.value;
+  const pos = textarea.selectionStart;
+  let start = pos;
+  while (start > 0 && /[a-zA-Z0-9_]/.test(val[start - 1])) start--;
+  let end = pos;
+  while (end < val.length && /[a-zA-Z0-9_]/.test(val[end])) end++;
+  return { word: val.substring(start, end).toLowerCase(), start, end };
+}
+
+function updateSuggestions() {
+  const { word, start, end } = getCurrentWord();
+  if (!word) {
+    for (const el of sugEls) { el.textContent = ''; el.className = 'sug'; }
+    return;
+  }
+
+  const matches = DICT.filter(d => d.startsWith(word) && d !== word).slice(0, 3);
+  for (let i = 0; i < 3; i++) {
+    const el = sugEls[i];
+    if (i < matches.length) {
+      el.textContent = matches[i];
+      el.className = 'sug match' + (i === 0 ? ' best' : '');
+    } else {
+      el.textContent = '';
+      el.className = 'sug';
+    }
+  }
+}
+
+function applySuggestion(sug) {
+  const { word, start, end } = getCurrentWord();
+  const val = textarea.value;
+  textarea.value = val.substring(0, start) + sug + ' ' + val.substring(end);
+  textarea.selectionStart = textarea.selectionEnd = start + sug.length + 1;
+  textarea.focus();
+  updateSuggestions();
+  textarea.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
+for (let i = 0; i < 3; i++) {
+  sugEls[i].addEventListener('click', () => {
+    const sug = sugEls[i].textContent;
+    if (sug) applySuggestion(sug);
+  });
+}
+
+textarea.addEventListener('input', updateSuggestions);
+textarea.addEventListener('keyup', updateSuggestions);
+
+buildKeyboard();
+textarea.focus();
+updateSuggestions();
+
+document.addEventListener('keydown', (e) => {
+  if (e.ctrlKey && (e.key === 'z' || e.key === 's')) e.preventDefault();
+});
+</script>
+</body>
+</html>
