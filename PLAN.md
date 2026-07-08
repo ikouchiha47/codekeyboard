@@ -50,41 +50,72 @@ A fully functional Android keyboard app for coders, built with React Native. Inc
    - Use `useWindowDimensions` for dynamic sizing.
 3. **Suggestion Bar**.
    - Fixed row above the keyboard showing 3 word predictions.
-   - `@react-native-community/datetimepicker` style pill buttons.
-   - **Language packs** — word lists loaded from external files, not hardcoded.
-   - Each language pack is a compressed trie file (~50k words) shipped as a separate asset or downloaded on first use.
-   - Pack format: serialized trie (JSON or binary) for O(n) prefix lookup.
+   - Pill-style buttons.
+   - **Language packs** — word lists loaded from external files, never hardcoded.
    - Tap suggestion → replace current word in buffer.
-4. **Slide Typing (Gesture Typing)**.
+
+4. **Trie – Word Lookup Engine**.
+   - A trie (prefix tree) is built from each language pack at load time.
+   - **Trie structure**: each node stores a map of `{nextChar -> childNode}` and a boolean `isEnd`.
+   - **Lookup**: walk the trie character-by-character from the root. At the final node, DFS to collect up to 3 completions.
+   - **Packing format**: the trie is serialized as a flat array of nodes. Each node:
+     ```
+     { c: char, children: [childIndex], isEnd: bool }
+     ```
+   - The packed file is bundled as an app asset (e.g. `assets/lang/en.trie`).
+   - At startup, the app reads the file from disk and deserializes into memory.
+   - **Build script** (`tools/build-trie.js`): reads a plain-text word list (one per line), builds the trie, serializes to `.trie`.
+   - Word list sources: [SCOWL](https://github.com/en-wl/wordlist), [dwyl/english-words](https://github.com/dwyl/english-words), LibreOffice Hunspell dictionaries, plus a curated programming-keywords list.
+   - Zero hardcoded words in React Native source code.
+5. **Slide Typing (Gesture Typing)**.
    - `PanResponder` or `react-native-gesture-handler` on the keyboard surface.
    - Track pointer movement across key boundaries using key-center hit testing.
    - Record key sequence from touch path.
    - Use gesture-to-word matching via levenshtein distance on the path against dictionary.
    - Show predicted word in suggestion bar as user slides.
    - On lift: insert best-match word.
-5. **Android IME Integration**.
+6. **Android IME Integration**.
    - Register as an input method via `InputMethodService`.
    - Use a hidden `TextInput` with `showSoftInputOnFocus={false}`.
    - Send key events to the focused text field via `InputConnection`.
-6. **Modifier State Management**.
+7. **Modifier State Management**.
    - `useReducer` for state: ctrl, alt, shift, caps, fn, currentLayer.
    - Key press → resolve character → insert/replace/delete.
-7. **Key Repeat**.
+8. **Key Repeat**.
    - `onPressIn` starts interval, `onPressOut` clears it.
-8. **Word Prediction / ML (Future)**.
+9. **Word Prediction / ML (Future)**.
    - Phase 2a: dictionary-based prefix matching (from language packs).
    - Phase 2b: n-gram language model built from user's typed corpus.
    - Phase 2c: small on-device ML model (TFLite) for next-word prediction.
    - Model trained on code comments and technical prose.
    - Language packs, dictionaries, and ML models all loaded as external assets — zero hardcoded data.
-9. **Rendering Performance**.
+10. **Rendering Performance**.
    - Use `React.memo` on keys, `Animated` for press feedback.
    - Avoid re-renders of full layout on modifier toggle.
-10. **Build APK**.
+11. **Build APK**.
     - `npx react-native build-android` → unsigned APK or AAB.
 
 ### Deliverable
 - Android APK that can be sideloaded and set as default keyboard.
+
+---
+
+## Language Pack Sourcing
+
+### Can we use Google's language packs?
+**No.** Google's language packs (used by Gboard) are proprietary, closed-format, and stored inside Gboard's private data directory. They are not licensed for redistribution or use in third-party apps.
+
+### Sources we *can* use
+
+| Source | License | Words | Format |
+|---|---|---|---|
+| [SCOWL](https://github.com/en-wl/wordlist) | LGPL / BSD | 60k+ | Plain text |
+| [dwyl/english-words](https://github.com/dwyl/english-words) | Public domain | 466k | Text |
+| [LibreOffice Hunspell dicts](https://github.com/LibreOffice/dictionaries) | LGPL / MPL | Varies | .dic/.aff |
+| [Android AOSP](https://android.googlesource.com/platform/packages/inputmethods/LatinIME/+/refs/heads/main/dictionaries/) | Apache 2.0 | Varies | Binary (can convert) |
+| Custom code-keywords list | Curated by us | ~500 | Manual |
+
+**Pipeline**: raw word list → `tools/build-trie.js` → `.trie` file → bundled as app asset.
 
 ---
 
