@@ -5,23 +5,23 @@ import android.view.View
 import android.view.inputmethod.EditorInfo
 import android.os.Bundle
 import com.facebook.react.ReactApplication
-import com.facebook.react.ReactRootView
 
 class CodeKeyboardIME : InputMethodService() {
 
-  private lateinit var reactRootView: ReactRootView
+  private var reactSurface: com.facebook.react.interfaces.fabric.ReactSurface? = null
 
   override fun onCreateInputView(): View {
     val reactHost = (applicationContext as ReactApplication).reactHost
-    reactRootView = ReactRootView(this)
 
     val props = Bundle().apply {
       putString("mode", "ime")
     }
 
-    reactRootView.startReactApplication(reactHost, "CodeKeyboard", props)
+    val surface = reactHost!!.createSurface(this, "CodeKeyboard", props)
+    surface.start()
+    reactSurface = surface
 
-    return reactRootView
+    return surface.view!!
   }
 
   override fun onStartInput(editorInfo: EditorInfo?, restarting: Boolean) {
@@ -30,7 +30,7 @@ class CodeKeyboardIME : InputMethodService() {
   }
 
   override fun onDestroy() {
-    reactRootView.unmountReactApplication()
+    reactSurface?.stop()
     super.onDestroy()
   }
 }
