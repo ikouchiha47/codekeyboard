@@ -15,20 +15,24 @@ A fully functional Android keyboard app for coders, built with React Native. Inc
 **File**: `keyboard.html` (single-file standalone)
 
 ### Steps
-1. Create a full keyboard layout using CSS Grid.
+1. Create a full keyboard layout using Flexbox.
    - Rows: number row, QWERTY top, home, bottom, spacebar row.
    - Modifier keys: Ctrl, Alt, Shift, Caps, Fn.
    - Navigation: arrows, Tab, Esc, Backspace, Enter.
-   - Extra: symbols layer toggle.
 2. Implement JS logic:
    - Track `ctrlKey`, `altKey`, `shiftKey`, `capsLock`, `fnLayer` state.
    - `ctrl+c`, `ctrl+v`, `ctrl+x`, `ctrl+z` map to clipboard/undo.
    - Alt key produces special characters (Alt+a = α, etc.).
    - Shift/Caps modify letter case.
-   - Fn layer shows symbols layer (numbers → symbols).
-3. Text input via `<textarea>` or `contenteditable`.
+   - Fn layer shows function keys F1-F12.
+3. **Suggestion bar** above the keyboard showing 3 word predictions.
+   - Built-in English dictionary for word lookup.
+   - Tapping suggestion inserts the word.
+   - Suggestion bar also shows the current word being typed.
+4. Text input via `<textarea>`.
    - Keystrokes insert/delete text programmatically.
-4. Test all key combinations, touch/click interactions, layout scaling.
+   - Track current word boundary for suggestions.
+5. Test all key combinations, touch/click interactions, layout scaling.
 
 ### Deliverable
 - `keyboard.html` – open in browser to validate UX before React Native.
@@ -44,20 +48,38 @@ A fully functional Android keyboard app for coders, built with React Native. Inc
 2. **Build Keyboard Component**.
    - Replicate the web layout with `View`, `TouchableOpacity`, `Text`.
    - Use `useWindowDimensions` for dynamic sizing.
-3. **Android IME Integration**.
+3. **Suggestion Bar**.
+   - Fixed row above the keyboard showing 3 word predictions.
+   - `@react-native-community/datetimepicker` style pill buttons.
+   - Built-in dictionary: embed a compressed word list (~50k English words).
+   - Trie-based prefix search for fast lookups.
+   - Tap suggestion → replace current word in buffer.
+4. **Slide Typing (Gesture Typing)**.
+   - `PanResponder` or `react-native-gesture-handler` on the keyboard surface.
+   - Track pointer movement across key boundaries using key-center hit testing.
+   - Record key sequence from touch path.
+   - Use gesture-to-word matching via levenshtein distance on the path against dictionary.
+   - Show predicted word in suggestion bar as user slides.
+   - On lift: insert best-match word.
+5. **Android IME Integration**.
    - Register as an input method via `InputMethodService`.
    - Use a hidden `TextInput` with `showSoftInputOnFocus={false}`.
-   - Send key events to the focused text field.
-4. **Modifier State Management**.
+   - Send key events to the focused text field via `InputConnection`.
+6. **Modifier State Management**.
    - `useReducer` for state: ctrl, alt, shift, caps, fn, currentLayer.
    - Key press → resolve character → insert/replace/delete.
-5. **Key Repeat**.
+7. **Key Repeat**.
    - `onPressIn` starts interval, `onPressOut` clears it.
-6. **Rendering Performance**.
+8. **Word Prediction / ML (Future)**.
+   - Phase 2a: dictionary-based prefix matching.
+   - Phase 2b: n-gram language model from typed corpus.
+   - Phase 2c: small on-device ML model (TFLite) for next-word prediction.
+   - Model trained on code comments and technical prose.
+9. **Rendering Performance**.
    - Use `React.memo` on keys, `Animated` for press feedback.
    - Avoid re-renders of full layout on modifier toggle.
-7. **Build APK**.
-   - `npx react-native build-android` → unsigned APK or AAB.
+10. **Build APK**.
+    - `npx react-native build-android` → unsigned APK or AAB.
 
 ### Deliverable
 - Android APK that can be sideloaded and set as default keyboard.
@@ -73,14 +95,19 @@ A fully functional Android keyboard app for coders, built with React Native. Inc
 | Modifier keys not latching | Dual behavior: tap = latch, hold = momentary |
 | Popup/suggestion overlap | Disable system suggestions; full-screen keyboard view |
 | Scrolling/closing unexpectedly | Handle `onKeyPreIme`; lock orientation if needed |
+| Slide trail lags behind finger | Use `Animated.event` with native driver for trail path |
+| Suggestion bar flickers | Keep 3 suggestion slots always mounted; swap text only |
 
 ## Milestones
 
-1. [ ] Web prototype renders correctly in browser
-2. [ ] All modifier keys work in web prototype
-3. [ ] RN project scaffolds and builds
-4. [ ] Keyboard layout renders in RN
-5. [ ] Text input works via hidden TextInput
-6. [ ] Ctrl/Alt/Shift/Caps/Fn all functional
-7. [ ] APK builds and installs
-8. [ ] Tested as system keyboard on device
+1. [x] Web prototype renders correctly in browser
+2. [x] All modifier keys work in web prototype
+3. [ ] Suggestion bar + word prediction in web prototype
+4. [ ] RN project scaffolds and builds
+5. [ ] Keyboard layout renders in RN
+6. [ ] Suggestion bar works in RN with dictionary
+7. [ ] Slide (gesture) typing works in RN
+8. [ ] Text input works via hidden TextInput
+9. [ ] Ctrl/Alt/Shift/Caps/Fn all functional
+10. [ ] APK builds and installs
+11. [ ] Tested as system keyboard on device

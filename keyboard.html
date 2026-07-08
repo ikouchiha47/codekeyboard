@@ -111,6 +111,31 @@
     to { opacity: 1; transform: translateX(-50%) scale(1); }
   }
 
+  #suggestions {
+    display: flex; gap: 6px; align-items: center;
+    padding: 4px 8px; margin-bottom: 4px;
+    min-height: 32px;
+    background: #1e1e1e; border-radius: 6px;
+    border: 1px solid #333;
+  }
+  #suggestions .sug {
+    flex: 1; text-align: center;
+    padding: 4px 8px; border-radius: 4px;
+    font-size: 13px; font-family: 'Consolas', monospace;
+    color: #999; background: transparent;
+    cursor: pointer; border: none; outline: none;
+    transition: background 0.08s, color 0.08s;
+  }
+  #suggestions .sug:active {
+    background: #333; color: #fff;
+  }
+  #suggestions .sug.match {
+    color: #d4d4d4;
+  }
+  #suggestions .sug.best {
+    color: #4a9eff; font-weight: 600;
+  }
+
   #status-bar {
     display: flex; gap: 10px; align-items: center;
     padding: 3px 6px; margin-bottom: 3px;
@@ -152,6 +177,11 @@
   </div>
   <div id="output-area">
     <textarea id="input" placeholder="Type here..." autofocus></textarea>
+  </div>
+  <div id="suggestions">
+    <button class="sug" id="sug0"></button>
+    <button class="sug" id="sug1"></button>
+    <button class="sug" id="sug2"></button>
   </div>
   <div id="keyboard"></div>
 </div>
@@ -568,8 +598,142 @@ function updateModUI() {
   }
 }
 
+// ── Suggestion Bar ──────────────────────────────────────
+
+const DICT = [
+  // Programming keywords
+  'function','const','let','var','return','import','export','default','class','interface',
+  'type','extends','implements','async','await','if','else','for','while','do','switch',
+  'case','break','continue','try','catch','finally','throw','new','delete','typeof',
+  'instanceof','void','yield','from','of','in','as','is','keyof','readonly','static',
+  'public','private','protected','abstract','enum','module','namespace','declare','get','set',
+  'then','catch','finally','true','false','null','undefined','NaN','this','super',
+  'map','filter','reduce','forEach','find','some','every','includes','push','pop','shift',
+  'unshift','splice','slice','concat','join','split','indexOf','lastIndexOf','toString',
+  'require','module','exports','console','log','error','warn','debug','info',
+  'document','window','global','process','Buffer','__dirname','__filename',
+  'String','Number','Boolean','Array','Object','Date','RegExp','Error','Promise',
+  'JSON','Math','parseInt','parseFloat','isNaN','isFinite','encodeURI','decodeURI',
+  'setTimeout','setInterval','clearTimeout','clearInterval','requestAnimationFrame',
+  'useState','useEffect','useRef','useMemo','useCallback','useContext','useReducer',
+  'useLayoutEffect','useImperativeHandle','useDebugValue',
+  'React','Component','Fragment','createElement','cloneElement','createRef',
+  'useState','useEffect','useRef','useMemo','useCallback',
+  'View','Text','StyleSheet','TouchableOpacity','FlatList','ScrollView',
+  'return','import','from','const','let','function','class','extends',
+  'int','float','double','char','bool','void','string','long','short',
+  'public','static','void','main','args','print','println',
+  'def','self','None','True','False','class','import','from','as',
+  'fn','mut','let','impl','struct','enum','trait','pub','use','mod',
+  'package','main','fmt','println',
+  // English words
+  'the','this','that','and','but','for','not','you','all','can','had','her','was',
+  'one','our','out','has','are','have','been','more','when','what','which','their',
+  'them','some','than','then','also','about','could','would','should','after',
+  'where','while','because','before','between','other','every','still','such',
+  'only','own','same','just','also','very','well','here','there','these','those',
+  'first','last','next','new','old','good','high','low','long','short','small',
+  'large','great','big','little','right','wrong','hard','easy','early','late',
+  'name','time','way','thing','place','year','day','week','month','part','kind',
+  'hand','life','world','work','home','room','door','line','end','start','side',
+  'head','eye','face','body','water','air','light','food','man','woman','child',
+  'word','number','order','power','state','system','group','member','point',
+  'value','level','type','form','area','class','group','field','case','data',
+  'code','text','file','name','line','set','list','type','sort','move','make',
+  'take','give','find','keep','hold','show','tell','ask','need','help','turn',
+  'look','call','use','get','put','set','let','run','go','come','see','know',
+  'think','want','mean','feel','seem','make','take','give','find','keep','hold',
+  'show','tell','ask','need','help','turn','look','call','use','get','put','set',
+  'let','run','go','come','see','know','think','want','mean','feel','seem',
+  'change','follow','start','follow','allow','bring','carry','create','develop',
+  'include','provide','support','accept','allow','begin','consider','continue',
+  'decide','expect','happen','help','increase','lead','learn','leave','live',
+  'move','offer','open','plan','play','produce','reach','read','ready','realize',
+  'remember','return','serve','start','stop','study','talk','travel','try','turn',
+  'understand','use','wait','walk','want','watch','work','worry','write',
+  // Number words
+  'zero','one','two','three','four','five','six','seven','eight','nine','ten',
+  'first','second','third','last','next','previous','current',
+  // Common coding terms
+  'callback','promise','resolve','reject','fulfill','pending','settled',
+  'buffer','stream','chunk','source','destination','pipe','transform',
+  'middleware','handler','route','request','response','header','body','params',
+  'query','session','cookie','token','auth','login','logout','register','user',
+  'admin','config','setting','option','preference','locale','theme','layout',
+  'render','mount','unmount','update','patch','diff','merge','rebase','clone',
+  'fetch','push','pull','commit','branch','tag','release','deploy','build',
+  'compile','transpile','bundle','pack','minify','uglify','lint','format',
+  'test','spec','assert','expect','describe','it','before','after','mock',
+  'spy','stub','fixture','suite','runner','coverage','benchmark',
+  'array','object','string','number','boolean','symbol','null','undefined',
+  'integer','float','decimal','character','byte','bit','binary','hex','octal',
+  'list','tuple','set','map','dictionary','stack','queue','tree','graph',
+  'node','edge','vertex','leaf','root','parent','child','sibling','depth',
+  'width','height','length','size','count','index','key','value','entry',
+  'error','exception','throw','catch','finally','debug','warn','info','trace',
+  'access','modify','update','delete','remove','insert','append','prepend',
+  'sort','search','filter','transform','aggregate','reduce','fold','scan',
+];
+
+const sugEls = [
+  document.getElementById('sug0'),
+  document.getElementById('sug1'),
+  document.getElementById('sug2'),
+];
+
+function getCurrentWord() {
+  const val = textarea.value;
+  const pos = textarea.selectionStart;
+  let start = pos;
+  while (start > 0 && /[a-zA-Z0-9_]/.test(val[start - 1])) start--;
+  let end = pos;
+  while (end < val.length && /[a-zA-Z0-9_]/.test(val[end])) end++;
+  return { word: val.substring(start, end).toLowerCase(), start, end };
+}
+
+function updateSuggestions() {
+  const { word, start, end } = getCurrentWord();
+  if (!word) {
+    for (const el of sugEls) { el.textContent = ''; el.className = 'sug'; }
+    return;
+  }
+
+  const matches = DICT.filter(d => d.startsWith(word) && d !== word).slice(0, 3);
+  for (let i = 0; i < 3; i++) {
+    const el = sugEls[i];
+    if (i < matches.length) {
+      el.textContent = matches[i];
+      el.className = 'sug match' + (i === 0 ? ' best' : '');
+    } else {
+      el.textContent = '';
+      el.className = 'sug';
+    }
+  }
+}
+
+function applySuggestion(sug) {
+  const { word, start, end } = getCurrentWord();
+  const val = textarea.value;
+  textarea.value = val.substring(0, start) + sug + ' ' + val.substring(end);
+  textarea.selectionStart = textarea.selectionEnd = start + sug.length + 1;
+  textarea.focus();
+  updateSuggestions();
+  textarea.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
+for (let i = 0; i < 3; i++) {
+  sugEls[i].addEventListener('click', () => {
+    const sug = sugEls[i].textContent;
+    if (sug) applySuggestion(sug);
+  });
+}
+
+textarea.addEventListener('input', updateSuggestions);
+textarea.addEventListener('keyup', updateSuggestions);
+
 buildKeyboard();
 textarea.focus();
+updateSuggestions();
 
 document.addEventListener('keydown', (e) => {
   if (e.ctrlKey && (e.key === 'z' || e.key === 's')) e.preventDefault();

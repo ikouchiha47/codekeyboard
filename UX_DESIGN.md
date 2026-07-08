@@ -98,16 +98,82 @@ Ctrl  Alt  Fn  [spacebar]  Alt  Ctrl  ←  ↑  ↓  →
 
 ---
 
-## Touch Behaviour
+## Suggestion Bar
 
-- **Tap**: insert character, play popup.
-- **Double-tap**: on modifiers = lock; on space = insert period+space (like Gboard).
-- **Hold**: after 200ms, enter key repeat mode (30ms interval for text keys, 50ms for backspace/arrows).
-- **Slide**: from modifier → key → release → triggers combo. (E.g., slide from Ctrl to C = Ctrl+C without releasing.)
+A fixed bar between the text output and the keyboard showing word predictions.
+
+```
+ ┌─────────────────────────────────┐
+ │  function   variable   return   │
+ └─────────────────────────────────┘
+```
+
+### Behavior
+- Shows 3 word predictions based on the current word prefix and preceding context.
+- Leftmost suggestion is the most likely; rightmost is the least likely.
+- Tapping a suggestion:
+  - Replaces the current partial word with the full suggestion.
+  - Inserts a trailing space (configurable).
+- As user types each letter, suggestions update in real-time (< 16ms latency).
+- If no suggestions match, the bar shows the current word in gray (fallback).
+- Suggestion bar has a subtle divider line separating it from the keyboard.
+
+### Dictionary
+- Built-in: ~50,000 English words (common + technical/coding terms).
+- Words stored in a compressed trie for O(n) prefix lookup where n = prefix length.
+- Additional programming keywords: `function`, `const`, `let`, `var`, `return`, `import`, `export`, `class`, `interface`, `type`, `async`, `await`, `if`, `else`, `for`, `while`, `switch`, `case`, `break`, `continue`, `try`, `catch`, `throw`, `true`, `false`, `null`, `undefined`, `NaN`, `this`, `super`, `new`, `delete`, `typeof`, `instanceof`, `void`, `yield`, `from`, `of`, `in`, `as`, `is`, `keyof`, `readonly`, `static`, `public`, `private`, `protected`, `abstract`, `implements`, `extends`, `enum`, `module`, `namespace`, `declare`, `get`, `set`, `then`, `catch`, `finally`.
+
+### Priority Scoring
+Suggestions ranked by:
+1. **Exact prefix match** — word starts with typed characters.
+2. **Frequency** — words used more often rank higher.
+3. **Context** — (future) next-word prediction from n-gram model.
+4. **Recency** — words recently used by the user.
 
 ---
 
-## Text Input
+## Slide Typing (Gesture Typing)
+
+User slides finger across keys without lifting, and the predicted word appears in the suggestion bar.
+
+``` 
+ [touch down on 'g'] → slide to 'e' → slide to 't' → [lift]
+ → suggestion bar shows: "get"  "gets"  "getting"
+```
+
+### Touch Handling
+- **onTouchStart** on the keyboard surface: record starting key.
+- **onTouchMove**: each time the finger crosses into a new key's bounds, append to the key sequence.
+- **onTouchEnd**: match the key sequence against the dictionary.
+
+### Key Hit Detection
+- Each key has a center point and bounding rect.
+- During slide, the finger position is checked against key rects.
+- To avoid jitter, apply a hysteresis: a key must be entered by > 30% of its width before it's registered.
+- Same key repeated (finger lingering) = single entry in the sequence.
+
+### Sequence-to-Word Matching
+- Build a set of candidate words from the dictionary that match the key pattern.
+- Use a Trie that maps key sequences to words (phone-keypad style but on QWERTY).
+- Multiple keys map to multiple letters (each key = 1 specific letter on QWERTY, so it's a direct letter sequence).
+- The finger path may overshoot or undershoot — use Damerau-Levenshtein distance (max edit distance 2) for fuzzy matching.
+- Score candidates: exact match > edit distance 1 > edit distance 2 > frequency tiebreaker.
+
+### Visual Feedback During Slide
+- A translucent trail line follows the finger (rendered with SVG or Canvas).
+- Keys passed through get a subtle "touched" highlight.
+- The current best-guess word appears in the center of the suggestion bar as the user slides.
+- On lift: either insert the selected word if user taps a suggestion, or auto-insert the best match.
+
+### Modifier Interaction
+- If a modifier key is latched/locked before sliding, the slide keys are modified:
+  - Shift latched → all letters in the path are uppercased.
+  - Fn latched → no slide typing (Fn is for symbols layer).
+  - Ctrl/Alt latched → slide does not trigger word prediction; instead records a combo.
+
+---
+
+## Touch Behaviour
 
 - Hidden `TextInput` element receives the keystrokes.
 - System suggestions/autocorrect disabled.
@@ -134,6 +200,11 @@ Ctrl  Alt  Fn  [spacebar]  Alt  Ctrl  ←  ↑  ↓  →
 | Keyboard height | Small / Medium / Large |
 | Number row always visible | On / Off |
 | Combo slide gesture | On / Off |
+| Word suggestions | On / Off |
+| Auto-space after suggestion | On / Off |
+| Slide typing | On / Off |
+| Slide sensitivity | Low / Medium / High |
+| Dictionary language | English / (future: more) |
 
 ---
 
