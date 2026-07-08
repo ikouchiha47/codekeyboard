@@ -16,6 +16,16 @@ export interface LayoutDef {
   splitAfter?: number;
 }
 
+/** A split ergonomic layout with two independent halves */
+export interface SplitLayoutDef {
+  name: string;
+  split: true;
+  left: KeySpec[][];
+  right: KeySpec[][];
+  /** Column stagger per side (in row-height units) */
+  stagger: {left: number[]; right: number[]};
+}
+
 export const LAYOUT_QWERTY: LayoutDef = {
   name: 'QWERTY',
   splitAfter: undefined,
@@ -78,90 +88,73 @@ export const LAYOUT_QWERTY: LayoutDef = {
 };
 
 /**
- * Sofle v2-inspired column-staggered ergonomic layout.
- * Each column has a vertical offset to follow natural finger reach.
- * Visual split gap between left (cols 0-5) and right (cols 6+) halves.
+ * Sofle Choc v2 — true split ergonomic layout.
+ * Two independent halves with column stagger, wide split gap, and thumb clusters.
  */
-export const LAYOUT_SOFLE: LayoutDef = {
-  name: 'Sofle v2',
-  splitAfter: 6,
-  rows: (() => {
-    // Stagger offsets per column for all rows (in row-height units)
-    const STAGGER = [0, 0.25, 0.5, 0.75, 1.0, 1.0, 1.0, 0.75, 0.5, 0.25, 0, 0, 0, 0];
+const SOFLE_STAGGER = {left: [0, 0.25, 0.5, 0.75, 1.0, 1.0], right: [1.0, 0.75, 0.5, 0.25, 0, 0, 0]};
 
-    function s(label: string, col: number, opts?: Partial<KeySpec>): KeySpec {
-      return {label, width: 1, stagger: STAGGER[col] ?? 0, ...opts};
-    }
+function s(label: string, col: number, staggerArr: number[], opts?: Partial<KeySpec>): KeySpec {
+  return {label, width: 1, stagger: staggerArr[col] ?? 0, ...opts};
+}
 
-    return [
-      // Row 0 — Numbers
-      [
-        s('Esc', 0, {action:'escape'}),
-        s('`', 0, {shift:'~', width:0}),  // spacer under Esc
-        s('1', 1, {shift:'!', alt:'α', fn:'F1'}),
-        s('2', 2, {shift:'@', alt:'β', fn:'F2'}),
-        s('3', 3, {shift:'#', alt:'γ', fn:'F3'}),
-        s('4', 4, {shift:'$', alt:'δ', fn:'F4'}),
-        s('5', 5, {shift:'%', alt:'ε', fn:'F5'}),
-        s('6', 6, {shift:'^', alt:'ζ', fn:'F6'}),
-        s('7', 7, {shift:'&', alt:'η', fn:'F7'}),
-        s('8', 8, {shift:'*', alt:'θ', fn:'F8'}),
-        s('9', 9, {shift:'(', alt:'ι', fn:'F9'}),
-        s('0', 10, {shift:')', alt:'κ', fn:'F10'}),
-        s('-', 11, {shift:'_', alt:'–', fn:'F11'}),
-        s('=', 12, {shift:'+', alt:'≈', fn:'F12'}),
-        s('Bksp', 13, {action:'backspace', width:1.5}),
-      ],
-      // Row 1 — Top alpha
-      [
-        s('Tab', 0, {action:'tab'}),
-        s('q', 1), s('w', 2), s('e', 3), s('r', 4), s('t', 5),
-        s('y', 6), s('u', 7), s('i', 8), s('o', 9), s('p', 10),
-        s('[', 11, {shift:'{'}), s(']', 12, {shift:'}'}),
-        s('\\', 13, {shift:'|'}),
-      ],
-      // Row 2 — Home row
-      [
-        s('Caps', 0, {action:'caps'}),
-        s('a', 1), s('s', 2), s('d', 3), s('f', 4), s('g', 5),
-        s('h', 6), s('j', 7), s('k', 8), s('l', 9),
-        s(';', 10, {shift:':'}), s("'", 11, {shift:'"'}),
-        s('Enter', 12, {action:'enter', width:1.5}),
-        {label:'', width:0, stagger: 0}, // spacer
-      ],
-      // Row 3 — Bottom alpha
-      [
-        s('Shift', 0, {action:'shift'}),
-        s('z', 1), s('x', 2), s('c', 3), s('v', 4), s('b', 5),
-        s('n', 6), s('m', 7),
-        s(',', 8, {shift:'<', alt:'≤'}),
-        s('.', 9, {shift:'>', alt:'≥'}),
-        s('/', 10, {shift:'?', alt:'÷'}),
-        s('Shift', 11, {action:'shift', width:1.5}),
-        {label:'', width:0, stagger: 0},
-        {label:'', width:0, stagger: 0},
-      ],
-      // Row 4 — Thumb cluster + modifiers + arrows
-      [
-        s('Ctrl', 0, {action:'ctrl'}),
-        s('Alt', 1, {action:'alt'}),
-        s('Cmd', 2, {action:'meta'}),
-        {label:'Space', action:'space', width:3, stagger: STAGGER[3] ?? 0},
-        {label:'', width:0, stagger: 0}, // spacer
-        {label:'', width:0, stagger: 0}, // spacer
-        s('Fn', 6, {action:'fn'}),
-        {label:'Space', action:'space', width:3, stagger: STAGGER[7] ?? 0},
-        {label:'', width:0, stagger: 0}, // spacer
-        {label:'', width:0, stagger: 0}, // spacer
-        s('Alt', 10, {action:'alt'}),
-        s('Ctrl', 11, {action:'ctrl'}),
-        s('←', 12, {action:'arrow-left'}),
-        s('↑', 13, {action:'arrow-up'}),
-        s('↓', 14, {action:'arrow-down'}),
-        s('→', 15, {action:'arrow-right'}),
-      ],
-    ];
-  })(),
+export const LAYOUT_SOFLE: SplitLayoutDef = {
+  name: 'Sofle Choc v2',
+  split: true,
+  stagger: SOFLE_STAGGER,
+  left: [
+    [s('Esc', 0, SOFLE_STAGGER.left, {action:'escape'}),
+     s('1', 1, SOFLE_STAGGER.left, {shift:'!', fn:'F1'}),
+     s('2', 2, SOFLE_STAGGER.left, {shift:'@', fn:'F2'}),
+     s('3', 3, SOFLE_STAGGER.left, {shift:'#', fn:'F3'}),
+     s('4', 4, SOFLE_STAGGER.left, {shift:'$', fn:'F4'}),
+     s('5', 5, SOFLE_STAGGER.left, {shift:'%', fn:'F5'})],
+    [s('Tab', 0, SOFLE_STAGGER.left, {action:'tab'}),
+     s('q', 1, SOFLE_STAGGER.left), s('w', 2, SOFLE_STAGGER.left),
+     s('e', 3, SOFLE_STAGGER.left), s('r', 4, SOFLE_STAGGER.left),
+     s('t', 5, SOFLE_STAGGER.left)],
+    [s('Caps', 0, SOFLE_STAGGER.left, {action:'caps'}),
+     s('a', 1, SOFLE_STAGGER.left), s('s', 2, SOFLE_STAGGER.left),
+     s('d', 3, SOFLE_STAGGER.left), s('f', 4, SOFLE_STAGGER.left),
+     s('g', 5, SOFLE_STAGGER.left)],
+    [s('Shift', 0, SOFLE_STAGGER.left, {action:'shift'}),
+     s('z', 1, SOFLE_STAGGER.left), s('x', 2, SOFLE_STAGGER.left),
+     s('c', 3, SOFLE_STAGGER.left), s('v', 4, SOFLE_STAGGER.left),
+     s('b', 5, SOFLE_STAGGER.left)],
+    [s('Ctrl', 0, SOFLE_STAGGER.left, {action:'ctrl'}),
+     s('Alt', 1, SOFLE_STAGGER.left, {action:'alt'}),
+     s('Cmd', 3, SOFLE_STAGGER.left, {action:'meta'}),
+     s('Spc', 4, SOFLE_STAGGER.left, {action:'space'}),
+     s('Spc', 5, SOFLE_STAGGER.left, {action:'space'})],
+  ],
+  right: [
+    [s('6', 0, SOFLE_STAGGER.right, {shift:'^', fn:'F6'}),
+     s('7', 1, SOFLE_STAGGER.right, {shift:'&', fn:'F7'}),
+     s('8', 2, SOFLE_STAGGER.right, {shift:'*', fn:'F8'}),
+     s('9', 3, SOFLE_STAGGER.right, {shift:'(', fn:'F9'}),
+     s('0', 4, SOFLE_STAGGER.right, {shift:')', fn:'F10'}),
+     s('-', 5, SOFLE_STAGGER.right, {shift:'_', fn:'F11'}),
+     s('=', 6, SOFLE_STAGGER.right, {shift:'+', fn:'F12'})],
+    [s('y', 0, SOFLE_STAGGER.right), s('u', 1, SOFLE_STAGGER.right),
+     s('i', 2, SOFLE_STAGGER.right), s('o', 3, SOFLE_STAGGER.right),
+     s('p', 4, SOFLE_STAGGER.right),
+     s('[', 5, SOFLE_STAGGER.right, {shift:'{'}), s(']', 6, SOFLE_STAGGER.right, {shift:'}'})],
+    [s('h', 0, SOFLE_STAGGER.right), s('j', 1, SOFLE_STAGGER.right),
+     s('k', 2, SOFLE_STAGGER.right), s('l', 3, SOFLE_STAGGER.right),
+     s(';', 4, SOFLE_STAGGER.right, {shift:':'}), s("'", 5, SOFLE_STAGGER.right, {shift:'"'}),
+     s('Enter', 6, SOFLE_STAGGER.right, {action:'enter'})],
+    [s('n', 0, SOFLE_STAGGER.right), s('m', 1, SOFLE_STAGGER.right),
+     s(',', 2, SOFLE_STAGGER.right, {shift:'<'}), s('.', 3, SOFLE_STAGGER.right, {shift:'>'}),
+     s('/', 4, SOFLE_STAGGER.right, {shift:'?'}),
+     s('Shift', 5, SOFLE_STAGGER.right, {action:'shift'}),
+     s('Bksp', 6, SOFLE_STAGGER.right, {action:'backspace'})],
+    [s('Spc', 0, SOFLE_STAGGER.right, {action:'space'}),
+     s('Spc', 1, SOFLE_STAGGER.right, {action:'space'}),
+     s('Fn', 2, SOFLE_STAGGER.right, {action:'fn'}),
+     s('Alt', 3, SOFLE_STAGGER.right, {action:'alt'}),
+     s('Ctrl', 4, SOFLE_STAGGER.right, {action:'ctrl'}),
+     s('←', 5, SOFLE_STAGGER.right, {action:'arrow-left'}),
+     s('→', 6, SOFLE_STAGGER.right, {action:'arrow-right'})],
+  ],
 };
 
 export const MODIFIERS = new Set(['ctrl','alt','shift','caps','fn']);

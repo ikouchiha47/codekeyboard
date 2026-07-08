@@ -1,13 +1,19 @@
 import React, {useState, useCallback, useRef} from 'react';
 import {View, TextInput, StyleSheet} from 'react-native';
-import {LayoutDef, KeySpec, isModifier, isLetter, LAYOUT_QWERTY, LAYOUT_SOFLE} from './Layout';
+import {LayoutDef, SplitLayoutDef, KeySpec, isModifier, isLetter, LAYOUT_QWERTY, LAYOUT_SOFLE} from './Layout';
 import {ModState, L, createModState, toggleMod, clearLatched, effective} from './ModifierState';
 import {getSuggestions} from './Dictionary';
 import {Key} from './Key';
 import {SuggestionBar} from './SuggestionBar';
 
+type AnyLayout = LayoutDef | SplitLayoutDef;
+
 interface Props {
-  layout?: LayoutDef;
+  layout?: AnyLayout;
+}
+
+function isSplit(l: AnyLayout): l is SplitLayoutDef {
+  return (l as SplitLayoutDef).split === true;
 }
 
 export function Keyboard({layout = LAYOUT_SOFLE}: Props) {
@@ -165,33 +171,18 @@ export function Keyboard({layout = LAYOUT_SOFLE}: Props) {
       </View>
       <SuggestionBar suggestions={suggestions} onSelect={applySuggestion} />
       <View style={styles.keyboard}>
-        {layout.rows.map((row, ri) => (
-          <View key={ri} style={styles.row}>
-            {row.map((spec, ki) => {
-              if (!spec.width) return null;
-              const a = spec.action ?? '';
-              const isMod = isModifier(a);
-              return (
-                <View
-                  key={`${ri}-${ki}`}
-                  style={[
-                    styles.keyWrap,
-                    {flex: spec.width, marginTop: (spec.stagger ?? 0) * 48},
-                    layout.splitAfter && ki === layout.splitAfter
-                      ? {marginLeft: 12}
-                      : null,
-                  ]}>
-                  <Key
-                    spec={spec}
-                    latched={isMod && mods[a as keyof ModState] === L.LATCHED}
-                    locked={isMod && mods[a as keyof ModState] === L.LOCKED}
-                    onPress={handleKeyPress}
-                  />
-                </View>
-              );
-            })}
+        {isSplit(layout) ? (
+          <View style={styles.splitContainer}>
+            <View style={styles.half}>
+              {renderRows(layout.left, 'L')}
+            </View>
+            <View style={styles.half}>
+              {renderRows(layout.right, 'R')}
+            </View>
           </View>
-        ))}
+        ) : (
+          renderRows(layout.rows, '')
+        )}
       </View>
     </View>
   );

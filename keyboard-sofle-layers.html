@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Codeboard – Sofle v2 Layers</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    height: 100%; overflow: hidden;
+    background: #111; color: #ddd;
+    font-family: -apple-system, 'Segoe UI', Roboto, sans-serif;
+    -webkit-user-select: none; user-select: none;
+    touch-action: manipulation;
+  }
+  #app {
+    display: flex; flex-direction: column;
+    height: 100%; max-width: 720px; margin: 0 auto;
+    padding: 6px;
+  }
+  #output-area {
+    flex: 0 0 auto; height: 90px;
+    margin-bottom: 6px; border-radius: 8px; overflow: hidden;
+  }
+  #output-area textarea {
+    width: 100%; height: 100%;
+    background: #1a1a1a; color: #d4d4d4;
+    border: 1px solid #333; border-radius: 8px;
+    padding: 10px; font-size: 15px; font-family: monospace;
+    resize: none; outline: none; tab-size: 4;
+    line-height: 1.5;
+  }
+  #layer-bar {
+    display: flex; gap: 4px; align-items: center;
+    padding: 3px 6px; margin-bottom: 3px;
+  }
+  .layer-pill {
+    padding: 2px 7px; border-radius: 4px;
+    font-weight: 700; font-size: 9px; letter-spacing: 0.5px;
+    background: #222; color: #555; border: 1px solid transparent;
+    cursor: pointer; transition: all 0.1s;
+  }
+  .layer-pill.active { background: #1a3a5c; color: #4a9eff; border-color: #4a9eff; }
+  .layer-pill.locked { background: #4a9eff; color: #fff; border-color: #7ab8ff; }
+  .layer-pill:hover { background: #2a2a2a; }
+  #curr-layer { margin-left: auto; font-size: 10px; color: #4a9eff; font-weight: 700; text-transform: uppercase; }
+
+  #keyboard {
+    padding: 6px; background: #1a1a1a; border-radius: 10px;
+    border: 1px solid #333;
+  }
+  .kb-split { display: flex; flex-direction: row; gap: 16px; }
+  .kb-half { display: flex; flex-direction: column; gap: 3px; flex: 1; }
+  .kb-row { display: flex; flex-direction: row; gap: 3px; }
+  .key {
+    display: flex; align-items: center; justify-content: center;
+    height: 44px; min-width: 0; padding: 0 2px;
+    background: #2c2c2c; color: #e0e0e0;
+    border: none; border-radius: 6px;
+    font-size: 11px; font-weight: 500;
+    font-family: inherit;
+    cursor: pointer; position: relative;
+    transition: background 0.05s, transform 0.05s;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.3);
+    outline: none;
+    flex: 1 1 0;
+  }
+  .key:active, .key.pressed { background: #3a3a3a !important; transform: scale(0.93); }
+  .key.special { background: #252525; color: #4a9eff; }
+  .key.special:active { background: #333 !important; }
+  .key.latched { box-shadow: 0 0 0 2px #4a9eff; }
+  .key.locked { background: #264f78 !important; box-shadow: 0 0 0 2px #4a9eff; }
+  .key .label { pointer-events: none; line-height: 1; font-size: 11px; }
+  .key .sub { position: absolute; top: 2px; right: 3px; font-size: 7px; color: #777; pointer-events: none; }
+  .key.thumb { background: #1a2a3a; border-bottom: 2px solid #4a9eff; }
+  .key.thumb .label { font-size: 9px; color: #7ab8ff; }
+  .key.layer-key { background: #162616; border-bottom: 2px solid #4CAF50; }
+  .key.layer-key .label { font-size: 8px; color: #81C784; font-weight: 700; }
+  .key.layer-key.latched { border-color: #81C784; box-shadow: 0 0 0 2px #81C784; }
+  .key.layer-key.locked { background: #1a4a1a !important; border-color: #81C784; box-shadow: 0 0 0 2px #81C784; }
+  .key.func { background: #2a1a1a; border-bottom: 2px solid #FF9800; }
+  .key.func .label { color: #FFB74D; font-size: 8px; }
+  .key.func:active { background: #3a2a2a !important; }
+  .key.func.latched { border-color: #FFB74D; box-shadow: 0 0 0 2px #FFB74D; }
+  .key.func.locked { background: #4a2a1a !important; border-color: #FFB74D; box-shadow: 0 0 0 2px #FFB74D; }
+
+  @media (max-width: 400px) {
+    .key { height: 38px; font-size: 10px; }
+    .key .label { font-size: 10px; }
+    .kb-half { gap: 4px; }
+    .kb-split { gap: 8px; }
+    .kb-row { gap: 3px; }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="layer-bar">
+    <span class="layer-pill" id="p-base" data-layer="base">BASE</span>
+    <span class="layer-pill" id="p-lower" data-layer="lower">LWR</span>
+    <span class="layer-pill" id="p-raise" data-layer="raise">RSE</span>
+    <span class="layer-pill" id="p-adj" data-layer="adj">ADJ</span>
+    <span class="layer-pill" id="p-func" data-layer="func">FUNC</span>
+    <span id="curr-layer">Base</span>
+  </div>
+  <div id="output-area">
+    <textarea id="input" placeholder="Type here..." autofocus></textarea>
+  </div>
+  <div id="keyboard"></div>
+</div>
+
+<script>
+// ── State ─────────────────────────────────────────────
+const L = { NONE:0, LATCHED:1, LOCKED:2 };
+const LAYER_NAMES = { base:'Base', lower:'Lower', raise:'Raise', adj:'Adjust', func:'Func' };
+
+const state = {
+  ctrl: L.NONE, alt: L.NONE, shift: L.NONE, caps: L.NONE,
+  layer: 'base',
+  layerState: L.NONE,
+};
+
+function isMod(a) { return ['ctrl','alt','shift','caps'].includes(a); }
+function isLayer(a) { return ['lower','raise','adj','func'].includes(a); }
+
+// ── Stagger ───────────────────────────────────────────
+// Column stagger offsets in key-height units
+const STAG = { l: [0, 0.25, 0.5, 0.75, 1.0, 1.0], r: [1.0, 0.75, 0.5, 0.25, 0, 0, 0] };
+
+function stag(col, side) { return (STAG[side] && STAG[side][col]) || 0; }
+
+// ── Layer Maps ────────────────────────────────────────
+// Key: {l:label, a:action, s:shift, c:cssClass, fn:fnLabel}
+
+const MAPS = {
+  base: {
+    l: [
+      [{l:'Tab', a:'tab'}, {l:'q'}, {l:'w'}, {l:'e'}, {l:'r'}, {l:'t'}],
+      [{l:'Caps', a:'caps'}, {l:'a'}, {l:'s'}, {l:'d'}, {l:'f'}, {l:'g'}],
+      [{l:'Shift', a:'shift'}, {l:'z'}, {l:'x'}, {l:'c'}, {l:'v'}, {l:'b'}],
+      [{l:'Ctrl', a:'ctrl', c:'thumb'}, {l:'Alt', a:'alt', c:'thumb'}, {l:'Spc', a:'space', c:'thumb'}, {l:'LWR', a:'lower', c:'layer-key'}, {l:'Cmd', a:'meta'}, {}],
+    ],
+    r: [
+      [{l:'y'}, {l:'u'}, {l:'i'}, {l:'o'}, {l:'p'}, {l:'[', s:'{'}, {l:']', s:'}'}],
+      [{l:'h'}, {l:'j'}, {l:'k'}, {l:'l'}, {l:';', s:':'}, {l:"'", s:'"'}, {l:'Enter', a:'enter'}],
+      [{l:'n'}, {l:'m'}, {l:',', s:'<'}, {l:'.', s:'>'}, {l:'/', s:'?'}, {l:'Shift', a:'shift'}, {l:'Bksp', a:'backspace'}],
+      [{l:'RSE', a:'raise', c:'layer-key'}, {l:'Spc', a:'space', c:'thumb'}, {l:'Spc', a:'space', c:'thumb'}, {l:'ADJ', a:'adj', c:'layer-key'}, {l:'FUNC', a:'func', c:'func'}, {l:'←', a:'arrow-left'}, {l:'→', a:'arrow-right'}],
+    ],
+  },
+  lower: {
+    l: [
+      [{l:'Esc', a:'escape'}, {l:'1', s:'!'}, {l:'2', s:'@'}, {l:'3', s:'#'}, {l:'4', s:'$'}, {l:'5', s:'%'}],
+      [{l:'`'}, {l:'-'}, {l:'='}, {l:'['}, {l:']'}, {l:'\\'}],
+      [{l:'~', s:'`'}, {l:'_'}, {l:'+'}, {l:'{'}, {l:'}'}, {l:'|'}],
+      [{l:'Ctrl', a:'ctrl', c:'thumb'}, {l:'Alt', a:'alt', c:'thumb'}, {l:'Spc', a:'space', c:'thumb'}, {l:'LWR', a:'lower', c:'layer-key'}, {}, {}],
+    ],
+    r: [
+      [{l:'6', s:'^'}, {l:'7', s:'&'}, {l:'8', s:'*'}, {l:'9', s:'('}, {l:'0', s:')'}, {l:'-'}, {l:'='}],
+      [{l:'^'}, {l:'&'}, {l:'*'}, {l:'('}, {l:')'}, {l:'_'}, {l:'+'}],
+      [{l:'!'}, {l:'@'}, {l:'#'}, {l:'$'}, {l:'%'}, {l:'Bksp', a:'backspace'}, {l:'Del', a:'delete'}],
+      [{l:'RSE', a:'raise', c:'layer-key'}, {l:'Spc', a:'space', c:'thumb'}, {}, {l:'ADJ', a:'adj', c:'layer-key'}, {l:'FUNC', a:'func', c:'func'}, {l:'←', a:'arrow-left'}, {l:'→', a:'arrow-right'}],
+    ],
+  },
+  raise: {
+    l: [
+      [{l:'F1'}, {l:'F2'}, {l:'F3'}, {l:'F4'}, {l:'F5'}, {l:'F6'}],
+      [{l:'F7'}, {l:'F8'}, {l:'F9'}, {l:'F10'}, {l:'F11'}, {l:'F12'}],
+      [{l:'PrtSc'}, {l:'ScrLk'}, {l:'Pause'}, {l:'Ins'}, {l:'Home'}, {l:'PgUp'}],
+      [{l:'Ctrl', a:'ctrl', c:'thumb'}, {l:'Alt', a:'alt', c:'thumb'}, {l:'Spc', a:'space', c:'thumb'}, {l:'LWR', a:'lower', c:'layer-key'}, {}, {}],
+    ],
+    r: [
+      [{l:'←', a:'arrow-left'}, {l:'↓', a:'arrow-down'}, {l:'↑', a:'arrow-up'}, {l:'→', a:'arrow-right'}, {}, {}, {}],
+      [{l:'Home'}, {l:'End'}, {l:'PgUp'}, {l:'PgDn'}, {}, {}, {}],
+      [{l:'Cut'}, {l:'Copy'}, {l:'Paste'}, {}, {}, {l:'Del', a:'delete'}, {l:'Bksp', a:'backspace'}],
+      [{l:'RSE', a:'raise', c:'layer-key'}, {l:'Spc', a:'space', c:'thumb'}, {}, {l:'ADJ', a:'adj', c:'layer-key'}, {l:'FUNC', a:'func', c:'func'}, {l:'←', a:'arrow-left'}, {l:'→', a:'arrow-right'}],
+    ],
+  },
+  adj: {
+    l: [
+      [{l:'Esc', a:'escape'}, {l:'Br-'}, {l:'Br+'}, {l:'Mute'}, {l:'Vol-'}, {l:'Vol+'}],
+      [{l:'Prev'}, {l:'Play'}, {l:'Next'}, {}, {}, {}],
+      [{}, {}, {}, {}, {}, {}],
+      [{l:'Ctrl', a:'ctrl', c:'thumb'}, {l:'Alt', a:'alt', c:'thumb'}, {l:'Spc', a:'space', c:'thumb'}, {l:'LWR', a:'lower', c:'layer-key'}, {}, {}],
+    ],
+    r: [
+      [{}, {}, {}, {}, {}, {}, {}],
+      [{l:'BT'}, {l:'WiFi'}, {}, {}, {}, {}, {}],
+      [{}, {}, {}, {}, {}, {l:'Bksp', a:'backspace'}, {l:'Del', a:'delete'}],
+      [{l:'RSE', a:'raise', c:'layer-key'}, {l:'Spc', a:'space', c:'thumb'}, {}, {l:'ADJ', a:'adj', c:'layer-key'}, {l:'FUNC', a:'func', c:'func'}, {l:'←', a:'arrow-left'}, {l:'→', a:'arrow-right'}],
+    ],
+  },
+  func: {
+    l: [
+      [{l:'Undo'}, {l:'Redo'}, {l:'Cut'}, {l:'Copy'}, {l:'Paste'}, {l:'SelAll'}],
+      [{l:'Save'}, {l:'Find'}, {l:'Repl'}, {l:'Cmnt', a:'comment'}, {l:'Dup', a:'duplicate'}, {l:'Fmt'}],
+      [{l:'Tab'}, {l:'Spc'}, {l:'Ent', a:'enter'}, {l:'Esc', a:'escape'}, {}, {}],
+      [{l:'Ctrl', a:'ctrl', c:'thumb'}, {l:'Alt', a:'alt', c:'thumb'}, {l:'Spc', a:'space', c:'thumb'}, {l:'LWR', a:'lower', c:'layer-key'}, {}, {}],
+    ],
+    r: [
+      [{}, {}, {}, {}, {}, {}, {}],
+      [{}, {}, {}, {}, {}, {}, {}],
+      [{}, {}, {}, {}, {}, {l:'Bksp', a:'backspace'}, {l:'Del', a:'delete'}],
+      [{l:'RSE', a:'raise', c:'layer-key'}, {l:'Spc', a:'space', c:'thumb'}, {}, {l:'ADJ', a:'adj', c:'layer-key'}, {l:'FUNC', a:'func', c:'func'}, {l:'←', a:'arrow-left'}, {l:'→', a:'arrow-right'}],
+    ],
+  },
+};
+
+const textarea = document.getElementById('input');
+const keyboardEl = document.getElementById('keyboard');
+
+function makeKey(kd, col, side) {
+  if (!kd || !kd.l) return null;
+  const el = document.createElement('button');
+  el.className = 'key';
+  if (kd.c) el.classList.add(kd.c);
+  if (isMod(kd.a)) el.classList.add('special');
+  if (isLayer(kd.a)) el.classList.add('layer-key');
+  if (kd.a === 'func') el.classList.add('func');
+
+  const off = stag(col, side);
+  if (off) el.style.marginTop = (off * 44) + 'px';
+
+  const label = document.createElement('span');
+  label.className = 'label';
+  label.textContent = kd.l;
+  el.appendChild(label);
+  if (kd.s) {
+    const sub = document.createElement('span');
+    sub.className = 'sub';
+    sub.textContent = kd.s;
+    el.appendChild(sub);
+  }
+  el.dataset.key = kd.l;
+  el.dataset.action = kd.a || '';
+  if (kd.s) el.dataset.shift = kd.s;
+
+  el.addEventListener('pointerdown', onDown);
+  el.addEventListener('pointerup', onUp);
+  el.addEventListener('pointerleave', onLeave);
+  return el;
+}
+
+function render() {
+  keyboardEl.innerHTML = '';
+  const split = document.createElement('div');
+  split.className = 'kb-split';
+  const map = MAPS[state.layer] || MAPS.base;
+  for (const side of ['l', 'r']) {
+    const half = document.createElement('div');
+    half.className = 'kb-half';
+    for (let ri = 0; ri < map[side].length; ri++) {
+      const rowEl = document.createElement('div');
+      rowEl.className = 'kb-row';
+      for (let ci = 0; ci < map[side][ri].length; ci++) {
+        const kd = map[side][ri][ci];
+        const key = makeKey(kd, ci, side);
+        if (key) rowEl.appendChild(key);
+        else {
+          const sp = document.createElement('div');
+          sp.style.flex = '1';
+          rowEl.appendChild(sp);
+        }
+      }
+      half.appendChild(rowEl);
+    }
+    split.appendChild(half);
+  }
+  keyboardEl.appendChild(split);
+  updateUI();
+}
+
+// ── Input ─────────────────────────────────────────────
+let rep = null, repKey = null;
+
+function onDown(e) {
+  e.preventDefault();
+  const k = e.currentTarget;
+  k.setPointerCapture(e.pointerId);
+  const a = k.dataset.action;
+
+  if (isLayer(a) || a === 'func') { cycleLayer(a); return; }
+  if (isMod(a)) { modToggle(a); return; }
+
+  k.classList.add('pressed');
+  const ch = resolveKey(k);
+  if (ch != null) {
+    ins(ch);
+    clearLatchedMods();
+    // latched layer → back to base
+    if (state.layerState === L.LATCHED && state.layer !== 'base') {
+      state.layer = 'base'; state.layerState = L.NONE;
+      render();
+    }
+  } else execAction(a);
+
+  if (['backspace','delete','arrow-left','arrow-right'].includes(a)) {
+    repKey = k;
+    rep = setTimeout(() => { rep = setInterval(() => execAction(repKey.dataset.action), 50); }, 250);
+  }
+}
+
+function onUp(e) {
+  const k = e.currentTarget;
+  try { k.releasePointerCapture(e.pointerId); } catch(_) {}
+  k.classList.remove('pressed');
+  if (rep) { clearInterval(rep); clearTimeout(rep); rep = null; repKey = null; }
+}
+function onLeave(e) {
+  const k = e.currentTarget;
+  k.classList.remove('pressed');
+  try { k.releasePointerCapture(e.pointerId); } catch(_) {}
+  if (rep) { clearInterval(rep); clearTimeout(rep); rep = null; repKey = null; }
+}
+
+// ── Layer cycling ─────────────────────────────────────
+function cycleLayer(name) {
+  if (state.layer === name && state.layerState === L.LOCKED) {
+    state.layer = 'base'; state.layerState = L.NONE;
+  } else if (state.layer === name && state.layerState === L.LATCHED) {
+    state.layerState = L.LOCKED;
+  } else if (state.layer === 'base') {
+    state.layer = name; state.layerState = L.LATCHED;
+  } else {
+    state.layer = 'base'; state.layerState = L.NONE;
+  }
+  render();
+}
+
+// ── Modifiers ─────────────────────────────────────────
+function modToggle(a) {
+  if (state[a] === L.NONE) state[a] = L.LATCHED;
+  else if (state[a] === L.LATCHED) state[a] = L.LOCKED;
+  else state[a] = L.NONE;
+  updateUI();
+}
+function clearLatchedMods() {
+  for (const m of ['ctrl','alt','shift','caps']) {
+    if (state[m] === L.LATCHED) state[m] = L.NONE;
+  }
+  updateUI();
+}
+function mods() {
+  return { ctrl: state.ctrl !== L.NONE, alt: state.alt !== L.NONE,
+           shift: state.shift !== L.NONE, caps: state.caps !== L.NONE };
+}
+
+// ── Key resolution ────────────────────────────────────
+function resolveKey(k) {
+  const m = mods();
+  let ch = k.dataset.key;
+  if (m.shift && k.dataset.shift) ch = k.dataset.shift;
+  if (/^[a-zA-Z]$/.test(ch)) {
+    ch = ((m.shift && !m.caps) || (!m.shift && m.caps)) ? ch.toUpperCase() : ch.toLowerCase();
+  }
+  return ch;
+}
+
+function ins(t) {
+  const s = textarea.selectionStart, e = textarea.selectionEnd;
+  textarea.value = textarea.value.substring(0, s) + t + textarea.value.substring(e);
+  textarea.selectionStart = textarea.selectionEnd = s + t.length;
+  textarea.dispatchEvent(new Event('input', {bubbles: true}));
+  textarea.focus();
+}
+
+function execAction(a) {
+  const val = textarea.value, s = textarea.selectionStart, e = textarea.selectionEnd;
+  if (a === 'backspace') {
+    if (s !== e) { textarea.value = val.substring(0, s) + val.substring(e); textarea.selectionStart = textarea.selectionEnd = s; }
+    else if (s > 0) { textarea.value = val.substring(0, s-1) + val.substring(s); textarea.selectionStart = textarea.selectionEnd = s-1; }
+  } else if (a === 'delete') {
+    if (s !== e) { textarea.value = val.substring(0, s) + val.substring(e); textarea.selectionStart = textarea.selectionEnd = s; }
+    else if (s < val.length) { textarea.value = val.substring(0, s) + val.substring(s+1); textarea.selectionStart = textarea.selectionEnd = s; }
+  } else if (a === 'enter') { ins('\n'); }
+  else if (a === 'space') { ins(' '); }
+  else if (a === 'tab') { ins('    '); }
+  else if (a === 'escape') { textarea.blur(); }
+  else if (a === 'arrow-left') { textarea.selectionStart = textarea.selectionEnd = Math.max(0, s - 1); }
+  else if (a === 'arrow-right') { textarea.selectionStart = textarea.selectionEnd = Math.min(val.length, s + 1); }
+  textarea.focus();
+}
+
+// ── UI ────────────────────────────────────────────────
+function updateUI() {
+  document.getElementById('curr-layer').textContent = LAYER_NAMES[state.layer] || 'Base';
+  for (const l of ['base','lower','raise','adj','func']) {
+    const el = document.getElementById('p-' + l);
+    el.className = 'layer-pill';
+    if (state.layer === l && state.layerState !== L.NONE) el.classList.add('active');
+    if (state.layer === l && state.layerState === L.LOCKED) el.classList.add('locked');
+  }
+  document.querySelectorAll('.key.layer-key, .key.func').forEach(k => {
+    k.classList.remove('latched','locked');
+    const a = k.dataset.action;
+    if (state.layer === a) {
+      k.classList.add(state.layerState === L.LOCKED ? 'locked' : 'latched');
+    }
+  });
+}
+
+// ── Init ──────────────────────────────────────────────
+render();
+textarea.focus();
+document.addEventListener('keydown', e => {
+  if (e.ctrlKey && (e.key === 'z' || e.key === 's')) e.preventDefault();
+});
+</script>
+</body>
+</html>
