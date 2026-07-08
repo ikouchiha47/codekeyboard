@@ -24,6 +24,22 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
+      - name: Cache Gradle (wrapper + dependencies)
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('CodeKeyboard/android/**/*.gradle*', 'CodeKeyboard/android/**/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      - name: Cache RN Android build directory
+        uses: actions/cache@v4
+        with:
+          path: CodeKeyboard/android/.gradle
+          key: ${{ runner.os }}-rn-gradle-${{ hashFiles('CodeKeyboard/android/**/*.gradle*', 'CodeKeyboard/android/**/gradle-wrapper.properties') }}
+
       - name: Install NDK (needed for React Native native modules)
         run: sdkmanager "ndk;27.1.12297006" || echo "NDK install skipped (not critical)"
 
