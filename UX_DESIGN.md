@@ -118,10 +118,14 @@ A fixed bar between the text output and the keyboard showing word predictions.
 - If no suggestions match, the bar shows the current word in gray (fallback).
 - Suggestion bar has a subtle divider line separating it from the keyboard.
 
-### Dictionary
-- Built-in: ~50,000 English words (common + technical/coding terms).
-- Words stored in a compressed trie for O(n) prefix lookup where n = prefix length.
-- Additional programming keywords: `function`, `const`, `let`, `var`, `return`, `import`, `export`, `class`, `interface`, `type`, `async`, `await`, `if`, `else`, `for`, `while`, `switch`, `case`, `break`, `continue`, `try`, `catch`, `throw`, `true`, `false`, `null`, `undefined`, `NaN`, `this`, `super`, `new`, `delete`, `typeof`, `instanceof`, `void`, `yield`, `from`, `of`, `in`, `as`, `is`, `keyof`, `readonly`, `static`, `public`, `private`, `protected`, `abstract`, `implements`, `extends`, `enum`, `module`, `namespace`, `declare`, `get`, `set`, `then`, `catch`, `finally`.
+### Language Packs (External, Not Hardcoded)
+- Word lists are **never hardcoded** in the app binary.
+- Shipped as external **language pack files** — compressed trie files loaded at runtime.
+- Default pack: ~50,000 English words (common + technical/coding terms).
+- Pack format: serialized trie (JSON or binary) for O(n) prefix lookup where n = prefix length.
+- Downloaded on first launch; stored in app data directory.
+- Users can install additional language packs (e.g., Spanish, French, German, or code-specific packs).
+- Additional programming keywords included in the default pack: `function`, `const`, `let`, `var`, `return`, `import`, `export`, `class`, `interface`, `type`, `async`, `await`, `if`, `else`, `for`, `while`, `switch`, `case`, `break`, `continue`, `try`, `catch`, `throw`, `true`, `false`, `null`, `undefined`, `NaN`, `this`, `super`, `new`, `delete`, `typeof`, `instanceof`, `void`, `yield`, `from`, `of`, `in`, `as`, `is`, `keyof`, `readonly`, `static`, `public`, `private`, `protected`, `abstract`, `implements`, `extends`, `enum`, `module`, `namespace`, `declare`, `get`, `set`, `then`, `catch`, `finally`.
 
 ### Priority Scoring
 Suggestions ranked by:

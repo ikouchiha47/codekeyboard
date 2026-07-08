@@ -51,8 +51,9 @@ A fully functional Android keyboard app for coders, built with React Native. Inc
 3. **Suggestion Bar**.
    - Fixed row above the keyboard showing 3 word predictions.
    - `@react-native-community/datetimepicker` style pill buttons.
-   - Built-in dictionary: embed a compressed word list (~50k English words).
-   - Trie-based prefix search for fast lookups.
+   - **Language packs** — word lists loaded from external files, not hardcoded.
+   - Each language pack is a compressed trie file (~50k words) shipped as a separate asset or downloaded on first use.
+   - Pack format: serialized trie (JSON or binary) for O(n) prefix lookup.
    - Tap suggestion → replace current word in buffer.
 4. **Slide Typing (Gesture Typing)**.
    - `PanResponder` or `react-native-gesture-handler` on the keyboard surface.
@@ -71,10 +72,11 @@ A fully functional Android keyboard app for coders, built with React Native. Inc
 7. **Key Repeat**.
    - `onPressIn` starts interval, `onPressOut` clears it.
 8. **Word Prediction / ML (Future)**.
-   - Phase 2a: dictionary-based prefix matching.
-   - Phase 2b: n-gram language model from typed corpus.
+   - Phase 2a: dictionary-based prefix matching (from language packs).
+   - Phase 2b: n-gram language model built from user's typed corpus.
    - Phase 2c: small on-device ML model (TFLite) for next-word prediction.
    - Model trained on code comments and technical prose.
+   - Language packs, dictionaries, and ML models all loaded as external assets — zero hardcoded data.
 9. **Rendering Performance**.
    - Use `React.memo` on keys, `Animated` for press feedback.
    - Avoid re-renders of full layout on modifier toggle.
