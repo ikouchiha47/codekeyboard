@@ -1,0 +1,55 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [ main, master ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install NDK (needed for React Native native modules)
+        run: sdkmanager "ndk;27.1.12297006" || echo "NDK install skipped (not critical)"
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: CodeKeyboard/package-lock.json
+
+      - name: Install npm dependencies
+        working-directory: CodeKeyboard
+        run: npm ci
+
+      - name: Build Android APK (release)
+        working-directory: CodeKeyboard/android
+        run: ./gradlew assembleRelease
+
+      - name: Upload APK as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: codekeyboard-apk
+          path: CodeKeyboard/android/app/build/outputs/apk/release/*.apk
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: CodeKeyboard/android/app/build/outputs/apk/release/*.apk
