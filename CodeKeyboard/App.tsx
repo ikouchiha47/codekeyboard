@@ -15,7 +15,7 @@ type Tab = 'keyboard' | 'settings' | 'themes' | 'languages';
 
 function SettingsScreen() {
   const handleEnable = useCallback(() => {
-    NativeModules.IMEHelper?.showPicker();
+    NativeModules.IMEHelper?.openSettings();
   }, []);
 
   return (
@@ -25,8 +25,8 @@ function SettingsScreen() {
         <Text style={styles.settingsButtonText}>Enable CodeKeyboard</Text>
       </TouchableOpacity>
       <Text style={styles.settingsHint}>
-        Opens the IME picker. Select "CodeKeyboard" from the list to enable
-        it, then switch to it in any text field.
+        Opens system keyboard settings. Tap "On-screen keyboard" then enable
+        "CodeKeyboard", and select it in any text field.
       </Text>
     </View>
   );
