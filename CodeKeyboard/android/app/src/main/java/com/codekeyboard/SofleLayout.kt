@@ -99,11 +99,41 @@ object SofleLayout : KeyboardLayout {
         )
     )
 
-    // TODO: define real LOWER, RAISE, ADJUST, FUNC layers
-    private val LOWER = BASE
-    private val RAISE = BASE
-    private val ADJUST = BASE
-    private val FUNC = BASE
+    private val LOWER = GridLayoutData(
+        rows = listOf(
+            row(KeyDef("Esc"), KeyDef("1"), KeyDef("2"), KeyDef("3"), KeyDef("4"), KeyDef("5"), KeyDef("6"), KeyDef("7"), KeyDef("8"), KeyDef("9"), KeyDef("0"), KeyDef("-"), KeyDef("=")),
+            row(KeyDef("Tab"), KeyDef("!"), KeyDef("@"), KeyDef("#"), KeyDef("$"), KeyDef("%"), KeyDef("^"), KeyDef("&"), KeyDef("*"), KeyDef("("), KeyDef(")"), KeyDef("["), KeyDef("]")),
+            row(KeyDef("Shift"), KeyDef("~"), KeyDef("`"), KeyDef("|"), KeyDef("\\"), KeyDef("{"), KeyDef("}"), KeyDef("<"), KeyDef(">"), KeyDef(":"), KeyDef(";"), KeyDef("\""), KeyDef("'")),
+            row(KeyDef("Ctrl"), KeyDef("Alt"), KeyDef("", stagger = STAGGER_LEFT[2]), KeyDef("Cmd"), KeyDef("Spc"), KeyDef("Spc"), KeyDef("Spc"), KeyDef("Spc"), KeyDef("Fn"), KeyDef("Alt"), KeyDef("Ctrl"), KeyDef("←"), KeyDef("→"))
+        )
+    )
+
+    private val RAISE = GridLayoutData(
+        rows = listOf(
+            row(KeyDef("Esc"), KeyDef("F1"), KeyDef("F2"), KeyDef("F3"), KeyDef("F4"), KeyDef("F5"), KeyDef("F6"), KeyDef("F7"), KeyDef("F8"), KeyDef("F9"), KeyDef("F10"), KeyDef("F11"), KeyDef("F12")),
+            row(KeyDef("Tab"), KeyDef("Home"), KeyDef("↑"), KeyDef("End"), KeyDef("PgUp"), KeyDef("Ins"), KeyDef("Del"), KeyDef("←"), KeyDef("↓"), KeyDef("→"), KeyDef("PgDn"), KeyDef("["), KeyDef("]")),
+            row(KeyDef("Shift"), KeyDef("Vol-"), KeyDef("Vol+"), KeyDef("Mute"), KeyDef("Play"), KeyDef("Prev"), KeyDef("Next"), KeyDef("RGB"), KeyDef("Bri-"), KeyDef("Bri+"), KeyDef("Mode"), KeyDef(":"), KeyDef("\"")),
+            row(KeyDef("Ctrl"), KeyDef("Alt"), KeyDef("", stagger = STAGGER_LEFT[2]), KeyDef("Cmd"), KeyDef("Spc"), KeyDef("Spc"), KeyDef("Spc"), KeyDef("Spc"), KeyDef("Fn"), KeyDef("Alt"), KeyDef("Ctrl"), KeyDef("←"), KeyDef("→"))
+        )
+    )
+
+    private val ADJUST = GridLayoutData(
+        rows = listOf(
+            row(KeyDef("Esc"), KeyDef("BT1"), KeyDef("BT2"), KeyDef("BT3"), KeyDef("BT4"), KeyDef("BT5"), KeyDef("6"), KeyDef("7"), KeyDef("8"), KeyDef("9"), KeyDef("0"), KeyDef("-"), KeyDef("=")),
+            row(KeyDef("Tab"), KeyDef("RGB"), KeyDef("Bri-"), KeyDef("Bri+"), KeyDef("Mode"), KeyDef("Next"), KeyDef("Home"), KeyDef("↑"), KeyDef("End"), KeyDef("PgUp"), KeyDef("["), KeyDef("]"), KeyDef("Enter")),
+            row(KeyDef("Shift"), KeyDef("Vol-"), KeyDef("Vol+"), KeyDef("Mute"), KeyDef("Play"), KeyDef("Prev"), KeyDef("←"), KeyDef("↓"), KeyDef("→"), KeyDef("PgDn"), KeyDef(":"), KeyDef("\""), KeyDef("Bksp")),
+            row(KeyDef("Ctrl"), KeyDef("Alt"), KeyDef("", stagger = STAGGER_LEFT[2]), KeyDef("Cmd"), KeyDef("Spc"), KeyDef("Spc"), KeyDef("Spc"), KeyDef("Spc"), KeyDef("Fn"), KeyDef("Alt"), KeyDef("Ctrl"), KeyDef("←"), KeyDef("→"))
+        )
+    )
+
+    private val FUNC = GridLayoutData(
+        rows = listOf(
+            row(KeyDef("Esc"), KeyDef("1"), KeyDef("2"), KeyDef("3"), KeyDef("4"), KeyDef("5"), KeyDef("6"), KeyDef("7"), KeyDef("8"), KeyDef("9"), KeyDef("0"), KeyDef("-"), KeyDef("=")),
+            row(KeyDef("Tab"), KeyDef("F1"), KeyDef("F2"), KeyDef("F3"), KeyDef("F4"), KeyDef("F5"), KeyDef("F6"), KeyDef("F7"), KeyDef("F8"), KeyDef("F9"), KeyDef("F10"), KeyDef("F11"), KeyDef("F12")),
+            row(KeyDef("Shift"), KeyDef("F13"), KeyDef("F14"), KeyDef("F15"), KeyDef("F16"), KeyDef("F17"), KeyDef("F18"), KeyDef("F19"), KeyDef("F20"), KeyDef("F21"), KeyDef("F22"), KeyDef(":"), KeyDef("\"")),
+            row(KeyDef("Ctrl"), KeyDef("Alt"), KeyDef("", stagger = STAGGER_LEFT[2]), KeyDef("Cmd"), KeyDef("Spc"), KeyDef("Spc"), KeyDef("Spc"), KeyDef("Spc"), KeyDef("Fn"), KeyDef("Alt"), KeyDef("Ctrl"), KeyDef("←"), KeyDef("→"))
+        )
+    )
 
     override val layers: Map<String, GridLayoutData> = mapOf(
         "base" to BASE,
