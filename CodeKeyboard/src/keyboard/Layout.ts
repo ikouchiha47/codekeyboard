@@ -151,7 +151,7 @@ const THUMB_R = (stagger: number[]) => [
   k('Spc', 1, stagger, {action:'space', c:'thumb'}),
   k('Spc', 2, stagger, {action:'space', c:'thumb'}),
   k('ADJ', 3, stagger, {action:'adj', c:'layer-key'}),
-  k('FUNC',4, stagger, {action:'func', c:'func'}),
+  k('Fn',  4, stagger, {action:'func', c:'func'}),
   k('←',   5, stagger, {action:'arrow-left'}),
   k('→',   6, stagger, {action:'arrow-right'}),
 ];
