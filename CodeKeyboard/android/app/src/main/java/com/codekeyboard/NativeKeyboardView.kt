@@ -36,11 +36,12 @@ class NativeKeyboardView @JvmOverloads constructor(
     private val subPaint = Paint().apply { color = Color.parseColor("#777777"); textSize = 20f; textAlign = Paint.Align.CENTER; isAntiAlias = true }
 
     private val density = resources.displayMetrics.density
-    private val keyGap = 3 * density
-    private val rowGap = 5 * density
-    private val halfGap = 16 * density
-    private val cornerRadius = 6 * density
-    private val rowHeight = 48 * density
+    private val keyGap = 4 * density
+    private val rowGap = 6 * density
+    private val halfGap = 20 * density
+    private val cornerRadius = 8 * density
+    private val rowHeight = 56 * density
+    private val bottomBarHeight = 44 * density
 
     private data class KeyRect(val rect: RectF, val key: KeyDef)
     private val keyRects = mutableListOf<KeyRect>()
@@ -56,7 +57,7 @@ class NativeKeyboardView @JvmOverloads constructor(
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         val rows = max(layout.left.size, layout.right.size)
-        val height = (rows * rowHeight + (rows - 1) * rowGap + 2 * 6 * density).toInt()
+        val height = (rows * rowHeight + (rows - 1) * rowGap + bottomBarHeight + 2 * 6 * density).toInt()
         setMeasuredDimension(MeasureSpec.getSize(widthMeasureSpec), height)
     }
 
@@ -68,12 +69,14 @@ class NativeKeyboardView @JvmOverloads constructor(
         val padding = 6 * density
         val availWidth = width - 2 * padding - halfGap
         val halfWidth = availWidth / 2
+        val keyboardHeight = height - bottomBarHeight
 
-        drawHalf(canvas, layout.left, padding, padding, halfWidth, true)
-        drawHalf(canvas, layout.right, padding + halfWidth + halfGap, padding, halfWidth, false)
+        drawHalf(canvas, layout.left, padding, padding, halfWidth, true, keyboardHeight)
+        drawHalf(canvas, layout.right, padding + halfWidth + halfGap, padding, halfWidth, false, keyboardHeight)
+        // Bottom padding reserved for system IME bar (globe + hide icons are drawn by Android)
     }
 
-    private fun drawHalf(canvas: Canvas, rows: SplitHalf, startX: Float, startY: Float, halfWidth: Float, isLeft: Boolean) {
+    private fun drawHalf(canvas: Canvas, rows: SplitHalf, startX: Float, startY: Float, halfWidth: Float, isLeft: Boolean, maxHeight: Float) {
         val staggerList = if (isLeft) layout.staggerLeft else layout.staggerRight
 
         for ((rowIdx, row) in rows.withIndex()) {
@@ -84,6 +87,7 @@ class NativeKeyboardView @JvmOverloads constructor(
             var x = startX
             val staggerPx = if (rowIdx < staggerList.size) staggerList[rowIdx] else 0
             val y = startY + rowIdx * (rowHeight + rowGap) + staggerPx * density * 0.25f
+            if (y + rowHeight > maxHeight) continue
 
             for (key in row) {
                 if (key.label.isEmpty()) {
@@ -138,6 +142,7 @@ class NativeKeyboardView @JvmOverloads constructor(
             "caps" -> { capsActive = !capsActive; invalidate() }
             "ctrl" -> { ctrlActive = !ctrlActive; invalidate() }
             "alt" -> { altActive = !altActive; invalidate() }
+
             else -> {
                 listener?.onKeyPress(key)
                 if (shiftActive && key.action !in listOf("shift", "caps", "ctrl", "alt")) {

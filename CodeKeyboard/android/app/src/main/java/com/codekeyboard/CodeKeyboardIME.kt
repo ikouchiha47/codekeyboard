@@ -7,10 +7,13 @@ import android.view.KeyEvent
 
 class CodeKeyboardIME : InputMethodService(), KeyPressListener {
 
+  private lateinit var keyboardView: NativeKeyboardView
+  private var currentLayer = "base"
+
   override fun onCreateInputView(): View {
-    val view = NativeKeyboardView(this)
-    view.setListener(this)
-    return view
+    keyboardView = NativeKeyboardView(this)
+    keyboardView.setListener(this)
+    return keyboardView
   }
 
   override fun onStartInput(editorInfo: EditorInfo?, restarting: Boolean) {
@@ -22,6 +25,11 @@ class CodeKeyboardIME : InputMethodService(), KeyPressListener {
     val ic = currentInputConnection ?: return
 
     when (key.action) {
+      "lower" -> { currentLayer = "lower"; keyboardView.setLayout(SofleLayout.LOWER); return }
+      "raise" -> { currentLayer = "raise"; keyboardView.setLayout(SofleLayout.RAISE); return }
+      "adj" -> { currentLayer = "adj"; keyboardView.setLayout(SofleLayout.ADJUST); return }
+      "func" -> { currentLayer = "func"; keyboardView.setLayout(SofleLayout.FUNC); return }
+      "base" -> { currentLayer = "base"; keyboardView.setLayout(SofleLayout.BASE); return }
       "backspace" -> {
         val before = ic.getTextBeforeCursor(1, 0)
         if (before != null && before.isNotEmpty()) {

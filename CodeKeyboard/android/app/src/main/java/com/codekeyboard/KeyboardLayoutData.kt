@@ -97,4 +97,72 @@ object SofleLayout {
         staggerLeft = STAGGER_LEFT,
         staggerRight = STAGGER_RIGHT
     )
+
+    val LOWER = SplitLayoutData(
+        left = listOf(
+            listOf(KeyDef("Esc", "esc"), KeyDef("1"), KeyDef("2"), KeyDef("3"), KeyDef("4"), KeyDef("5")),
+            listOf(KeyDef("Tab"), KeyDef("!"), KeyDef("@"), KeyDef("#"), KeyDef("$"), KeyDef("%")),
+            listOf(KeyDef("Shift"), KeyDef("~"), KeyDef("`"), KeyDef("^"), KeyDef("&"), KeyDef("*")),
+            listOf(KeyDef("Ctrl"), KeyDef("Alt"), KeyDef("Spc"), KeyDef("LWR"), KeyDef("Cmd"))
+        ),
+        right = listOf(
+            listOf(KeyDef("6"), KeyDef("7"), KeyDef("8"), KeyDef("9"), KeyDef("0"), KeyDef("-"), KeyDef("=")),
+            listOf(KeyDef("("), KeyDef(")"), KeyDef("_"), KeyDef("+"), KeyDef("["), KeyDef("]"), KeyDef("Enter")),
+            listOf(KeyDef("{"), KeyDef("}"), KeyDef("|"), KeyDef("\\"), KeyDef(":"), KeyDef("\""), KeyDef("Bksp")),
+            listOf(KeyDef("RSE"), KeyDef("Spc"), KeyDef("Spc"), KeyDef("ADJ"), KeyDef("Fn"), KeyDef("←"), KeyDef("→"))
+        ),
+        staggerLeft = STAGGER_LEFT,
+        staggerRight = STAGGER_RIGHT
+    )
+
+    val RAISE = SplitLayoutData(
+        left = listOf(
+            listOf(KeyDef("Esc"), KeyDef("F1"), KeyDef("F2"), KeyDef("F3"), KeyDef("F4"), KeyDef("F5")),
+            listOf(KeyDef("Tab"), KeyDef("F6"), KeyDef("F7"), KeyDef("F8"), KeyDef("F9"), KeyDef("F10")),
+            listOf(KeyDef("Shift"), KeyDef("F11"), KeyDef("F12"), KeyDef("Ins"), KeyDef("Del"), KeyDef("PgUp")),
+            listOf(KeyDef("Ctrl"), KeyDef("Alt"), KeyDef("Spc"), KeyDef("LWR"), KeyDef("Cmd"))
+        ),
+        right = listOf(
+            listOf(KeyDef("F6"), KeyDef("F7"), KeyDef("F8"), KeyDef("F9"), KeyDef("F10"), KeyDef("-"), KeyDef("=")),
+            listOf(KeyDef("Home"), KeyDef("↑"), KeyDef("End"), KeyDef("PgDn"), KeyDef("["), KeyDef("]"), KeyDef("Enter")),
+            listOf(KeyDef("←"), KeyDef("↓"), KeyDef("→"), KeyDef("PgUp"), KeyDef(":"), KeyDef("\""), KeyDef("Bksp")),
+            listOf(KeyDef("RSE"), KeyDef("Spc"), KeyDef("Spc"), KeyDef("ADJ"), KeyDef("Fn"), KeyDef("←"), KeyDef("→"))
+        ),
+        staggerLeft = STAGGER_LEFT,
+        staggerRight = STAGGER_RIGHT
+    )
+
+    val ADJUST = SplitLayoutData(
+        left = listOf(
+            listOf(KeyDef("Esc"), KeyDef("Vol-"), KeyDef("Vol+"), KeyDef("Mute"), KeyDef("Play"), KeyDef("Prev")),
+            listOf(KeyDef("Tab"), KeyDef("RGB"), KeyDef("Bri-"), KeyDef("Bri+"), KeyDef("Mode"), KeyDef("Next")),
+            listOf(KeyDef("Shift"), KeyDef("BT1"), KeyDef("BT2"), KeyDef("BT3"), KeyDef("BT4"), KeyDef("BT5")),
+            listOf(KeyDef("Ctrl"), KeyDef("Alt"), KeyDef("Spc"), KeyDef("LWR"), KeyDef("Cmd"))
+        ),
+        right = listOf(
+            listOf(KeyDef("6"), KeyDef("7"), KeyDef("8"), KeyDef("9"), KeyDef("0"), KeyDef("-"), KeyDef("=")),
+            listOf(KeyDef("Home"), KeyDef("↑"), KeyDef("End"), KeyDef("PgDn"), KeyDef("["), KeyDef("]"), KeyDef("Enter")),
+            listOf(KeyDef("←"), KeyDef("↓"), KeyDef("→"), KeyDef("PgUp"), KeyDef(":"), KeyDef("\""), KeyDef("Bksp")),
+            listOf(KeyDef("RSE"), KeyDef("Spc"), KeyDef("Spc"), KeyDef("ADJ"), KeyDef("Fn"), KeyDef("←"), KeyDef("→"))
+        ),
+        staggerLeft = STAGGER_LEFT,
+        staggerRight = STAGGER_RIGHT
+    )
+
+    val FUNC = SplitLayoutData(
+        left = listOf(
+            listOf(KeyDef("Esc"), KeyDef("1"), KeyDef("2"), KeyDef("3"), KeyDef("4"), KeyDef("5")),
+            listOf(KeyDef("Tab"), KeyDef("F1"), KeyDef("F2"), KeyDef("F3"), KeyDef("F4"), KeyDef("F5")),
+            listOf(KeyDef("Shift"), KeyDef("F6"), KeyDef("F7"), KeyDef("F8"), KeyDef("F9"), KeyDef("F10")),
+            listOf(KeyDef("Ctrl"), KeyDef("Alt"), KeyDef("Spc"), KeyDef("LWR"), KeyDef("Cmd"))
+        ),
+        right = listOf(
+            listOf(KeyDef("6"), KeyDef("7"), KeyDef("8"), KeyDef("9"), KeyDef("0"), KeyDef("-"), KeyDef("=")),
+            listOf(KeyDef("F11"), KeyDef("F12"), KeyDef("↑"), KeyDef("PgUp"), KeyDef("["), KeyDef("]"), KeyDef("Enter")),
+            listOf(KeyDef("←"), KeyDef("↓"), KeyDef("→"), KeyDef("PgDn"), KeyDef(":"), KeyDef("\""), KeyDef("Bksp")),
+            listOf(KeyDef("RSE"), KeyDef("Spc"), KeyDef("Spc"), KeyDef("ADJ"), KeyDef("Fn"), KeyDef("←"), KeyDef("→"))
+        ),
+        staggerLeft = STAGGER_LEFT,
+        staggerRight = STAGGER_RIGHT
+    )
 }
