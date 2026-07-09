@@ -33,7 +33,7 @@ class CodeKeyboardIME : InputMethodService() {
     container.addView(loadingView)
 
     try {
-      val reactHost = (applicationContext as ReactApplication).reactHost
+      val reactHost = (applicationContext as ReactApplication).reactHost!!
 
       val props = Bundle().apply {
         putString("mode", "ime")
