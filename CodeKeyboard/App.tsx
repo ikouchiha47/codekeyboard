@@ -18,15 +18,26 @@ function SettingsScreen() {
     NativeModules.IMEHelper?.openSettings();
   }, []);
 
+  const handleSwitch = useCallback(() => {
+    NativeModules.IMEHelper?.showPicker();
+  }, []);
+
   return (
     <View style={styles.settingsContainer}>
       <Text style={styles.settingsTitle}>Settings</Text>
       <TouchableOpacity style={styles.settingsButton} onPress={handleEnable}>
-        <Text style={styles.settingsButtonText}>Enable CodeKeyboard</Text>
+        <Text style={styles.settingsButtonText}>Manage Keyboards</Text>
       </TouchableOpacity>
       <Text style={styles.settingsHint}>
-        Opens system keyboard settings. Tap "On-screen keyboard" then enable
-        "CodeKeyboard", and select it in any text field.
+        Opens system settings to enable/disable keyboards.
+      </Text>
+      <TouchableOpacity
+        style={[styles.settingsButton, styles.switchButton]}
+        onPress={handleSwitch}>
+        <Text style={styles.settingsButtonText}>Switch Keyboard</Text>
+      </TouchableOpacity>
+      <Text style={styles.settingsHint}>
+        Opens IME picker to switch active keyboard.
       </Text>
     </View>
   );
@@ -130,6 +141,10 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     paddingHorizontal: 32,
     borderRadius: 8,
+  },
+  switchButton: {
+    backgroundColor: '#1a3a5c',
+    marginTop: 20,
   },
   settingsButtonText: {
     color: '#fff',
