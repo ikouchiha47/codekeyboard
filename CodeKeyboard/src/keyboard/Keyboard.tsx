@@ -1,5 +1,5 @@
 import React, {useState, useCallback, useRef} from 'react';
-import {View, TextInput, StyleSheet} from 'react-native';
+import {View, TextInput, StyleSheet, NativeModules} from 'react-native';
 import {
   KeyboardLayout, KeySpec, isModifier, isLetter, isLayerAction,
   LAYOUT_SOFLE, isSplit, SplitLayout, StandardLayout, StandardLayer,
@@ -18,6 +18,7 @@ interface ActionCtx {
   selStart: number;
   mods: ModState;
   layer: LayerState;
+  isIME: boolean;
   setText: (v: React.SetStateAction<string>) => void;
   setSelStart: (v: React.SetStateAction<number>) => void;
   setMods: (v: React.SetStateAction<ModState>) => void;
@@ -31,8 +32,14 @@ interface ActionCtx {
 
 type ActionHandler = (ctx: ActionCtx, spec: KeySpec) => void;
 
+const NativeIME = NativeModules.CodeKeyboardModule;
+
 const ACTION_REGISTRY: Record<string, ActionHandler> = {
-  backspace: ({text, selStart, setText, setSelStart, updateSuggestions}) => {
+  backspace: ({text, selStart, setText, setSelStart, updateSuggestions, isIME}) => {
+    if (isIME) {
+      NativeIME?.deleteBackward();
+      return;
+    }
     if (selStart <= 0) return;
     setText(prev => {
       const next = prev.substring(0, selStart - 1) + prev.substring(selStart);
@@ -41,7 +48,11 @@ const ACTION_REGISTRY: Record<string, ActionHandler> = {
       return next;
     });
   },
-  delete: ({text, selStart, setText, setSelStart, updateSuggestions}) => {
+  delete: ({text, selStart, setText, setSelStart, updateSuggestions, isIME}) => {
+    if (isIME) {
+      NativeIME?.deleteForward();
+      return;
+    }
     if (selStart >= text.length) return;
     setText(prev => {
       const next = prev.substring(0, selStart) + prev.substring(selStart + 1);
@@ -49,7 +60,11 @@ const ACTION_REGISTRY: Record<string, ActionHandler> = {
       return next;
     });
   },
-  enter: ({selStart, setText, setSelStart, updateSuggestions}) => {
+  enter: ({selStart, setText, setSelStart, updateSuggestions, isIME}) => {
+    if (isIME) {
+      NativeIME?.performEnter();
+      return;
+    }
     setText(prev => {
       const next = prev.substring(0, selStart) + '\n' + prev.substring(selStart);
       setSelStart(selStart + 1);
@@ -57,17 +72,56 @@ const ACTION_REGISTRY: Record<string, ActionHandler> = {
       return next;
     });
   },
-  tab: ({insertText}) => insertText('    '),
-  space: ({insertText}) => insertText(' '),
-  escape: ({inputRef}) => inputRef.current?.blur(),
-  'arrow-left': ({moveCursor}) => moveCursor(-1),
-  'arrow-right': ({moveCursor}) => moveCursor(1),
-  'arrow-up': ({moveCursor}) => moveCursor(-10),
-  'arrow-down': ({moveCursor}) => moveCursor(10),
+  tab: ({insertText, isIME}) => {
+    if (isIME) {
+      NativeIME?.performTab();
+      return;
+    }
+    insertText('    ');
+  },
+  space: ({insertText, isIME}) => {
+    if (isIME) {
+      NativeIME?.commitText(' ');
+      return;
+    }
+    insertText(' ');
+  },
+  escape: ({inputRef, isIME}) => {
+    if (!isIME) inputRef.current?.blur();
+  },
+  'arrow-left': ({moveCursor, isIME}) => {
+    if (isIME) {
+      NativeIME?.sendDownUpKeyEvents(21);
+      return;
+    }
+    moveCursor(-1);
+  },
+  'arrow-right': ({moveCursor, isIME}) => {
+    if (isIME) {
+      NativeIME?.sendDownUpKeyEvents(22);
+      return;
+    }
+    moveCursor(1);
+  },
+  'arrow-up': ({moveCursor, isIME}) => {
+    if (isIME) {
+      NativeIME?.sendDownUpKeyEvents(19);
+      return;
+    }
+    moveCursor(-10);
+  },
+  'arrow-down': ({moveCursor, isIME}) => {
+    if (isIME) {
+      NativeIME?.sendDownUpKeyEvents(20);
+      return;
+    }
+    moveCursor(10);
+  },
 };
 
 interface Props {
   layout?: KeyboardLayout;
+  mode?: string;
 }
 
 const ROW_HEIGHT = 48;
@@ -103,13 +157,15 @@ function renderRows(
   ));
 }
 
-export function Keyboard({layout = LAYOUT_SOFLE}: Props) {
+export function Keyboard({layout = LAYOUT_SOFLE, mode}: Props) {
+  const isIME = mode === 'ime';
   const [mods, setMods] = useState<ModState>(createModState());
   const [layer, setLayer] = useState<LayerState>(createLayerState());
   const [text, setText] = useState('');
   const [selStart, setSelStart] = useState(0);
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const inputRef = useRef<TextInput>(null);
+  const nativeModule = NativeModules.CodeKeyboardModule;
 
   const ctxRef = useRef<ActionCtx>(null!);
 
@@ -122,6 +178,10 @@ export function Keyboard({layout = LAYOUT_SOFLE}: Props) {
 
   const insertText = useCallback(
     (t: string) => {
+      if (isIME) {
+        nativeModule?.commitText(t);
+        return;
+      }
       setText(prev => {
         const before = prev.substring(0, selStart);
         const after = prev.substring(selStart);
@@ -133,7 +193,7 @@ export function Keyboard({layout = LAYOUT_SOFLE}: Props) {
         return next;
       });
     },
-    [selStart, updateSuggestions],
+    [selStart, updateSuggestions, isIME, nativeModule],
   );
 
   const moveCursor = useCallback(
@@ -182,7 +242,7 @@ export function Keyboard({layout = LAYOUT_SOFLE}: Props) {
   };
 
   const ctx: ActionCtx = {
-    text, selStart, mods, layer,
+    text, selStart, mods, layer, isIME,
     setText, setSelStart, setMods, setLayer, setSuggestions,
     inputRef, updateSuggestions, insertText, moveCursor,
   };
@@ -238,25 +298,27 @@ export function Keyboard({layout = LAYOUT_SOFLE}: Props) {
   const layerData = getLayer(layout, layerName);
 
   return (
-    <View style={styles.container}>
-      <View style={styles.outputArea}>
-        <TextInput
-          ref={inputRef}
-          style={styles.input}
-          value={text}
-          onChangeText={setText}
-          onSelectionChange={e => {
-            const pos = e.nativeEvent.selection.start;
-            setSelStart(pos);
-            updateSuggestions(text, pos);
-          }}
-          placeholder="Type here..."
-          placeholderTextColor="#555"
-          autoCapitalize="none"
-          autoCorrect={false}
-          multiline
-        />
-      </View>
+    <View style={isIME ? styles.imeContainer : styles.container}>
+      {!isIME && (
+        <View style={styles.outputArea}>
+          <TextInput
+            ref={inputRef}
+            style={styles.input}
+            value={text}
+            onChangeText={setText}
+            onSelectionChange={e => {
+              const pos = e.nativeEvent.selection.start;
+              setSelStart(pos);
+              updateSuggestions(text, pos);
+            }}
+            placeholder="Type here..."
+            placeholderTextColor="#555"
+            autoCapitalize="none"
+            autoCorrect={false}
+            multiline
+          />
+        </View>
+      )}
       <SuggestionBar suggestions={suggestions} onSelect={applySuggestion} />
       <View style={styles.keyboard}>
         {isSplit(layout) ? (
@@ -295,6 +357,9 @@ export function Keyboard({layout = LAYOUT_SOFLE}: Props) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: '#111',
+  },
+  imeContainer: {
     backgroundColor: '#111',
   },
   outputArea: {

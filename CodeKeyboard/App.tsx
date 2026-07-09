@@ -53,9 +53,13 @@ function PlaceholderScreen({tab}: {tab: Tab}) {
   );
 }
 
-function App() {
+function App({mode}: {mode?: string}) {
   const isDarkMode = useColorScheme() === 'dark';
   const [activeTab, setActiveTab] = useState<Tab>('keyboard');
+
+  if (mode === 'ime') {
+    return <Keyboard mode="ime" />;
+  }
 
   return (
     <SafeAreaProvider>
