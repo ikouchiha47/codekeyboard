@@ -2,7 +2,6 @@ package com.codekeyboard
 
 /**
  * Base definition of a single key.
- * Used by both split and flat layouts.
  */
 data class KeyDef(
     val label: String,
@@ -13,34 +12,27 @@ data class KeyDef(
 )
 
 /**
- * Represents one row of keys.
+ * Row alignment within the keyboard area.
  */
-typealias KeyRow = List<KeyDef>
-
-/**
- * Data for a split keyboard (left + right halves).
- */
-data class SplitLayoutData(
-    val left: List<KeyRow>,
-    val right: List<KeyRow>,
-    val staggerLeft: List<Int>,
-    val staggerRight: List<Int>
-)
-
-/**
- * Data for a flat (non-split) keyboard.
- */
-data class FlatLayoutData(
-    val rows: List<KeyRow>
-)
-
-/**
- * Sealed type so a layout can be either split or flat.
- */
-sealed class LayoutData {
-    data class Split(val data: SplitLayoutData) : LayoutData()
-    data class Flat(val data: FlatLayoutData) : LayoutData()
+enum class Alignment {
+    LEFT, RIGHT, CENTER, SPLIT
 }
+
+/**
+ * One row of keys + metadata.
+ */
+data class Row(
+    val keys: List<KeyDef>,
+    val alignment: Alignment = Alignment.SPLIT,
+    val stagger: List<Int> = emptyList()
+)
+
+/**
+ * Unified grid layout used by all keyboard layouts (split or flat).
+ */
+data class GridLayoutData(
+    val rows: List<Row>
+)
 
 /**
  * Core abstraction for a keyboard layout.
@@ -49,5 +41,5 @@ sealed class LayoutData {
 interface KeyboardLayout {
     val name: String
     val isSplit: Boolean
-    val layers: Map<String, LayoutData>
+    val layers: Map<String, GridLayoutData>
 }
