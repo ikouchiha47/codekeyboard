@@ -13,8 +13,8 @@ class IMEHelperModule(reactContext: ReactApplicationContext) :
 
   @ReactMethod
   fun showPicker() {
-    val imm = currentActivity?.getSystemService(Context.INPUT_METHOD_SERVICE)
-            as? InputMethodManager
+    val imm = reactApplicationContext.currentActivity
+        ?.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
     imm?.showInputMethodPicker()
   }
 }
