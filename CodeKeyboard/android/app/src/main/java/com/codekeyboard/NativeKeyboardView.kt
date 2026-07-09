@@ -20,7 +20,8 @@ class NativeKeyboardView @JvmOverloads constructor(
     defStyleAttr: Int = 0
 ) : View(context, attrs, defStyleAttr) {
 
-    private var layout: SplitLayoutData = SofleLayout.BASE
+    private var currentLayout: KeyboardLayout = SofleLayout
+    private var currentLayerData: LayoutData = SofleLayout.layers["base"]!!
     private var listener: KeyPressListener? = null
 
     private var shiftActive = false
@@ -46,8 +47,9 @@ class NativeKeyboardView @JvmOverloads constructor(
     private data class KeyRect(val rect: RectF, val key: KeyDef)
     private val keyRects = mutableListOf<KeyRect>()
 
-    fun setLayout(layout: SplitLayoutData) {
-        this.layout = layout
+    fun setLayout(layout: KeyboardLayout, layer: String = "base") {
+        this.currentLayout = layout
+        this.currentLayerData = layout.layers[layer] ?: layout.layers["base"]!!
         requestLayout()
     }
 
@@ -56,7 +58,10 @@ class NativeKeyboardView @JvmOverloads constructor(
     }
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
-        val rows = max(layout.left.size, layout.right.size)
+        val rows = when (val d = currentLayerData) {
+            is LayoutData.Split -> max(d.data.left.size, d.data.right.size)
+            is LayoutData.Flat -> d.data.rows.size
+        }
         val height = (rows * rowHeight + (rows - 1) * rowGap + bottomBarHeight + 2 * 6 * density).toInt()
         setMeasuredDimension(MeasureSpec.getSize(widthMeasureSpec), height)
     }
@@ -71,14 +76,19 @@ class NativeKeyboardView @JvmOverloads constructor(
         val halfWidth = availWidth / 2
         val keyboardHeight = height - bottomBarHeight
 
-        drawHalf(canvas, layout.left, padding, padding, halfWidth, true, keyboardHeight)
-        drawHalf(canvas, layout.right, padding + halfWidth + halfGap, padding, halfWidth, false, keyboardHeight)
-        // Bottom padding reserved for system IME bar (globe + hide icons are drawn by Android)
+        when (val d = currentLayerData) {
+            is LayoutData.Split -> {
+                drawHalf(canvas, d.data.left, padding, padding, halfWidth, true, keyboardHeight, d.data.staggerLeft)
+                drawHalf(canvas, d.data.right, padding + halfWidth + halfGap, padding, halfWidth, false, keyboardHeight, d.data.staggerRight)
+            }
+            is LayoutData.Flat -> {
+                drawFlat(canvas, d.data.rows, padding, padding, width - 2 * padding, keyboardHeight)
+            }
+        }
+        // Bottom padding reserved for system IME bar
     }
 
-    private fun drawHalf(canvas: Canvas, rows: SplitHalf, startX: Float, startY: Float, halfWidth: Float, isLeft: Boolean, maxHeight: Float) {
-        val staggerList = if (isLeft) layout.staggerLeft else layout.staggerRight
-
+    private fun drawHalf(canvas: Canvas, rows: SplitHalf, startX: Float, startY: Float, halfWidth: Float, isLeft: Boolean, maxHeight: Float, staggerList: List<Int>) {
         for ((rowIdx, row) in rows.withIndex()) {
             val totalWidthUnits = row.sumOf { it.width.toDouble() }.toFloat()
             val availForKey = halfWidth - (row.size - 1) * keyGap
@@ -120,6 +130,12 @@ class NativeKeyboardView @JvmOverloads constructor(
                 x += keyW + keyGap
             }
         }
+    }
+
+    private fun drawFlat(canvas: Canvas, rows: List<KeyRow>, startX: Float, startY: Float, availWidth: Float, maxHeight: Float) {
+        // TODO: implement flat keyboard rendering (QWERTY, etc.)
+        // For now just draw a placeholder text
+        canvas.drawText("Flat layout not implemented", startX + 20, startY + 40, labelPaint)
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {

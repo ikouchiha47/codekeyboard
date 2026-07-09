@@ -25,11 +25,11 @@ class CodeKeyboardIME : InputMethodService(), KeyPressListener {
     val ic = currentInputConnection ?: return
 
     when (key.action) {
-      "lower" -> { currentLayer = "lower"; keyboardView.setLayout(SofleLayout.LOWER); return }
-      "raise" -> { currentLayer = "raise"; keyboardView.setLayout(SofleLayout.RAISE); return }
-      "adj" -> { currentLayer = "adj"; keyboardView.setLayout(SofleLayout.ADJUST); return }
-      "func" -> { currentLayer = "func"; keyboardView.setLayout(SofleLayout.FUNC); return }
-      "base" -> { currentLayer = "base"; keyboardView.setLayout(SofleLayout.BASE); return }
+      "lower" -> { currentLayer = "lower"; keyboardView.setLayout(SofleLayout, "lower"); return }
+      "raise" -> { currentLayer = "raise"; keyboardView.setLayout(SofleLayout, "raise"); return }
+      "adj" -> { currentLayer = "adj"; keyboardView.setLayout(SofleLayout, "adj"); return }
+      "func" -> { currentLayer = "func"; keyboardView.setLayout(SofleLayout, "func"); return }
+      "base" -> { currentLayer = "base"; keyboardView.setLayout(SofleLayout, "base"); return }
       "backspace" -> {
         val before = ic.getTextBeforeCursor(1, 0)
         if (before != null && before.isNotEmpty()) {
