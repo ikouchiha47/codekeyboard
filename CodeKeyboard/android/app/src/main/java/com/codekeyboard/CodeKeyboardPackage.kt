@@ -9,7 +9,10 @@ class CodeKeyboardPackage : ReactPackage {
   override fun createNativeModules(
     reactContext: ReactApplicationContext
   ): List<NativeModule> {
-    return listOf(CodeKeyboardModule(reactContext))
+    return listOf(
+      CodeKeyboardModule(reactContext),
+      IMEHelperModule(reactContext),
+    )
   }
 
   override fun createViewManagers(

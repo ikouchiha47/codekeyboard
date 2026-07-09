@@ -1,4 +1,4 @@
-import React, {useState} from 'react';
+import React, {useState, useCallback} from 'react';
 import {
   View,
   Text,
@@ -6,11 +6,41 @@ import {
   StyleSheet,
   StatusBar,
   useColorScheme,
+  NativeModules,
 } from 'react-native';
 import {SafeAreaProvider, SafeAreaView} from 'react-native-safe-area-context';
 import {Keyboard} from './src/keyboard/Keyboard';
 
 type Tab = 'keyboard' | 'settings' | 'themes' | 'languages';
+
+function SettingsScreen() {
+  const handleEnable = useCallback(() => {
+    NativeModules.IMEHelper?.showPicker();
+  }, []);
+
+  return (
+    <View style={styles.settingsContainer}>
+      <Text style={styles.settingsTitle}>Settings</Text>
+      <TouchableOpacity style={styles.settingsButton} onPress={handleEnable}>
+        <Text style={styles.settingsButtonText}>Enable CodeKeyboard</Text>
+      </TouchableOpacity>
+      <Text style={styles.settingsHint}>
+        Opens the IME picker. Select "CodeKeyboard" from the list to enable
+        it, then switch to it in any text field.
+      </Text>
+    </View>
+  );
+}
+
+function PlaceholderScreen({tab}: {tab: Tab}) {
+  return (
+    <View style={styles.placeholder}>
+      <Text style={styles.placeholderText}>
+        {tab.charAt(0).toUpperCase() + tab.slice(1)} — coming soon
+      </Text>
+    </View>
+  );
+}
 
 function App() {
   const isDarkMode = useColorScheme() === 'dark';
@@ -45,13 +75,10 @@ function App() {
         </View>
         {activeTab === 'keyboard' ? (
           <Keyboard />
+        ) : activeTab === 'settings' ? (
+          <SettingsScreen />
         ) : (
-          <View style={styles.placeholder}>
-            <Text style={styles.placeholderText}>
-              {activeTab.charAt(0).toUpperCase() + activeTab.slice(1)} —
-              coming soon
-            </Text>
-          </View>
+          <PlaceholderScreen tab={activeTab} />
         )}
       </SafeAreaView>
     </SafeAreaProvider>
@@ -85,6 +112,37 @@ const styles = StyleSheet.create({
   },
   activeTabText: {
     color: '#4a9eff',
+  },
+  settingsContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  settingsTitle: {
+    color: '#e0e0e0',
+    fontSize: 22,
+    fontWeight: '600',
+    marginBottom: 24,
+  },
+  settingsButton: {
+    backgroundColor: '#2d6b3f',
+    paddingVertical: 14,
+    paddingHorizontal: 32,
+    borderRadius: 8,
+  },
+  settingsButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  settingsHint: {
+    color: '#777',
+    fontSize: 13,
+    textAlign: 'center',
+    marginTop: 16,
+    lineHeight: 20,
+    maxWidth: 300,
   },
   placeholder: {
     flex: 1,
