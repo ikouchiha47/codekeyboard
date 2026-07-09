@@ -21,7 +21,7 @@ class NativeKeyboardView @JvmOverloads constructor(
 ) : View(context, attrs, defStyleAttr) {
 
     private var currentLayout: KeyboardLayout = SofleLayout
-    private var currentLayerData: LayoutData = SofleLayout.layers["base"]!!
+    private var currentLayerData: GridLayoutData = SofleLayout.layers["base"]!!
     private var listener: KeyPressListener? = null
 
     private var shiftActive = false
