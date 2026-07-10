@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Keyboard Variants – Native Sizing</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #0a0a0a; color: #ddd;
+    font-family: -apple-system, 'Segoe UI', Roboto, sans-serif;
+    font-size: 13px;
+    padding: 16px 8px;
+    -webkit-user-select: none; user-select: none;
+  }
+
+  h1 { font-size: 13px; color: #888; margin-bottom: 12px; letter-spacing: 0.5px; text-transform: uppercase; }
+
+  /* ── Controls ── */
+  .controls {
+    display: flex; gap: 6px; flex-wrap: wrap;
+    margin-bottom: 12px;
+  }
+  .pill {
+    padding: 4px 10px; border-radius: 5px;
+    font-size: 10px; font-weight: 700; letter-spacing: 0.5px;
+    background: #222; color: #555; border: 1px solid #333;
+    cursor: pointer; transition: all 0.1s;
+  }
+  .pill.active { background: #1a3a5c; color: #4a9eff; border-color: #4a9eff; }
+  .pill:hover   { background: #2a2a2a; color: #999; }
+  .sep { width: 1px; background: #333; margin: 0 2px; align-self: stretch; }
+
+  /* ── Phone frame ── */
+  .phone-wrap {
+    display: flex; justify-content: center;
+    margin-bottom: 24px;
+  }
+  .phone {
+    width: 360px;
+    background: #111;
+    border: 1px solid #2a2a2a;
+    border-radius: 12px;
+    overflow: hidden;
+  }
+
+  /* ── Info bar ── */
+  .info-bar {
+    padding: 6px 8px;
+    background: #0e0e0e;
+    border-bottom: 1px solid #1e1e1e;
+    display: flex; gap: 12px; align-items: center;
+    font-size: 10px; color: #555;
+  }
+  .info-bar span { color: #4a9eff; font-weight: 700; }
+
+  /* ── Keyboard canvas ── */
+  .kb-canvas {
+    background: #111;
+    position: relative;
+    /* height set by JS */
+  }
+
+  /* ── Keys (absolutely positioned by JS) ── */
+  .key {
+    position: absolute;
+    display: flex; align-items: center; justify-content: center;
+    background: #2c2c2c;
+    border-radius: 6px;
+    color: #e0e0e0;
+    font-size: 11px; font-weight: 500;
+    cursor: pointer;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.4);
+    transition: background 0.05s, transform 0.05s;
+    overflow: hidden;
+  }
+  .key:active { background: #3a3a3a !important; transform: scale(0.93); }
+  .key .lbl { pointer-events: none; font-size: 11px; line-height: 1; }
+  .key .sub {
+    position: absolute; top: 2px; right: 3px;
+    font-size: 7px; color: #777; pointer-events: none;
+  }
+  /* special types */
+  .key.mod    { background: #252525; }
+  .key.thumb  { background: #1a2a3a; border-bottom: 2px solid #4a9eff; }
+  .key.thumb .lbl { font-size: 9px; color: #7ab8ff; }
+  .key.layer  { background: #162616; border-bottom: 2px solid #4caf50; }
+  .key.layer .lbl { font-size: 8px; color: #81c784; font-weight: 700; }
+  .key.func   { background: #2a1a1a; border-bottom: 2px solid #ff9800; }
+  .key.func .lbl  { font-size: 8px; color: #ffb74d; }
+
+  /* ── Description ── */
+  .desc {
+    width: 360px;
+    margin: 0 auto 24px;
+    font-size: 11px; color: #555; line-height: 1.6;
+  }
+  .desc strong { color: #999; }
+  .tag {
+    display: inline-block;
+    background: #1a1a1a; border: 1px solid #333;
+    padding: 1px 5px; border-radius: 3px;
+    font-size: 10px; font-family: monospace;
+    color: #bbb; margin: 1px;
+  }
+
+  /* ── Gap indicator ── */
+  .gap-line {
+    position: absolute; top: 0; bottom: 0;
+    width: 1px; background: #1e1e1e;
+    pointer-events: none;
+  }
+</style>
+</head>
+<body>
+
+<h1>Keyboard Variants — 360px portrait (exact native sizing)</h1>
+
+<div class="controls">
+  <button class="pill active" id="v-v1">V1 · 6+7 current</button>
+  <button class="pill"        id="v-v2">V2 · 6+5 drop [ ]</button>
+  <button class="pill"        id="v-v3">V3 · 5+5 symmetric</button>
+  <div class="sep"></div>
+  <button class="pill active" id="l-base">BASE</button>
+  <button class="pill"        id="l-lower">LOWER</button>
+  <button class="pill"        id="l-raise">RAISE</button>
+</div>
+
+<!-- V1 -->
+<div class="phone-wrap" id="wrap-v1">
+  <div class="phone">
+    <div class="info-bar" id="info-v1"></div>
+    <div class="kb-canvas" id="kb-v1"></div>
+  </div>
+</div>
+<div class="desc" id="desc-v1"></div>
+
+<!-- V2 -->
+<div class="phone-wrap" id="wrap-v2" style="display:none">
+  <div class="phone">
+    <div class="info-bar" id="info-v2"></div>
+    <div class="kb-canvas" id="kb-v2"></div>
+  </div>
+</div>
+<div class="desc" id="desc-v2" style="display:none"></div>
+
+<!-- V3 -->
+<div class="phone-wrap" id="wrap-v3" style="display:none">
+  <div class="phone">
+    <div class="info-bar" id="info-v3"></div>
+    <div class="kb-canvas" id="kb-v3"></div>
+  </div>
+</div>
+<div class="desc" id="desc-v3" style="display:none"></div>
+
+<script>
+// ── Exact same constants as SofleLayoutComputer.kt ─────────────────────────
+const C = {
+  PADDING:    6,
+  KEY_GAP:    5,
+  ROW_GAP:    5,
+  HALF_GAP:   24,
+  KEY_HEIGHT: 44,
+  SCREEN_W:   360,
+};
+
+// Derived
+const halfWidth = (C.SCREEN_W - 2 * C.PADDING - C.HALF_GAP) / 2;
+const totalH = 4 * (C.KEY_HEIGHT + C.ROW_GAP) + 1.0 * C.KEY_HEIGHT + 2 * C.PADDING;
+
+// ── Stagger arrays ──────────────────────────────────────────────────────────
+const ST = {
+  L6: [0, 0.25, 0.50, 0.75, 1.00, 1.00],
+  L5: [0, 0.25, 0.50, 0.75, 1.00],
+  R7: [1.00, 0.75, 0.50, 0.25, 0, 0, 0],
+  R5: [1.00, 0.75, 0.50, 0.25, 0],
+};
+
+// ── Key helpers ─────────────────────────────────────────────────────────────
+const k  = (l, a, s, c)     => ({ l, a: a||'', s: s||'', c: c||'' });
+const kl = (l, a)           => k(l, a||l, '', 'layer');
+const km = (l, a)           => k(l, a||l, '', 'mod');
+const kt = (l, a)           => k(l, a||l, '', 'thumb');
+const kf = (l, a)           => k(l, a||l, '', 'func');
+const _  = ()               => k('', '', '', '');
+
+// ── Layer data ──────────────────────────────────────────────────────────────
+// Each variant: { layers: { base:{l,r}, lower:{l,r}, raise:{l,r} }, staggerL, staggerR }
+
+const VARIANTS = {
+
+  // ── V1: 6 + 7 (current Sofle) ────────────────────────────────────────────
+  v1: {
+    staggerL: ST.L6,
+    staggerR: ST.R7,
+    layers: {
+      base: {
+        l: [
+          [km('Tab','tab'), k('q'), k('w'), k('e'), k('r'), k('t')],
+          [km('Caps','caps'), k('a'), k('s'), k('d'), k('f'), k('g')],
+          [km('Shift','shift'), k('z'), k('x'), k('c'), k('v'), k('b')],
+          [km('Ctrl','ctrl'), km('Alt','alt'), kt('Spc','space'), kl('LWR','lower'), kt('Cmd','meta'), _()],
+        ],
+        r: [
+          [k('y'), k('u'), k('i'), k('o'), k('p'), k('[','','{'), k(']','','}')],
+          [k('h'), k('j'), k('k'), k('l'), k(';','',':'), k("'",'','"'), km('Enter','enter')],
+          [k('n'), k('m'), k(',','','<'), k('.','','>'), k('/','','?'), km('Shift','shift'), km('Bksp','backspace')],
+          [kl('RSE','raise'), kt('Spc','space'), kt('Spc','space'), kl('ADJ','adj'), kf('FUNC','func'), km('←','arrow-left'), km('→','arrow-right')],
+        ],
+      },
+      lower: {
+        l: [
+          [km('Esc','escape'), k('1','','!'), k('2','','@'), k('3','','#'), k('4','','$'), k('5','','%')],
+          [k('`'), k('-'), k('='), k('['), k(']'), k('\\')],
+          [k('~'), k('_'), k('+'), k('{'), k('}'), k('|')],
+          [km('Ctrl','ctrl'), km('Alt','alt'), kt('Spc','space'), kl('LWR','lower'), _(), _()],
+        ],
+        r: [
+          [k('6','','^'), k('7','','&'), k('8','','*'), k('9','','('), k('0','',' )'), k('-'), k('=')],
+          [k('^'), k('&'), k('*'), k('('), k(')'), k('_'), k('+')],
+          [k('!'), k('@'), k('#'), k('$'), k('%'), km('Bksp','backspace'), km('Del','delete')],
+          [kl('RSE','raise'), kt('Spc','space'), _(), kl('ADJ','adj'), kf('FUNC','func'), km('←','arrow-left'), km('→','arrow-right')],
+        ],
+      },
+      raise: {
+        l: [
+          [k('F1'), k('F2'), k('F3'), k('F4'), k('F5'), k('F6')],
+          [k('F7'), k('F8'), k('F9'), k('F10'), k('F11'), k('F12')],
+          [k('PrtSc'), k('ScrLk'), k('Pause'), k('Ins'), k('Home'), k('PgUp')],
+          [km('Ctrl','ctrl'), km('Alt','alt'), kt('Spc','space'), kl('LWR','lower'), _(), _()],
+        ],
+        r: [
+          [km('←','arrow-left'), km('↓','arrow-down'), km('↑','arrow-up'), km('→','arrow-right'), _(), _(), _()],
+          [k('Home'), k('End'), k('PgUp'), k('PgDn'), _(), _(), _()],
+          [k('Cut'), k('Copy'), k('Paste'), _(), _(), km('Del','delete'), km('Bksp','backspace')],
+          [kl('RSE','raise'), kt('Spc','space'), _(), kl('ADJ','adj'), kf('FUNC','func'), km('←','arrow-left'), km('→','arrow-right')],
+        ],
+      },
+    },
+  },
+
+  // ── V2: 6 + 5 (drop [ ] from right, Enter+Shift→thumb) ──────────────────
+  v2: {
+    staggerL: ST.L6,
+    staggerR: ST.R5,
+    layers: {
+      base: {
+        l: [
+          [km('Tab','tab'), k('q'), k('w'), k('e'), k('r'), k('t')],
+          [km('Caps','caps'), k('a'), k('s'), k('d'), k('f'), k('g')],
+          [km('Shift','shift'), k('z'), k('x'), k('c'), k('v'), k('b')],
+          [km('Ctrl','ctrl'), km('Alt','alt'), kt('Spc','space'), kl('LWR','lower'), kt('Cmd','meta'), _()],
+        ],
+        r: [
+          [k('y'), k('u'), k('i'), k('o'), k('p')],
+          [k('h'), k('j'), k('k'), k('l'), k(';','',':')],
+          [k('n'), k('m'), k(',','','<'), k('.','','>'), km('Bksp','backspace')],
+          [kl('RSE','raise'), kt('Spc','space'), km('Enter','enter'), kl('ADJ','adj'), kf('FUNC','func')],
+        ],
+      },
+      lower: {
+        l: [
+          [km('Esc','escape'), k('1','','!'), k('2','','@'), k('3','','#'), k('4','','$'), k('5','','%')],
+          [k('`'), k('-'), k('='), k('[','','{'), k(']','','}'), k('\\')],
+          [k('~'), k('_'), k('+'), k('('), k(')'), k('|')],
+          [km('Ctrl','ctrl'), km('Alt','alt'), kt('Spc','space'), kl('LWR','lower'), _(), _()],
+        ],
+        r: [
+          [k('6','','^'), k('7','','&'), k('8','','*'), k('9','','('), k('0','',')')],
+          [k("'",'',' "'), k('/','','?'), k(';','',':'), k('='), k('+')],
+          [k('-'), k('_'), k('<'), k('>'), km('Del','delete')],
+          [kl('RSE','raise'), kt('Spc','space'), km('Enter','enter'), kl('ADJ','adj'), kf('FUNC','func')],
+        ],
+      },
+      raise: {
+        l: [
+          [k('F1'), k('F2'), k('F3'), k('F4'), k('F5'), k('F6')],
+          [k('F7'), k('F8'), k('F9'), k('F10'), k('F11'), k('F12')],
+          [k('Esc','escape'), k('Tab','tab'), k('Ins'), k('Home'), k('End'), k('PgUp')],
+          [km('Ctrl','ctrl'), km('Alt','alt'), kt('Spc','space'), kl('LWR','lower'), _(), _()],
+        ],
+        r: [
+          [km('←','arrow-left'), km('↓','arrow-down'), km('↑','arrow-up'), km('→','arrow-right'), k('PgDn')],
+          [k('Cut'), k('Copy'), k('Paste'), k('Undo'), k('Redo')],
+          [k('`'), k('\\'), k('|'), _(), km('Bksp','backspace')],
+          [kl('RSE','raise'), kt('Spc','space'), km('Enter','enter'), kl('ADJ','adj'), kf('FUNC','func')],
+        ],
+      },
+    },
+  },
+
+  // ── V3: 5 + 5 (drop outer cols both sides, fully symmetric) ─────────────
+  v3: {
+    staggerL: ST.L5,
+    staggerR: ST.R5,
+    layers: {
+      base: {
+        l: [
+          [k('q'), k('w'), k('e'), k('r'), k('t')],
+          [k('a'), k('s'), k('d'), k('f'), k('g')],
+          [k('z'), k('x'), k('c'), k('v'), k('b')],
+          [km('Shift','shift'), kt('Spc','space'), kl('LWR','lower'), km('Ctrl','ctrl'), km('Alt','alt')],
+        ],
+        r: [
+          [k('y'), k('u'), k('i'), k('o'), k('p')],
+          [k('h'), k('j'), k('k'), k('l'), k(';','',':')],
+          [k('n'), k('m'), k(',','','<'), k('.','','>'), km('Bksp','backspace')],
+          [kl('RSE','raise'), km('Enter','enter'), kt('Spc','space'), kf('FUNC','func'), kl('ADJ','adj')],
+        ],
+      },
+      lower: {
+        l: [
+          [k('1','','!'), k('2','','@'), k('3','','#'), k('4','','$'), k('5','','%')],
+          [k('`'), k('-','','_'), k('=','','+'), k('[','','{'), k(']','','}')],
+          [k('~'), k('\\','','|'), k('('), k(')'), k("'",'','"')],
+          [km('Shift','shift'), kt('Spc','space'), kl('LWR','lower'), km('Esc','escape'), km('Tab','tab')],
+        ],
+        r: [
+          [k('6','','^'), k('7','','&'), k('8','','*'), k('9','','('), k('0','',')')],
+          [k('/','','?'), k(';','',':'), k("'",'','"'), k('<'), k('>')],
+          [k('!'), k('@'), k('#'), k('$'), km('Del','delete')],
+          [kl('RSE','raise'), km('Enter','enter'), kt('Spc','space'), kf('FUNC','func'), kl('ADJ','adj')],
+        ],
+      },
+      raise: {
+        l: [
+          [k('F1'), k('F2'), k('F3'), k('F4'), k('F5')],
+          [k('F6'), k('F7'), k('F8'), k('F9'), k('F10')],
+          [k('F11'), k('F12'), k('Ins'), k('Home'), k('PgUp')],
+          [km('Shift','shift'), kt('Spc','space'), kl('LWR','lower'), km('Ctrl','ctrl'), km('Alt','alt')],
+        ],
+        r: [
+          [km('←','arrow-left'), km('↓','arrow-down'), km('↑','arrow-up'), km('→','arrow-right'), k('PgDn')],
+          [k('Home'), k('End'), k('PgUp'), k('PgDn'), k('End')],
+          [k('Cut'), k('Copy'), k('Paste'), k('Undo'), km('Bksp','backspace')],
+          [kl('RSE','raise'), km('Enter','enter'), kt('Spc','space'), kf('FUNC','func'), kl('ADJ','adj')],
+        ],
+      },
+    },
+  },
+};
+
+// ── Descriptions ────────────────────────────────────────────────────────────
+const DESCS = {
+  v1: {
+    base:  `<strong>V1 · 6+7 current.</strong> Left keys ≈ <span id="kw-v1-l"></span>px wide. Right keys ≈ <span id="kw-v1-r"></span>px wide. The 7-col right half makes right keys noticeably narrower — asymmetric and cramped for the right thumb. <span class="tag">[</span><span class="tag">]</span><span class="tag">'</span><span class="tag">Enter</span> occupy full columns on base.`,
+    lower: `<strong>V1 LOWER.</strong> Numbers + symbols. Left 6 cols still carry shifted symbols. Right has 7 cols of symbols — busy.`,
+    raise: `<strong>V1 RAISE.</strong> Navigation + F-keys on left, arrows + edit shortcuts on right.`,
+  },
+  v2: {
+    base:  `<strong>V2 · 6+5 — drop [ ] from right.</strong> Left ≈ <span id="kw-v2-l"></span>px. Right ≈ <span id="kw-v2-r"></span>px. Right half is now symmetric width. <span class="tag">Enter</span> moves to right thumb cluster. <span class="tag">[</span><span class="tag">]</span><span class="tag">{</span><span class="tag">}</span><span class="tag">(</span><span class="tag">)</span> move to LOWER. <span class="tag">'</span> and <span class="tag">/</span><span class="tag">?</span> also move to LOWER. Right keys are ~50% wider than V1.`,
+    lower: `<strong>V2 LOWER.</strong> Coding symbols on right: <span class="tag">'</span><span class="tag">/</span><span class="tag">;</span><span class="tag">=</span><span class="tag">+</span> — one thumb holds LWR, other taps. Left has numbers + brackets/braces/parens.`,
+    raise: `<strong>V2 RAISE.</strong> Left: F-keys + Esc/Tab/Home/End. Right: arrows + edit shortcuts + backtick/pipe.`,
+  },
+  v3: {
+    base:  `<strong>V3 · 5+5 — symmetric, no outer cols.</strong> Both halves ≈ <span id="kw-v3-l"></span>px per key. Fully symmetric. <span class="tag">Tab</span><span class="tag">Caps</span> dropped from base — move to LOWER thumb. <span class="tag">Shift</span> becomes left thumb key. <span class="tag">Enter</span> right thumb. Numbers, all brackets, symbols on layers. Cleanest base — alpha only + modifiers on thumbs.`,
+    lower: `<strong>V3 LOWER.</strong> Full number row split 1-5 / 6-0. All brackets/braces/parens/quotes on this layer. <span class="tag">Esc</span><span class="tag">Tab</span> on left thumb (coding must-haves).`,
+    raise: `<strong>V3 RAISE.</strong> Full F-key set on left. Arrows + nav on right. Edit shortcuts (Cut/Copy/Paste/Undo) on right bottom row.`,
+  },
+};
+
+// ── Layout compute (mirrors SofleLayoutComputer exactly) ────────────────────
+function computeLayout(variant, layer) {
+  const def   = VARIANTS[variant];
+  const data  = def.layers[layer] || def.layers.base;
+  const keys  = [];
+
+  computeHalf(data.l, def.staggerL, C.PADDING,                          halfWidth, keys);
+  computeHalf(data.r, def.staggerR, C.PADDING + halfWidth + C.HALF_GAP, halfWidth, keys);
+
+  return keys;
+}
+
+function computeHalf(rows, stagger, startX, hw, out) {
+  for (let ri = 0; ri < rows.length; ri++) {
+    const row      = rows[ri];
+    const total    = row.reduce((s, k) => s + 1, 0);  // all width=1
+    const gaps     = (row.length - 1) * C.KEY_GAP;
+    const keyW     = (hw - gaps) / row.length;
+    const baseY    = C.PADDING + ri * (C.KEY_HEIGHT + C.ROW_GAP);
+
+    let x = startX;
+    for (let ci = 0; ci < row.length; ci++) {
+      const key     = row[ci];
+      const stagY   = (stagger[ci] || 0) * C.KEY_HEIGHT;
+      const y       = baseY + stagY;
+
+      if (key.l !== '') {
+        out.push({ key, x, y, w: keyW, h: C.KEY_HEIGHT });
+      }
+      x += keyW + C.KEY_GAP;
+    }
+  }
+}
+
+// ── Render ──────────────────────────────────────────────────────────────────
+function render(variant, layer) {
+  const canvas  = document.getElementById('kb-' + variant);
+  const infoEl  = document.getElementById('info-' + variant);
+  const descEl  = document.getElementById('desc-' + variant);
+  const def     = VARIANTS[variant];
+
+  canvas.innerHTML = '';
+  canvas.style.height = totalH + 'px';
+  canvas.style.position = 'relative';
+
+  // Gap indicator line
+  const gapX  = C.PADDING + halfWidth + C.HALF_GAP / 2;
+  const gline = document.createElement('div');
+  gline.className = 'gap-line';
+  gline.style.left = gapX + 'px';
+  canvas.appendChild(gline);
+
+  const posKeys = computeLayout(variant, layer);
+
+  posKeys.forEach(({ key, x, y, w, h }) => {
+    const el = document.createElement('div');
+    el.className = 'key ' + key.c;
+    el.style.left   = x + 'px';
+    el.style.top    = y + 'px';
+    el.style.width  = w + 'px';
+    el.style.height = h + 'px';
+
+    const lbl = document.createElement('span');
+    lbl.className = 'lbl';
+    lbl.textContent = key.l;
+    el.appendChild(lbl);
+
+    if (key.s) {
+      const sub = document.createElement('span');
+      sub.className = 'sub';
+      sub.textContent = key.s;
+      el.appendChild(sub);
+    }
+
+    canvas.appendChild(el);
+  });
+
+  // Info bar
+  const lCols   = def.layers.base.l[0].filter(k => k.l !== '').length;
+  const rCols   = def.layers.base.r[0].filter(k => k.l !== '').length;
+  const lKeyW   = Math.round((halfWidth - (def.layers.base.l[0].length - 1) * C.KEY_GAP) / def.layers.base.l[0].length);
+  const rKeyW   = Math.round((halfWidth - (def.layers.base.r[0].length - 1) * C.KEY_GAP) / def.layers.base.r[0].length);
+
+  infoEl.innerHTML =
+    `cols: <span>${lCols}+${rCols}</span> &nbsp;|&nbsp; ` +
+    `left key: <span>~${lKeyW}px</span> &nbsp;|&nbsp; ` +
+    `right key: <span>~${rKeyW}px</span> &nbsp;|&nbsp; ` +
+    `layer: <span>${layer.toUpperCase()}</span>`;
+
+  // Fill size spans in desc
+  const descHTML = DESCS[variant][layer] || DESCS[variant].base;
+  descEl.innerHTML = descHTML;
+  const lSpan = descEl.querySelector(`#kw-${variant}-l`);
+  const rSpan = descEl.querySelector(`#kw-${variant}-r`);
+  if (lSpan) lSpan.textContent = lKeyW;
+  if (rSpan) rSpan.textContent = rKeyW;
+}
+
+// ── State + wiring ──────────────────────────────────────────────────────────
+let curVariant = 'v1';
+let curLayer   = 'base';
+
+function updateVariant(v) {
+  curVariant = v;
+  ['v1','v2','v3'].forEach(id => {
+    document.getElementById('wrap-' + id).style.display = id === v ? '' : 'none';
+    document.getElementById('desc-' + id).style.display = id === v ? '' : 'none';
+    document.getElementById('v-' + id).classList.toggle('active', id === v);
+  });
+  render(curVariant, curLayer);
+}
+
+function updateLayer(l) {
+  curLayer = l;
+  ['base','lower','raise'].forEach(id => {
+    document.getElementById('l-' + id).classList.toggle('active', id === l);
+  });
+  render(curVariant, curLayer);
+}
+
+['v1','v2','v3'].forEach(v =>
+  document.getElementById('v-' + v).addEventListener('click', () => updateVariant(v))
+);
+['base','lower','raise'].forEach(l =>
+  document.getElementById('l-' + l).addEventListener('click', () => updateLayer(l))
+);
+
+// Initial render of all three variants so their heights are set
+['v1','v2','v3'].forEach(v => render(v, 'base'));
+
+</script>
+</body>
+</html>
