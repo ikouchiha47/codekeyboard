@@ -42,6 +42,19 @@ data class PositionedKey(
 )
 
 /**
+ * One layer's full key data: a top utility row + left/right split halves.
+ *
+ * topRow  — full-width row, no stagger (Tab, Esc anchors + layer-specific slots)
+ * left    — 4 rows × 5 cols, column-staggered
+ * right   — 4 rows × 5 cols, column-staggered (mirror stagger)
+ */
+data class SofleLayerData(
+    val topRow: List<KeyDef>,
+    val left:   List<List<KeyDef>>,
+    val right:  List<List<KeyDef>>
+)
+
+/**
  * Contract every keyboard layout must fulfil.
  *
  * Implementations own:

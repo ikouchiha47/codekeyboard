@@ -4,56 +4,89 @@ import org.junit.Assert.*
 import org.junit.Test
 
 /**
- * Pure JUnit tests for SofleLayoutComputer.
- * No Android runtime needed — SofleLayoutComputer has zero Android imports.
+ * Pure JUnit tests for SofleLayoutComputer — V5 layout.
+ * No Android runtime needed.
+ *
+ * V5 structure:
+ *   Top row : 8 keys (Tab, Esc + 6 layer slots), full-width, no stagger
+ *   Left    : 4 rows × 5 cols, stagger [0, .25, .5, .75, 1.0]
+ *   Right   : 4 rows × 5 cols, stagger [1.0, .75, .5, .25, 0]
  */
 class SofleLayoutComputerTest {
 
-    // Use density=1f so px == dp, making assertions easy to reason about.
     private val density  = 1f
     private val computer = SofleLayoutComputer(density)
     private val screenW  = 1000
 
-    // ── Structural tests ──────────────────────────────────────────────────────
+    // ── Key counts ────────────────────────────────────────────────────────────
 
     @Test fun `compute returns keys for base layer`() {
-        val keys = computer.compute(screenW, "base")
-        assertTrue("Should have keys", keys.isNotEmpty())
+        assertTrue(computer.compute(screenW, "base").isNotEmpty())
     }
 
-    @Test fun `compute falls back to base for unknown layer`() {
+    @Test fun `unknown layer falls back to base`() {
         val base    = computer.compute(screenW, "base")
-        val unknown = computer.compute(screenW, "does_not_exist")
+        val unknown = computer.compute(screenW, "nope")
         assertEquals(base.size, unknown.size)
     }
 
     @Test fun `all five layers produce keys`() {
-        for (layer in listOf("base", "lower", "raise", "adj", "func")) {
-            val keys = computer.compute(screenW, layer)
-            assertTrue("Layer $layer should have keys", keys.isNotEmpty())
+        for (layer in listOf("base","lower","raise","adj","func")) {
+            assertTrue("Layer $layer empty", computer.compute(screenW, layer).isNotEmpty())
         }
     }
 
-    @Test fun `base layer has correct key count`() {
-        // Left: 6+6+6+5 = 23 non-empty keys, Right: 7+7+7+7 = 28  → total 51
+    @Test fun `base layer key count is correct`() {
+        // top row:  8 (Tab Esc ` ^ Ctrl Alt Cmd \)
+        // left  :  5+5+5+5 = 20
+        // right :  5+5+5+5 = 20  (Bksp counts, ADJ counts)
+        // total : 48
         val keys = computer.compute(screenW, "base")
-        assertEquals(51, keys.size)
+        assertEquals(48, keys.size)
     }
 
-    // ── Split geometry tests ───────────────────────────────────────────────────
+    // ── Split geometry ────────────────────────────────────────────────────────
 
-    @Test fun `keys span both halves with a gap`() {
-        val keys    = computer.compute(screenW, "base")
-        val midX    = screenW / 2f
-        val leftMax = keys.filter { it.rect.right  <= midX }.maxOfOrNull { it.rect.right }
-        val rightMin= keys.filter { it.rect.left   >= midX }.minOfOrNull { it.rect.left }
+    @Test fun `top row keys span full width`() {
+        val keys   = computer.compute(screenW, "base")
+        val topRow = keys.filter { it.rect.top < computer.padding + computer.keyHeight }
+        assertEquals(8, topRow.size)
 
-        assertNotNull("Should have left-half keys",  leftMax)
-        assertNotNull("Should have right-half keys", rightMin)
-        assertTrue(
-            "Gap should exist between halves (halfGap=${computer.halfGap}px)",
-            rightMin!! - leftMax!! >= computer.halfGap - 1f   // 1px tolerance
-        )
+        // leftmost top key starts at padding
+        assertEquals(computer.padding, topRow.minOf { it.rect.left }, 0.5f)
+        // rightmost top key ends near screenW - padding
+        assertEquals(screenW - computer.padding, topRow.maxOf { it.rect.right }, 1f)
+    }
+
+    @Test fun `top row keys are all at same Y`() {
+        val keys   = computer.compute(screenW, "base")
+        val topRow = keys.filter { it.rect.top < computer.padding + computer.keyHeight }
+        val tops   = topRow.map { it.rect.top }.distinct()
+        assertEquals("All top-row keys should share the same Y", 1, tops.size)
+        assertEquals(computer.padding, tops[0], 0.5f)
+    }
+
+    @Test fun `main rows start below top row`() {
+        val keys      = computer.compute(screenW, "base")
+        val mainY     = computer.padding + computer.keyHeight + computer.rowGap
+        val mainKeys  = keys.filter { it.rect.top >= mainY - 0.5f }
+        assertTrue("Main rows should have keys", mainKeys.isNotEmpty())
+    }
+
+    @Test fun `two halves separated by gap`() {
+        val keys     = computer.compute(screenW, "base")
+        val hw       = (screenW - 2 * computer.padding - computer.halfGap) / 2f
+        val leftMax  = computer.padding + hw
+        val rightMin = leftMax + computer.halfGap
+
+        val leftKeys  = keys.filter { it.rect.right  <= leftMax  + 1f && it.rect.top >= computer.padding + computer.keyHeight }
+        val rightKeys = keys.filter { it.rect.left   >= rightMin - 1f }
+
+        assertTrue("Left half should have keys",  leftKeys.isNotEmpty())
+        assertTrue("Right half should have keys", rightKeys.isNotEmpty())
+
+        val actualGap = rightKeys.minOf { it.rect.left } - leftKeys.maxOf { it.rect.right }
+        assertTrue("Gap between halves should be >= halfGap", actualGap >= computer.halfGap - 1f)
     }
 
     @Test fun `no two keys overlap`() {
@@ -75,8 +108,8 @@ class SofleLayoutComputerTest {
     @Test fun `all keys fit within screen width`() {
         val keys = computer.compute(screenW, "base")
         for (pk in keys) {
-            assertTrue("Key '${pk.key.label}' left=${pk.rect.left} < 0", pk.rect.left >= 0f)
-            assertTrue("Key '${pk.key.label}' right=${pk.rect.right} > $screenW", pk.rect.right <= screenW + 1f)
+            assertTrue("${pk.key.label} left < 0",       pk.rect.left  >= 0f)
+            assertTrue("${pk.key.label} right > $screenW", pk.rect.right <= screenW + 1f)
         }
     }
 
@@ -85,92 +118,94 @@ class SofleLayoutComputerTest {
         val height = computer.heightPx(screenW).toFloat()
         for (pk in keys) {
             assertTrue(
-                "Key '${pk.key.label}' bottom=${pk.rect.bottom} > height=$height",
+                "${pk.key.label} bottom=${pk.rect.bottom} > height=$height",
                 pk.rect.bottom <= height + 1f
             )
         }
     }
 
-    // ── Stagger tests ─────────────────────────────────────────────────────────
+    // ── Stagger ───────────────────────────────────────────────────────────────
 
-    @Test fun `left half column 0 has zero stagger offset`() {
-        val keys = computer.compute(screenW, "base")
-        // Tab is left half, col 0, row 0 — its top should be at padding exactly
-        val tab = keys.first { it.key.label == "Tab" }
-        assertEquals(computer.padding, tab.rect.top, 0.5f)
+    @Test fun `left col 0 main keys have zero stagger offset`() {
+        val keys    = computer.compute(screenW, "base")
+        val mainY   = computer.padding + computer.keyHeight + computer.rowGap
+        // q is left half, col 0, row 0 — should be at mainY exactly
+        val q = keys.first { it.key.label == "q" }
+        assertEquals(mainY, q.rect.top, 0.5f)
     }
 
-    @Test fun `left half columns are progressively lower`() {
-        // Row 0: Tab(col0), q(col1), w(col2), e(col3), r(col4), t(col5)
+    @Test fun `left half main row 0 columns progressively lower`() {
         val keys  = computer.compute(screenW, "base")
-        val row0L = listOf("Tab","q","w","e","r","t").map { label ->
-            keys.first { it.key.label == label }
+        // Row 0 left: q(0) w(1) e(2) r(3) t(4)
+        val row0L = listOf("q","w","e","r","t").map { lbl ->
+            keys.first { it.key.label == lbl }
         }
-        // Each successive column top must be >= previous top (or equal for col4==col5)
         for (i in 0 until row0L.size - 1) {
             assertTrue(
-                "col$i top=${row0L[i].rect.top} should be <= col${i+1} top=${row0L[i+1].rect.top}",
-                row0L[i].rect.top <= row0L[i + 1].rect.top + 0.5f
+                "col$i.top=${row0L[i].rect.top} should be <= col${i+1}.top=${row0L[i+1].rect.top}",
+                row0L[i].rect.top <= row0L[i+1].rect.top + 0.5f
             )
         }
     }
 
-    @Test fun `right half column 0 has maximum stagger (lowest position)`() {
-        val keys  = computer.compute(screenW, "base")
-        // 'y' is right half col 0, row 0 — stagger = 1.0 → top = padding + keyHeight
+    @Test fun `right col 0 has maximum stagger (lowest position in its row)`() {
+        val keys    = computer.compute(screenW, "base")
+        val mainY   = computer.padding + computer.keyHeight + computer.rowGap
+        // 'y' is right half col 0, row 0 — stagger = 1.0
         val y = keys.first { it.key.label == "y" }
-        val expectedTop = computer.padding + computer.keyHeight
-        assertEquals(expectedTop, y.rect.top, 0.5f)
+        val expected = mainY + computer.keyHeight
+        assertEquals(expected, y.rect.top, 0.5f)
     }
 
-    @Test fun `right half columns are progressively higher (stagger decreases)`() {
+    @Test fun `right half main row 0 columns progressively higher`() {
         val keys  = computer.compute(screenW, "base")
-        // Row 0 right: y(col0=1.0), u(col1=0.75), i(col2=0.5), o(col3=0.25), p(col4=0), [(col5=0), ](col6=0)
-        val row0R = listOf("y","u","i","o","p","[","]").map { label ->
-            keys.first { it.key.label == label }
+        // Row 0 right: y(1.0) u(.75) i(.5) o(.25) p(0)
+        val row0R = listOf("y","u","i","o","p").map { lbl ->
+            keys.first { it.key.label == lbl }
         }
         for (i in 0 until row0R.size - 1) {
             assertTrue(
-                "col$i top=${row0R[i].rect.top} should be >= col${i+1} top=${row0R[i+1].rect.top}",
-                row0R[i].rect.top >= row0R[i + 1].rect.top - 0.5f
+                "col$i.top=${row0R[i].rect.top} should be >= col${i+1}.top=${row0R[i+1].rect.top}",
+                row0R[i].rect.top >= row0R[i+1].rect.top - 0.5f
             )
         }
     }
 
-    // ── Hit-test tests ────────────────────────────────────────────────────────
+    // ── Hit-test ──────────────────────────────────────────────────────────────
 
-    @Test fun `hitTest finds Tab key at its center`() {
+    @Test fun `Tab key is in top row and hittable at its centre`() {
         val keys = computer.compute(screenW, "base")
         val tab  = keys.first { it.key.label == "Tab" }
-        val found = keys.firstOrNull { it.rect.contains(tab.rect.centerX, tab.rect.centerY) }
-        assertEquals("Tab", found?.key?.label)
+        // Tab should be in the top row (y = padding)
+        assertEquals(computer.padding, tab.rect.top, 0.5f)
+        val hit = keys.firstOrNull { it.rect.contains(tab.rect.centerX, tab.rect.centerY) }
+        assertEquals("Tab", hit?.key?.label)
     }
 
-    @Test fun `hitTest finds Bksp key at its center`() {
-        val keys  = computer.compute(screenW, "base")
-        val bksp  = keys.first { it.key.action == "backspace" }
-        val found = keys.firstOrNull { it.rect.contains(bksp.rect.centerX, bksp.rect.centerY) }
-        assertEquals("backspace", found?.key?.action)
-    }
-
-    @Test fun `hitTest returns null for gap between halves`() {
+    @Test fun `Bksp key is hittable at its centre`() {
         val keys = computer.compute(screenW, "base")
-        // Point in the middle of the gap
-        val gapX  = screenW / 2f
-        val gapY  = computer.padding + computer.keyHeight / 2f
-        val found = keys.firstOrNull { it.rect.contains(gapX, gapY) }
-        assertNull("Gap should not hit any key", found)
+        val bksp = keys.first { it.key.action == "backspace" }
+        val hit  = keys.firstOrNull { it.rect.contains(bksp.rect.centerX, bksp.rect.centerY) }
+        assertEquals("backspace", hit?.key?.action)
     }
 
-    // ── heightPx test ─────────────────────────────────────────────────────────
+    @Test fun `gap between halves returns no hit`() {
+        val keys = computer.compute(screenW, "base")
+        val gapX = screenW / 2f
+        val gapY = computer.padding + computer.keyHeight + computer.rowGap + computer.keyHeight / 2f
+        val hit  = keys.firstOrNull { it.rect.contains(gapX, gapY) }
+        assertNull("Gap should not hit any key", hit)
+    }
 
-    @Test fun `heightPx is consistent across calls`() {
+    // ── Height ────────────────────────────────────────────────────────────────
+
+    @Test fun `heightPx is stable across calls`() {
         assertEquals(computer.heightPx(screenW), computer.heightPx(screenW))
     }
 
-    @Test fun `heightPx grows with larger density`() {
+    @Test fun `heightPx scales with density`() {
         val h1 = SofleLayoutComputer(1f).heightPx(screenW)
         val h2 = SofleLayoutComputer(2f).heightPx(screenW)
-        assertTrue("Higher density should produce taller keyboard", h2 > h1)
+        assertTrue(h2 > h1)
     }
 }
