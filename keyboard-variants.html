@@ -344,68 +344,53 @@ const VARIANTS = {
     },
   }},
 
-  // V5 ── hold-tap: home row mods + layer-on-hold thumbs ─────────────────────
-  // Tap = primary label  |  Hold = coloured strip + small label
-  // Home row mods (SCAG, index→pinky):
-  //   Left  f=⇧Shift  d=⌃Ctrl  s=⌥Alt  a=⌘Cmd
-  //   Right j=⇧Shift  k=⌃Ctrl  l=⌥Alt  ;=⌘Cmd
-  // Thumb hold:
-  //   Left  Spc  → hold = LWR
-  //   Right Enter→ hold = RSE  |  Right Spc → hold = FUNC
-  // Result: 2 thumb keys per side — no dedicated layer key column needed
+  // V5 = V4 exactly, with hold-tap annotations added on top
+  // Layout is identical — only these keys gain a secondary hold action:
+  //   Home row left:  a→⌘  s→⌥  d→⌃  f→⇧
+  //   Home row right: j→⇧  k→⌃  l→⌥  ;→⌘
+  //   Thumb left:     Spc  → hold = LWR  (LWR key still present as backup)
+  //   Thumb right:    Enter→ hold = RSE  (RSE key still present as backup)
   v5: { sL:ST.L5, sR:ST.R5, topRow: true,
     anchors:[km('Tab','tab'), km('Esc','escape')],
     layers:{
     base:{
       topSlots:[k('`'), k('^'), km('Ctrl','ctrl'), km('Alt','alt'), km('Cmd','meta'), k('\\')],
-      l:[
-        [k('q'), k('w'), k('e'), k('r'), k('t')],
-        [kht('a','a','⌘','hrm-cmd'),  kht('s','s','⌥','hrm-alt'),
-         kht('d','d','⌃','hrm-ctrl'), kht('f','f','⇧','hrm-shift'), k('g')],
-        [k('z'), k('x'), k('c'), k('v'), k('b')],
-        [km('Shift','shift'), kht('Spc','space','LWR','lhold')],
-      ],
-      r:[
-        [k('y'), k('u'), k('i'), k('o'), k('p')],
-        [k('h'), kht('j','j','⇧','hrm-shift'), kht('k','k','⌃','hrm-ctrl'),
-         kht('l','l','⌥','hrm-alt'), kht(';',';','⌘','hrm-cmd')],
-        [k('n'), k('m'), k(',','','<'), k('.','','>'), km('Bksp','backspace')],
-        [kht('Enter','enter','RSE','lhold'), kht('Spc','space','FUNC','lhold')],
-      ],
+      l:[[k('q'), k('w'), k('e'), k('r'), k('t')],
+         [kht('a','a','⌘','hrm-cmd'),  kht('s','s','⌥','hrm-alt'),
+          kht('d','d','⌃','hrm-ctrl'), kht('f','f','⇧','hrm-shift'), k('g')],
+         [k('z'), k('x'), k('c'), k('v'), k('b')],
+         [km('Shift','shift'), kht('Spc','space','LWR','lhold'), kl('LWR','lower'), km('Ctrl','ctrl'), km('Alt','alt')]],
+      r:[[k('y'), k('u'), k('i'), k('o'), k('p')],
+         [k('h'), kht('j','j','⇧','hrm-shift'), kht('k','k','⌃','hrm-ctrl'),
+          kht('l','l','⌥','hrm-alt'), kht(';',';','⌘','hrm-cmd')],
+         [k('n'), k('m'), k(',','','<'), k('.','','>'), km('Bksp','backspace')],
+         [kl('RSE','raise'), kht('Enter','enter','RSE','lhold'), kt('Spc','space'), kf('FUNC','func'), kl('ADJ','adj')]],
     },
     lower:{
       topSlots:[k('('), k(')'), k('['), k(']'), k('{'), k('}')],
-      l:[
-        [k('1','','!'), k('2','','@'), k('3','','#'), k('4','','$'), k('5','','%')],
-        [kht('a','a','⌘','hrm-cmd'),  kht('s','s','⌥','hrm-alt'),
-         kht('d','d','⌃','hrm-ctrl'), kht('f','f','⇧','hrm-shift'), k('`','','~')],
-        [k('\\','','|'), k('-','','_'), k('=','','+'), k("'",'','"'), k('/','','?')],
-        [km('Shift','shift'), kht('Spc','space','LWR','lhold')],
-      ],
-      r:[
-        [k('6','','^'), k('7','','&'), k('8','','*'), k('9'), k('0')],
-        [k('h'), kht('j','j','⇧','hrm-shift'), kht('k','k','⌃','hrm-ctrl'),
-         kht('l','l','⌥','hrm-alt'), kht(';',';','⌘','hrm-cmd')],
-        [k('<'), k('>'), k('~'), k('`'), km('Del','delete')],
-        [kht('Enter','enter','RSE','lhold'), kht('Spc','space','FUNC','lhold')],
-      ],
+      l:[[k('1','','!'), k('2','','@'), k('3','','#'), k('4','','$'), k('5','','%')],
+         [kht('a','a','⌘','hrm-cmd'),  kht('s','s','⌥','hrm-alt'),
+          kht('d','d','⌃','hrm-ctrl'), kht('f','f','⇧','hrm-shift'), k('`')],
+         [k('~'), k('\\','','|'), k('('), k(')'), k("'",'','"')],
+         [km('Shift','shift'), kht('Spc','space','LWR','lhold'), kl('LWR','lower'), km('Esc','escape'), km('Tab','tab')]],
+      r:[[k('6','','^'), k('7','','&'), k('8','','*'), k('9','','('), k('0','',')')],
+         [k('h'), kht('j','j','⇧','hrm-shift'), kht('k','k','⌃','hrm-ctrl'),
+          kht('l','l','⌥','hrm-alt'), kht(';',';','⌘','hrm-cmd')],
+         [k('/','','?'), k(';','',':'), k("'",'','"'), k('<'), km('Del','delete')],
+         [kl('RSE','raise'), kht('Enter','enter','RSE','lhold'), kt('Spc','space'), kf('FUNC','func'), kl('ADJ','adj')]],
     },
     raise:{
       topSlots:[k('F1'), k('F2'), k('F3'), k('F4'), k('F5'), k('F6')],
-      l:[
-        [k('F7'), k('F8'), k('F9'), k('F10'), k('F11')],
-        [kht('a','a','⌘','hrm-cmd'),  kht('s','s','⌥','hrm-alt'),
-         kht('d','d','⌃','hrm-ctrl'), kht('f','f','⇧','hrm-shift'), k('F12')],
-        [k('Home'), k('PgUp'), k('PgDn'), k('End'), k('Ins')],
-        [km('Shift','shift'), kht('Spc','space','LWR','lhold')],
-      ],
-      r:[
-        [km('←','arrow-left'), km('↓','arrow-down'), km('↑','arrow-up'), km('→','arrow-right'), k('PgDn')],
-        [k('h'), kht('j','j','⇧','hrm-shift'), kht('k','k','⌃','hrm-ctrl'),
-         kht('l','l','⌥','hrm-alt'), kht(';',';','⌘','hrm-cmd')],
-        [k('Cut'), k('Copy'), k('Paste'), k('Undo'), km('Bksp','backspace')],
-        [kht('Enter','enter','RSE','lhold'), kht('Spc','space','FUNC','lhold')],
-      ],
+      l:[[k('F7'), k('F8'), k('F9'), k('F10'), k('F11')],
+         [kht('a','a','⌘','hrm-cmd'),  kht('s','s','⌥','hrm-alt'),
+          kht('d','d','⌃','hrm-ctrl'), kht('f','f','⇧','hrm-shift'), k('F12')],
+         [k('Ins'), k('Home'), k('PgUp'), k('PgDn'), k('End')],
+         [km('Shift','shift'), kht('Spc','space','LWR','lhold'), kl('LWR','lower'), km('Ctrl','ctrl'), km('Alt','alt')]],
+      r:[[km('←','arrow-left'), km('↓','arrow-down'), km('↑','arrow-up'), km('→','arrow-right'), k('PgDn')],
+         [k('h'), kht('j','j','⇧','hrm-shift'), kht('k','k','⌃','hrm-ctrl'),
+          kht('l','l','⌥','hrm-alt'), kht(';',';','⌘','hrm-cmd')],
+         [k('Cut'), k('Copy'), k('Paste'), k('Undo'), km('Bksp','backspace')],
+         [kl('RSE','raise'), kht('Enter','enter','RSE','lhold'), kt('Spc','space'), kf('FUNC','func'), kl('ADJ','adj')]],
     },
   }},
 
