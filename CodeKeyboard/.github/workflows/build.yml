@@ -2,9 +2,9 @@ name: Build APK
 
 on:
   push:
-    branches: [main]
+    branches: [main, master]
   pull_request:
-    branches: [main]
+    branches: [main, master]
   workflow_dispatch:
 
 jobs:
@@ -43,6 +43,10 @@ jobs:
             "build-tools;36.0.0" \
             "ndk;27.1.12297006" \
             "cmake;3.22.1" | grep -v "^\[=" || true
+
+      - name: Run unit tests
+        run: |
+          cd android && ./gradlew testDebugUnitTest --console=plain
 
       - name: Build APK
         run: |

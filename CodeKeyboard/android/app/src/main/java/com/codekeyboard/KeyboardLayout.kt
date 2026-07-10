@@ -1,7 +1,5 @@
 package com.codekeyboard
 
-import android.graphics.RectF
-
 /**
  * A single key's logical definition. No geometry here.
  *
@@ -18,12 +16,29 @@ data class KeyDef(
 )
 
 /**
+ * Plain Kotlin rectangle — no Android imports, fully testable with pure JUnit.
+ * The renderer converts this to RectF when drawing.
+ */
+data class KeyRect(
+    val left: Float,
+    val top: Float,
+    val right: Float,
+    val bottom: Float
+) {
+    val width  get() = right - left
+    val height get() = bottom - top
+    val centerX get() = left + width / 2f
+    val centerY get() = top + height / 2f
+    fun contains(x: Float, y: Float) = x >= left && x < right && y >= top && y < bottom
+}
+
+/**
  * A key with a computed screen-space rectangle.
  * This is the only thing the renderer needs to know about a key.
  */
 data class PositionedKey(
     val key: KeyDef,
-    val rect: RectF
+    val rect: KeyRect
 )
 
 /**

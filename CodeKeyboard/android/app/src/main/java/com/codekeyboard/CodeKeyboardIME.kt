@@ -2,8 +2,10 @@ package com.codekeyboard
 
 import android.inputmethodservice.InputMethodService
 import android.view.View
+import android.view.ViewGroup
 import android.view.inputmethod.EditorInfo
 import android.view.KeyEvent
+import android.widget.LinearLayout
 
 class CodeKeyboardIME : InputMethodService() {
 
@@ -16,17 +18,41 @@ class CodeKeyboardIME : InputMethodService() {
         val density = resources.displayMetrics.density
 
         keyboardView = NativeKeyboardView(this)
-        keyboardView.computer   = SofleLayoutComputer(density)
-        keyboardView.kbState    = kbState
+        keyboardView.computer    = SofleLayoutComputer(density)
+        keyboardView.kbState     = kbState
         keyboardView.onKeyTapped = { key -> handleKey(key) }
 
-        // Initial render using screen width as estimate.
-        // onSizeChanged will recompute once the real width is known.
+        // Wrap the keyboard in a container that adds bottom padding for the
+        // navigation bar so the bottom row of keys is never hidden.
+        val wrapper = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+        }
+        wrapper.addView(keyboardView)
+
+        // Apply navigation bar inset as bottom padding on the wrapper.
+        // rootWindowInsets may be null on older APIs — guard with ?.
+        val navBarHeight = try {
+            val insets = window?.window?.decorView?.rootWindowInsets
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+                insets?.getInsets(android.view.WindowInsets.Type.navigationBars())?.bottom ?: 0
+            } else {
+                @Suppress("DEPRECATION")
+                insets?.systemWindowInsetBottom ?: 0
+            }
+        } catch (_: Exception) { 0 }
+        wrapper.setPadding(0, 0, 0, navBarHeight)
+
+        // Initial key compute — will be corrected by onSizeChanged once the
+        // view has real dimensions.
         val w = resources.displayMetrics.widthPixels
         val c = keyboardView.computer!!
         keyboardView.setKeys(c.compute(w, kbState.layer), kbState, c.heightPx(w))
 
-        return keyboardView
+        return wrapper
     }
 
     override fun onStartInput(editorInfo: EditorInfo?, restarting: Boolean) {
@@ -53,14 +79,23 @@ class CodeKeyboardIME : InputMethodService() {
             "ctrl"  -> { kbState.cycleCtrl();  keyboardView.notifyStateChanged(kbState); return }
             "alt"   -> { kbState.cycleAlt();   keyboardView.notifyStateChanged(kbState); return }
 
-            // ── Action keys ───────────────────────────────────────────────────
+            // ── Backspace ─────────────────────────────────────────────────────
+            // deleteSurroundingText(1,0) works across all editor types.
+            // Fall back to KEYCODE_DEL for editors that reject it (e.g. WebViews).
             "backspace" -> {
-                val before = ic?.getTextBeforeCursor(1, 0)
-                if (before != null && before.isNotEmpty()) {
-                    ic.deleteSurroundingText(before.length, 0)
+                if (ic?.deleteSurroundingText(1, 0) != true) {
+                    ic?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DEL))
+                    ic?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_UP,   KeyEvent.KEYCODE_DEL))
                 }
             }
-            "delete"      -> ic?.deleteSurroundingText(0, 1)
+
+            // ── Other action keys ─────────────────────────────────────────────
+            "delete"      -> {
+                if (ic?.deleteSurroundingText(0, 1) != true) {
+                    ic?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_FORWARD_DEL))
+                    ic?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_UP,   KeyEvent.KEYCODE_FORWARD_DEL))
+                }
+            }
             "enter"       -> ic?.commitText("\n", 1)
             "tab"         -> ic?.commitText("    ", 1)
             "space"       -> ic?.commitText(" ", 1)
