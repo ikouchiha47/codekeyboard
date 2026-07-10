@@ -8,19 +8,24 @@ import android.view.KeyEvent
 class CodeKeyboardIME : InputMethodService() {
 
     private lateinit var keyboardView: NativeKeyboardView
-    private lateinit var computer: KeyboardLayoutComputer
     private val kbState = KeyboardState()
 
     // ── Lifecycle ─────────────────────────────────────────────────────────────
 
     override fun onCreateInputView(): View {
         val density = resources.displayMetrics.density
-        computer    = SofleLayoutComputer(density)
 
         keyboardView = NativeKeyboardView(this)
+        keyboardView.computer   = SofleLayoutComputer(density)
+        keyboardView.kbState    = kbState
         keyboardView.onKeyTapped = { key -> handleKey(key) }
 
-        pushToView()
+        // Initial render using screen width as estimate.
+        // onSizeChanged will recompute once the real width is known.
+        val w = resources.displayMetrics.widthPixels
+        val c = keyboardView.computer!!
+        keyboardView.setKeys(c.compute(w, kbState.layer), kbState, c.heightPx(w))
+
         return keyboardView
     }
 
@@ -38,15 +43,15 @@ class CodeKeyboardIME : InputMethodService() {
             // ── Layer keys ────────────────────────────────────────────────────
             "lower", "raise", "adj", "func" -> {
                 kbState.cycleLayer(key.action)
-                pushToView()
+                keyboardView.notifyStateChanged(kbState)
                 return
             }
 
             // ── Modifier keys ─────────────────────────────────────────────────
-            "shift" -> { kbState.cycleShift(); pushToView(); return }
-            "caps"  -> { kbState.cycleCaps();  pushToView(); return }
-            "ctrl"  -> { kbState.cycleCtrl();  pushToView(); return }
-            "alt"   -> { kbState.cycleAlt();   pushToView(); return }
+            "shift" -> { kbState.cycleShift(); keyboardView.notifyStateChanged(kbState); return }
+            "caps"  -> { kbState.cycleCaps();  keyboardView.notifyStateChanged(kbState); return }
+            "ctrl"  -> { kbState.cycleCtrl();  keyboardView.notifyStateChanged(kbState); return }
+            "alt"   -> { kbState.cycleAlt();   keyboardView.notifyStateChanged(kbState); return }
 
             // ── Action keys ───────────────────────────────────────────────────
             "backspace" -> {
@@ -65,8 +70,6 @@ class CodeKeyboardIME : InputMethodService() {
             "arrow-up"    -> ic?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_UP))
             "arrow-down"  -> ic?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_DOWN))
             "meta"        -> ic?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_META_LEFT))
-
-            // Editor shortcuts (FUNC layer)
             "comment"     -> sendCtrl(ic, KeyEvent.KEYCODE_SLASH)
             "duplicate"   -> { sendCtrl(ic, KeyEvent.KEYCODE_C); sendCtrl(ic, KeyEvent.KEYCODE_V) }
 
@@ -76,7 +79,7 @@ class CodeKeyboardIME : InputMethodService() {
                 if (text.isNotEmpty()) {
                     ic?.commitText(text, 1)
                     kbState.onCharCommitted()
-                    pushToView()
+                    keyboardView.notifyStateChanged(kbState)
                 }
             }
         }
@@ -84,22 +87,8 @@ class CodeKeyboardIME : InputMethodService() {
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
-    /**
-     * Recompute key positions for the current layer and push to the view.
-     * Called after every state change.
-     */
-    private fun pushToView() {
-        val w      = keyboardView.width.takeIf { it > 0 }
-            ?: resources.displayMetrics.widthPixels
-        val keys   = computer.compute(w, kbState.layer)
-        val height = computer.heightPx(w)
-        keyboardView.setKeys(keys, kbState, height)
-    }
-
     private fun sendCtrl(ic: android.view.inputmethod.InputConnection?, keyCode: Int) {
-        ic?.sendKeyEvent(KeyEvent(0, 0, KeyEvent.ACTION_DOWN, keyCode,
-            0, KeyEvent.META_CTRL_ON))
-        ic?.sendKeyEvent(KeyEvent(0, 0, KeyEvent.ACTION_UP, keyCode,
-            0, KeyEvent.META_CTRL_ON))
+        ic?.sendKeyEvent(KeyEvent(0, 0, KeyEvent.ACTION_DOWN, keyCode, 0, KeyEvent.META_CTRL_ON))
+        ic?.sendKeyEvent(KeyEvent(0, 0, KeyEvent.ACTION_UP,   keyCode, 0, KeyEvent.META_CTRL_ON))
     }
 }

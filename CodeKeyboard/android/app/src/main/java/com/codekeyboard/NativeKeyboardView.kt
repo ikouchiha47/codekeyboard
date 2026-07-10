@@ -36,6 +36,10 @@ class NativeKeyboardView @JvmOverloads constructor(
     private var state: KeyboardState = KeyboardState()
     private var viewHeightPx: Int = 0
 
+    /** Called by the IME to provide a computer and state. View recomputes on every size change. */
+    var computer: KeyboardLayoutComputer? = null
+    var kbState: KeyboardState = KeyboardState()
+
     /**
      * Push a new set of pre-computed keys and matching state snapshot.
      * Triggers a redraw.
@@ -46,6 +50,25 @@ class NativeKeyboardView @JvmOverloads constructor(
         this.viewHeightPx = heightPx
         requestLayout()
         invalidate()
+    }
+
+    /** Called when the IME state changes — recomputes if we already have a valid width. */
+    fun notifyStateChanged(newState: KeyboardState) {
+        this.kbState = newState
+        if (width > 0) recompute(width)
+        else invalidate()
+    }
+
+    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
+        super.onSizeChanged(w, h, oldw, oldh)
+        if (w > 0) recompute(w)
+    }
+
+    private fun recompute(w: Int) {
+        val c = computer ?: return
+        val computed = c.compute(w, kbState.layer)
+        val h        = c.heightPx(w)
+        setKeys(computed, kbState, h)
     }
 
     // ── Measure ───────────────────────────────────────────────────────────────
