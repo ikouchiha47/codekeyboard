@@ -6,6 +6,7 @@ import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.RectF
 import android.util.AttributeSet
+import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
 import android.view.View
 
@@ -154,7 +155,10 @@ class NativeKeyboardView @JvmOverloads constructor(
             MotionEvent.ACTION_DOWN,
             MotionEvent.ACTION_POINTER_DOWN -> {
                 val idx = event.actionIndex
-                hitTest(event.getX(idx), event.getY(idx))?.let { onKeyTapped?.invoke(it) }
+                hitTest(event.getX(idx), event.getY(idx))?.let {
+                    performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                    onKeyTapped?.invoke(it)
+                }
             }
         }
         return true

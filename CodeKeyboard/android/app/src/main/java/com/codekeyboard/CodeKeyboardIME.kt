@@ -33,18 +33,18 @@ class CodeKeyboardIME : InputMethodService() {
         }
         wrapper.addView(keyboardView)
 
-        // Apply navigation bar inset as bottom padding on the wrapper.
-        // rootWindowInsets may be null on older APIs — guard with ?.
-        val navBarHeight = try {
-            val insets = window?.window?.decorView?.rootWindowInsets
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
-                insets?.getInsets(android.view.WindowInsets.Type.navigationBars())?.bottom ?: 0
+        // Listen for navigation bar insets and apply as bottom padding so the
+        // bottom row of keys is never hidden by the system gesture bar.
+        window?.window?.decorView?.setOnApplyWindowInsetsListener { v, insets ->
+            val navBarBottom = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+                insets.getInsets(android.view.WindowInsets.Type.navigationBars()).bottom
             } else {
                 @Suppress("DEPRECATION")
-                insets?.systemWindowInsetBottom ?: 0
+                insets.systemWindowInsetBottom
             }
-        } catch (_: Exception) { 0 }
-        wrapper.setPadding(0, 0, 0, navBarHeight)
+            wrapper.setPadding(0, 0, 0, navBarBottom)
+            v.onApplyWindowInsets(insets)
+        }
 
         // Initial key compute — will be corrected by onSizeChanged once the
         // view has real dimensions.
