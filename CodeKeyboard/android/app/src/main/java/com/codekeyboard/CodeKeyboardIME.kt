@@ -92,7 +92,17 @@ class CodeKeyboardIME : InputMethodService() {
                     ic?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_UP,   KeyEvent.KEYCODE_FORWARD_DEL))
                 }
             }
-            "enter"       -> ic?.commitText("\n", 1)
+            "enter"       -> {
+                val editorInfo = currentInputEditorInfo
+                val imeOptions = editorInfo?.imeOptions ?: 0
+                val action = imeOptions and EditorInfo.IME_MASK_ACTION
+                val noEnterAction = imeOptions and EditorInfo.IME_FLAG_NO_ENTER_ACTION != 0
+                if (noEnterAction || action == EditorInfo.IME_ACTION_UNSPECIFIED || action == EditorInfo.IME_ACTION_NONE) {
+                    ic?.commitText("\n", 1)
+                } else {
+                    ic?.performEditorAction(action)
+                }
+            }
             "tab"         -> {
                 ic?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_TAB))
                 ic?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_UP,   KeyEvent.KEYCODE_TAB))
