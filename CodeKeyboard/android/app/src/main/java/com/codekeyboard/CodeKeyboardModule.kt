@@ -53,4 +53,9 @@ class CodeKeyboardModule(reactContext: ReactApplicationContext) :
   fun performEditorAction(actionCode: Int) {
     inputConnection?.performEditorAction(actionCode)
   }
+
+  @ReactMethod
+  fun getSofleLayout(): String {
+    return SofleLayoutComputer.exportLayoutJson()
+  }
 }

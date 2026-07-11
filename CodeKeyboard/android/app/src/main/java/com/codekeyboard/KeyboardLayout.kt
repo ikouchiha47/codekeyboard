@@ -86,4 +86,13 @@ interface KeyboardLayoutComputer {
      * Must be consistent with whatever [compute] returns.
      */
     fun heightPx(screenWidthPx: Int): Int
+
+    /**
+     * Export the full layout definition as a JSON string.
+     * The JSON format is implementation-specific but must be parseable
+     * into the same key structure the renderer expects.
+     *
+     * Used by the RN bridge to share layout data without duplication.
+     */
+    fun exportLayout(): String
 }

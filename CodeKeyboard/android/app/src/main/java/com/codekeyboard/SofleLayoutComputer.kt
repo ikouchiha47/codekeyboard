@@ -85,6 +85,63 @@ class SofleLayoutComputer(density: Float) : KeyboardLayoutComputer {
         }
     }
 
+    override fun exportLayout(): String = SofleLayoutComputer.exportLayoutJson()
+
+    companion object {
+        fun exportLayoutJson(): String = buildString {
+            append("""{"stagger":{"left":[""")
+            append(staggerLeft.joinToString(",") { it.toString() })
+            append("""],"right":[""")
+            append(staggerRight.joinToString(",") { it.toString() })
+            append("""]},"layers":{""")
+            SofleKeyData.LAYERS.entries.joinTo(this, ",") { (name, data) ->
+                append(name.toJson())
+                append(":")
+                append(data.toJson())
+            }
+            append("}}")
+        }
+
+        private val staggerLeft  = listOf(0f, 0.25f, 0.50f, 0.75f, 1.00f)
+        private val staggerRight = listOf(1.00f, 0.75f, 0.50f, 0.25f, 0f)
+
+        private fun SofleLayerData.toJson(): String = buildString {
+            append("""{"topRow":[""")
+            topRow.joinTo(this, ",") { it.toJson() }
+            append("""],"left":[""")
+            left.joinTo(this, ",") { row -> "[" + row.joinToString(",") { it.toJson() } + "]" }
+            append("""],"right":[""")
+            right.joinTo(this, ",") { row -> "[" + row.joinToString(",") { it.toJson() } + "]" }
+            append("]}")
+        }
+
+        private fun KeyDef.toJson(): String = buildString {
+            append("{")
+            append("\"label\":".plus(label.toJson()))
+            if (action != null) append(",\"action\":".plus(action.toJson()))
+            if (shift != null) append(",\"shift\":".plus(shift.toJson()))
+            if (width != 1f) append(",\"width\":".plus(width.toString()))
+            append("}")
+        }
+
+        private fun String.toJson(): String = buildString {
+            append('"')
+            for (c in this@toJson) {
+                when (c) {
+                    '"' -> append("\\\"")
+                    '\\' -> append("\\\\")
+                    '\n' -> append("\\n")
+                    '\t' -> append("\\t")
+                    '\b' -> append("\\b")
+                    '\r' -> append("\\r")
+                    '\u000C' -> append("\\f")
+                    else -> append(c)
+                }
+            }
+            append('"')
+        }
+    }
+
     private fun computeHalf(
         rows: List<List<KeyDef>>,
         colStagger: List<Float>,
