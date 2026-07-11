@@ -12,7 +12,6 @@ class CodeKeyboardPackage : ReactPackage {
     return listOf(
       CodeKeyboardModule(reactContext),
       IMEHelperModule(reactContext),
-      SettingsModule(reactContext),
     )
   }
 

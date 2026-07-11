@@ -1,4 +1,4 @@
-import React, {useState, useCallback, useEffect} from 'react';
+import React, {useState, useCallback} from 'react';
 import {
   View,
   Text,
@@ -7,7 +7,6 @@ import {
   StatusBar,
   useColorScheme,
   NativeModules,
-  Switch,
 } from 'react-native';
 import {SafeAreaProvider, SafeAreaView} from 'react-native-safe-area-context';
 import {Keyboard} from './src/keyboard/Keyboard';
@@ -15,29 +14,12 @@ import {Keyboard} from './src/keyboard/Keyboard';
 type Tab = 'keyboard' | 'settings' | 'themes' | 'languages';
 
 function SettingsScreen() {
-  const [fallthroughEnabled, setFallthroughEnabled] = useState(true);
-
-  useEffect(() => {
-    NativeModules.SettingsModule?.getFallthroughBehavior().then(
-      (behavior: string) => {
-        setFallthroughEnabled(behavior === 'insert_text');
-      },
-    );
-  }, []);
-
   const handleEnable = useCallback(() => {
     NativeModules.IMEHelper?.openSettings();
   }, []);
 
   const handleSwitch = useCallback(() => {
     NativeModules.IMEHelper?.showPicker();
-  }, []);
-
-  const handleFallthroughToggle = useCallback((value: boolean) => {
-    setFallthroughEnabled(value);
-    NativeModules.SettingsModule?.setFallthroughBehavior(
-      value ? 'insert_text' : 'do_nothing',
-    );
   }, []);
 
   return (
@@ -57,22 +39,6 @@ function SettingsScreen() {
       <Text style={styles.settingsHint}>
         Opens IME picker to switch active keyboard.
       </Text>
-
-      <View style={styles.settingRow}>
-        <View style={styles.settingLabelContainer}>
-          <Text style={styles.settingLabel}>Insert text for unknown keys</Text>
-          <Text style={styles.settingDescription}>
-            When disabled, keys without actions do nothing instead of inserting
-            their label as text.
-          </Text>
-        </View>
-        <Switch
-          value={fallthroughEnabled}
-          onValueChange={handleFallthroughToggle}
-          trackColor={{false: '#333', true: '#4a9eff'}}
-          thumbColor={fallthroughEnabled ? '#fff' : '#666'}
-        />
-      </View>
     </View>
   );
 }
@@ -196,32 +162,6 @@ const styles = StyleSheet.create({
     marginTop: 16,
     lineHeight: 20,
     maxWidth: 300,
-  },
-  settingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#1a1a1a',
-    padding: 16,
-    borderRadius: 8,
-    marginTop: 32,
-    width: '100%',
-    maxWidth: 400,
-  },
-  settingLabelContainer: {
-    flex: 1,
-    marginRight: 16,
-  },
-  settingLabel: {
-    color: '#e0e0e0',
-    fontSize: 15,
-    fontWeight: '500',
-    marginBottom: 4,
-  },
-  settingDescription: {
-    color: '#777',
-    fontSize: 12,
-    lineHeight: 16,
   },
   placeholder: {
     flex: 1,

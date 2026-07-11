@@ -14,11 +14,6 @@ class CodeKeyboardIME : InputMethodService() {
 
     // ── Lifecycle ─────────────────────────────────────────────────────────────
 
-    override fun onCreate() {
-        super.onCreate()
-        KeyboardSettings.init(this)
-    }
-
     override fun onCreateInputView(): View {
         val density = resources.displayMetrics.density
 
@@ -141,15 +136,12 @@ class CodeKeyboardIME : InputMethodService() {
 
             // ── Character keys ────────────────────────────────────────────────
             else -> {
-                if (KeyboardSettings.shouldInsertTextOnFallthrough()) {
-                    val text = kbState.resolveLabel(key) ?: key.label
-                    if (text.isNotEmpty()) {
-                        ic?.commitText(text, 1)
-                        kbState.onCharCommitted()
-                        keyboardView.notifyStateChanged(kbState)
-                    }
+                val text = kbState.resolveLabel(key) ?: key.label
+                if (text.isNotEmpty()) {
+                    ic?.commitText(text, 1)
+                    kbState.onCharCommitted()
+                    keyboardView.notifyStateChanged(kbState)
                 }
-                // If setting is "do_nothing", we simply don't insert anything
             }
         }
     }
