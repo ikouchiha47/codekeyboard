@@ -103,10 +103,13 @@ object SofleKeyData {
     private val ADJUST = SofleLayerData(
         topRow = listOf(
             ANCHOR_TAB, ANCHOR_ESC,
-            k("Br-"), k("Br+"), k("Mute"), k("Vol-"), k("Vol+"), k("Play")
+            k("Br-", "brightness-down"), k("Br+", "brightness-up"),
+            k("Mute", "volume-mute"), k("Vol-", "volume-down"), k("Vol+", "volume-up"),
+            k("Play", "media-play")
         ),
         left = listOf(
-            listOf(k("Prev"),  k("Play"),  k("Next"),  empty(),   empty()),
+            listOf(k("Prev", "media-previous"), k("Play", "media-play"),
+                   k("Next", "media-next"), empty(), empty()),
             listOf(empty(),    empty(),    empty(),    empty(),   empty()),
             listOf(empty(),    empty(),    empty(),    empty(),   empty()),
             listOf(k("Shift","shift"), k("Spc","space"), k("LWR","lower"),
