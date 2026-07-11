@@ -115,19 +115,23 @@ class NativeKeyboardView @JvmOverloads constructor(
         }
         canvas.drawRoundRect(drawRect, cornerR, cornerR, bg)
 
-        // ── Bottom accent bar ─────────────────────────────────────────────────
-        val accentColor = when (action) {
-            "func"          -> Color.parseColor("#ff9800")
-            in LAYER_ACTIONS -> Color.parseColor("#4caf50")
-            in THUMB_ACTIONS -> Color.parseColor("#4a9eff")
-            "ctrl", "alt", "meta" -> Color.parseColor("#4a9eff")
-            "tab", "escape" -> Color.parseColor("#666666")
-            else -> null
+        // ── Bottom accent bar (only when key is active) ───────────────────────
+        val isActive = when {
+            action == "shift" && state.isShiftActive -> true
+            action == "caps"  && state.isCapsActive  -> true
+            action == "ctrl"  && state.isCtrlActive  -> true
+            action == "alt"   && state.isAltActive   -> true
+            action in LAYER_ACTIONS && state.layer == action -> true
+            else -> false
         }
-        if (accentColor != null) {
-            accentBarPaint.color = accentColor
-            val barH = 2f * density
-            canvas.drawRect(drawRect.left, drawRect.bottom - barH, drawRect.right, drawRect.bottom, accentBarPaint)
+        if (isActive) {
+            accentBarPaint.color = when (action) {
+                "func"          -> Color.parseColor("#ff9800")
+                in LAYER_ACTIONS -> Color.parseColor("#4caf50")
+                else            -> Color.parseColor("#4a9eff")
+            }
+            canvas.drawRect(drawRect.left, drawRect.bottom - 2f * density,
+                            drawRect.right, drawRect.bottom, accentBarPaint)
         }
 
         // ── Label ─────────────────────────────────────────────────────────────
