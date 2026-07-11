@@ -12,6 +12,16 @@ class CodeKeyboardIME : InputMethodService() {
     private lateinit var keyboardView: NativeKeyboardView
     private val kbState = KeyboardState()
 
+    // Modifier name → KeyEvent meta flag — extend this map to add new modifiers.
+    private val MODIFIER_META_FLAGS = mapOf(
+        "ctrl" to KeyEvent.META_CTRL_ON,
+        "alt"  to KeyEvent.META_ALT_ON,
+        "meta" to KeyEvent.META_META_ON,
+    )
+
+    private val CYCLE_AND_TOGGLE = KeyboardState.CYCLE_MODIFIERS + KeyboardState.TOGGLE_MODIFIERS
+    private val STATE_HOLD_ACTIONS = KeyboardState.HOLD_STATE_MODIFIERS + KeyboardState.LAYER_HOLDS
+
     // ── Lifecycle ─────────────────────────────────────────────────────────────
 
     override fun onCreate() {
@@ -68,17 +78,16 @@ class CodeKeyboardIME : InputMethodService() {
 
         when (key.action) {
             // ── Layer keys ────────────────────────────────────────────────────
-            "lower", "raise", "adj", "func" -> {
+            in KeyboardState.LAYER_HOLDS -> {
                 kbState.cycleLayer(key.action)
                 keyboardView.notifyStateChanged(kbState)
-                return
             }
 
-            // ── Modifier keys ─────────────────────────────────────────────────
-            "shift" -> { kbState.cycleShift(); keyboardView.notifyStateChanged(kbState); return }
-            "caps"  -> { kbState.cycleCaps();  keyboardView.notifyStateChanged(kbState); return }
-            "ctrl"  -> { kbState.cycleCtrl();  keyboardView.notifyStateChanged(kbState); return }
-            "alt"   -> { kbState.cycleAlt();   keyboardView.notifyStateChanged(kbState); return }
+            // ── Modifier state keys ──────────────────────────────────────────
+            in CYCLE_AND_TOGGLE -> {
+                kbState.cycleModifier(key.action)
+                keyboardView.notifyStateChanged(kbState)
+            }
 
             // ── Backspace ─────────────────────────────────────────────────────
             // deleteSurroundingText(1,0) works across all editor types.
@@ -102,13 +111,10 @@ class CodeKeyboardIME : InputMethodService() {
                 val action = editorInfo?.let { it.imeOptions and EditorInfo.IME_MASK_ACTION } ?: EditorInfo.IME_ACTION_UNSPECIFIED
                 val noEnterAction = editorInfo?.let { it.imeOptions and EditorInfo.IME_FLAG_NO_ENTER_ACTION } ?: 0
                 if (noEnterAction != 0 || action == EditorInfo.IME_ACTION_UNSPECIFIED || action == EditorInfo.IME_ACTION_NONE) {
-                    // No editor action requested - send normal newline
                     ic?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_ENTER))
                     ic?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_UP,   KeyEvent.KEYCODE_ENTER))
                 } else {
-                    // Editor wants an action (search, done, go, etc.)
                     if (ic?.performEditorAction(action) != true) {
-                        // Fallback to ENTER key if performEditorAction not handled
                         ic?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_ENTER))
                         ic?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_UP,   KeyEvent.KEYCODE_ENTER))
                     }
@@ -143,6 +149,19 @@ class CodeKeyboardIME : InputMethodService() {
             else -> {
                 val text = kbState.resolveLabel(key) ?: key.label
                 if (text.isNotEmpty()) {
+                    val metaState = MODIFIER_META_FLAGS.entries.fold(0) { acc, (name, flag) ->
+                        if (kbState.isModifierActive(name)) acc or flag else acc
+                    }
+                    if (text.length == 1 && metaState != 0) {
+                        val keyCode = charToKeyCode(text[0])
+                        if (keyCode != null) {
+                            ic?.sendKeyEvent(KeyEvent(0, 0, KeyEvent.ACTION_DOWN, keyCode, 0, metaState))
+                            ic?.sendKeyEvent(KeyEvent(0, 0, KeyEvent.ACTION_UP,   keyCode, 0, metaState))
+                            kbState.onCharCommitted()
+                            keyboardView.notifyStateChanged(kbState)
+                            return
+                        }
+                    }
                     ic?.commitText(text, 1)
                     kbState.onCharCommitted()
                     keyboardView.notifyStateChanged(kbState)
@@ -165,31 +184,21 @@ class CodeKeyboardIME : InputMethodService() {
 
     private fun handleHold(key: KeyDef) {
         val action = key.holdAction ?: return
-        when (action) {
-            "ctrl", "shift", "alt", "meta",
-            "lower", "raise", "adj", "func" -> {
-                kbState.applyHold(action)
-                kbState.heldKeyLabel = key.label
-                keyboardView.notifyStateChanged(kbState)
-            }
-            else -> {
-                if (action.isNotEmpty()) {
-                    handleKey(KeyDef("", action = action))
-                }
-            }
+        if (action in STATE_HOLD_ACTIONS) {
+            kbState.applyHold(action)
+            kbState.heldKeyLabel = key.label
+            keyboardView.notifyStateChanged(kbState)
+        } else if (action.isNotEmpty()) {
+            handleKey(KeyDef("", action = action))
         }
     }
 
     private fun handleRelease(key: KeyDef) {
         val action = key.holdAction ?: return
-        when (action) {
-            "ctrl", "shift", "alt", "meta",
-            "lower", "raise", "adj", "func" -> {
-                kbState.releaseHold(action)
-                kbState.heldKeyLabel = null
-                keyboardView.notifyStateChanged(kbState)
-            }
-            else -> { /* no-op for non-state actions */ }
+        if (action in STATE_HOLD_ACTIONS) {
+            kbState.releaseHold(action)
+            kbState.heldKeyLabel = null
+            keyboardView.notifyStateChanged(kbState)
         }
     }
 
@@ -198,5 +207,48 @@ class CodeKeyboardIME : InputMethodService() {
     private fun sendCtrl(ic: android.view.inputmethod.InputConnection?, keyCode: Int) {
         ic?.sendKeyEvent(KeyEvent(0, 0, KeyEvent.ACTION_DOWN, keyCode, 0, KeyEvent.META_CTRL_ON))
         ic?.sendKeyEvent(KeyEvent(0, 0, KeyEvent.ACTION_UP,   keyCode, 0, KeyEvent.META_CTRL_ON))
+    }
+
+    private fun charToKeyCode(c: Char): Int? = when (c.uppercaseChar()) {
+        'A' -> KeyEvent.KEYCODE_A
+        'B' -> KeyEvent.KEYCODE_B
+        'C' -> KeyEvent.KEYCODE_C
+        'D' -> KeyEvent.KEYCODE_D
+        'E' -> KeyEvent.KEYCODE_E
+        'F' -> KeyEvent.KEYCODE_F
+        'G' -> KeyEvent.KEYCODE_G
+        'H' -> KeyEvent.KEYCODE_H
+        'I' -> KeyEvent.KEYCODE_I
+        'J' -> KeyEvent.KEYCODE_J
+        'K' -> KeyEvent.KEYCODE_K
+        'L' -> KeyEvent.KEYCODE_L
+        'M' -> KeyEvent.KEYCODE_M
+        'N' -> KeyEvent.KEYCODE_N
+        'O' -> KeyEvent.KEYCODE_O
+        'P' -> KeyEvent.KEYCODE_P
+        'Q' -> KeyEvent.KEYCODE_Q
+        'R' -> KeyEvent.KEYCODE_R
+        'S' -> KeyEvent.KEYCODE_S
+        'T' -> KeyEvent.KEYCODE_T
+        'U' -> KeyEvent.KEYCODE_U
+        'V' -> KeyEvent.KEYCODE_V
+        'W' -> KeyEvent.KEYCODE_W
+        'X' -> KeyEvent.KEYCODE_X
+        'Y' -> KeyEvent.KEYCODE_Y
+        'Z' -> KeyEvent.KEYCODE_Z
+        '0' -> KeyEvent.KEYCODE_0
+        '1' -> KeyEvent.KEYCODE_1
+        '2' -> KeyEvent.KEYCODE_2
+        '3' -> KeyEvent.KEYCODE_3
+        '4' -> KeyEvent.KEYCODE_4
+        '5' -> KeyEvent.KEYCODE_5
+        '6' -> KeyEvent.KEYCODE_6
+        '7' -> KeyEvent.KEYCODE_7
+        '8' -> KeyEvent.KEYCODE_8
+        '9' -> KeyEvent.KEYCODE_9
+        '\n' -> KeyEvent.KEYCODE_ENTER
+        ' ' -> KeyEvent.KEYCODE_SPACE
+        '\t' -> KeyEvent.KEYCODE_TAB
+        else -> null
     }
 }

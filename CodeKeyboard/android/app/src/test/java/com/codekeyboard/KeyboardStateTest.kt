@@ -72,30 +72,30 @@ class KeyboardStateTest {
 
     @Test fun `shift cycles NONE → LATCHED → LOCKED → NONE`() {
         assertEquals(LatchState.NONE, state.shift)
-        state.cycleShift(); assertEquals(LatchState.LATCHED, state.shift)
-        state.cycleShift(); assertEquals(LatchState.LOCKED,  state.shift)
-        state.cycleShift(); assertEquals(LatchState.NONE,    state.shift)
+        state.cycleModifier("shift"); assertEquals(LatchState.LATCHED, state.shift)
+        state.cycleModifier("shift"); assertEquals(LatchState.LOCKED,  state.shift)
+        state.cycleModifier("shift"); assertEquals(LatchState.NONE,    state.shift)
     }
 
     @Test fun `caps toggles NONE ↔ LOCKED (no LATCHED state)`() {
-        state.cycleCaps(); assertEquals(LatchState.LOCKED, state.caps)
-        state.cycleCaps(); assertEquals(LatchState.NONE,   state.caps)
+        state.cycleModifier("caps"); assertEquals(LatchState.LOCKED, state.caps)
+        state.cycleModifier("caps"); assertEquals(LatchState.NONE,   state.caps)
     }
 
     @Test fun `latched shift clears after char committed`() {
-        state.cycleShift()   // LATCHED
+        state.cycleModifier("shift")   // LATCHED
         state.onCharCommitted()
         assertEquals(LatchState.NONE, state.shift)
     }
 
     @Test fun `locked shift stays after char committed`() {
-        state.cycleShift(); state.cycleShift()  // LOCKED
+        state.cycleModifier("shift"); state.cycleModifier("shift")  // LOCKED
         state.onCharCommitted()
         assertEquals(LatchState.LOCKED, state.shift)
     }
 
     @Test fun `latched ctrl clears after char committed`() {
-        state.cycleCtrl()
+        state.cycleModifier("ctrl")
         state.onCharCommitted()
         assertEquals(LatchState.NONE, state.ctrl)
     }
@@ -108,23 +108,23 @@ class KeyboardStateTest {
     }
 
     @Test fun `shift produces uppercase alpha`() {
-        state.cycleShift()
+        state.cycleModifier("shift")
         assertEquals("A", state.resolveLabel(KeyDef("a")))
     }
 
     @Test fun `caps produces uppercase alpha`() {
-        state.cycleCaps()
+        state.cycleModifier("caps")
         assertEquals("A", state.resolveLabel(KeyDef("a")))
     }
 
     @Test fun `shift + caps cancels out (lowercase)`() {
-        state.cycleShift()
-        state.cycleCaps()
+        state.cycleModifier("shift")
+        state.cycleModifier("caps")
         assertEquals("a", state.resolveLabel(KeyDef("a")))
     }
 
     @Test fun `shift selects shift label for non-alpha`() {
-        state.cycleShift()
+        state.cycleModifier("shift")
         val key = KeyDef("1", shift = "!")
         assertEquals("!", state.resolveLabel(key))
     }
@@ -135,7 +135,7 @@ class KeyboardStateTest {
     }
 
     @Test fun `caps does not affect non-alpha shift label`() {
-        state.cycleCaps()
+        state.cycleModifier("caps")
         val key = KeyDef("1", shift = "!")
         // caps applies shift label for non-alpha too (matches isShiftActive || isCapsActive check)
         assertEquals("!", state.resolveLabel(key))
@@ -144,7 +144,7 @@ class KeyboardStateTest {
     // ── Reset ─────────────────────────────────────────────────────────────────
 
     @Test fun `reset clears all state`() {
-        state.cycleShift(); state.cycleCtrl(); state.cycleLayer("lower")
+        state.cycleModifier("shift"); state.cycleModifier("ctrl"); state.cycleLayer("lower")
         state.reset()
         assertEquals("base", state.layer)
         assertFalse(state.isShiftActive)
