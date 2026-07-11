@@ -93,7 +93,10 @@ class CodeKeyboardIME : InputMethodService() {
                 }
             }
             "enter"       -> ic?.commitText("\n", 1)
-            "tab"         -> ic?.commitText("    ", 1)
+            "tab"         -> {
+                ic?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_TAB))
+                ic?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_UP,   KeyEvent.KEYCODE_TAB))
+            }
             "space"       -> ic?.commitText(" ", 1)
             "escape"      -> ic?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_ESCAPE))
             "arrow-left"  -> ic?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_LEFT))
