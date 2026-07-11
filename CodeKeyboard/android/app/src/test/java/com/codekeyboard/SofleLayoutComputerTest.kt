@@ -75,9 +75,10 @@ class SofleLayoutComputerTest {
 
     @Test fun `two halves separated by gap`() {
         val keys     = computer.compute(screenW, "base")
-        val hw       = (screenW - 2 * computer.padding - computer.halfGap) / 2f
+        val gap      = computer.halfGap(screenW)
+        val hw       = (screenW - 2 * computer.padding - gap) / 2f
         val leftMax  = computer.padding + hw
-        val rightMin = leftMax + computer.halfGap
+        val rightMin = leftMax + gap
 
         val leftKeys  = keys.filter { it.rect.right  <= leftMax  + 1f && it.rect.top >= computer.padding + computer.keyHeight }
         val rightKeys = keys.filter { it.rect.left   >= rightMin - 1f }
@@ -86,7 +87,7 @@ class SofleLayoutComputerTest {
         assertTrue("Right half should have keys", rightKeys.isNotEmpty())
 
         val actualGap = rightKeys.minOf { it.rect.left } - leftKeys.maxOf { it.rect.right }
-        assertTrue("Gap between halves should be >= halfGap", actualGap >= computer.halfGap - 1f)
+        assertTrue("Gap between halves should be >= halfGap", actualGap >= gap - 1f)
     }
 
     @Test fun `no two keys overlap`() {

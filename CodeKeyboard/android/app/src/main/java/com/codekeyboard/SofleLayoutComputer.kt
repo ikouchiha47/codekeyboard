@@ -27,9 +27,11 @@ class SofleLayoutComputer(density: Float) : KeyboardLayoutComputer {
     internal val padding    = 6f  * density
     internal val keyGap     = 5f  * density
     internal val rowGap     = 5f  * density
-    internal val halfGap    = 24f * density
-    internal val keyHeight  = 44f * density
+    internal val keyHeight  = 48f * density
     internal val topRowKeys = 8              // Tab + Esc + 6 layer slots
+
+    /** Gap between the left and right halves as a fraction of screen width. */
+    internal fun halfGap(screenW: Int): Float = screenW * 0.05f
 
     // ── Stagger ───────────────────────────────────────────────────────────────
     internal val staggerLeft  = listOf(0f, 0.25f, 0.50f, 0.75f, 1.00f)
@@ -39,7 +41,7 @@ class SofleLayoutComputer(density: Float) : KeyboardLayoutComputer {
     private val numRows    = 4
 
     // ── Derived ───────────────────────────────────────────────────────────────
-    private fun halfWidth(screenW: Int) = (screenW - 2 * padding - halfGap) / 2f
+    private fun halfWidth(screenW: Int) = (screenW - 2 * padding - halfGap(screenW)) / 2f
     private fun topKeyWidth(screenW: Int) =
         (screenW - 2 * padding - (topRowKeys - 1) * keyGap) / topRowKeys
 
@@ -61,8 +63,8 @@ class SofleLayoutComputer(density: Float) : KeyboardLayoutComputer {
         val hw       = halfWidth(screenWidthPx)
         val mainTopY = padding + keyHeight + rowGap   // below the top row
 
-        computeHalf(data.left,  staggerLeft,               padding,             hw, mainTopY, out)
-        computeHalf(data.right, staggerRight, padding + hw + halfGap, hw, mainTopY, out)
+        computeHalf(data.left,  staggerLeft,                        padding,             hw, mainTopY, out)
+        computeHalf(data.right, staggerRight, padding + hw + halfGap(screenWidthPx), hw, mainTopY, out)
 
         return out
     }
