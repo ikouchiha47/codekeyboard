@@ -333,10 +333,21 @@ class NativeKeyboardView @JvmOverloads constructor(
     }
 
     private fun hitTest(x: Float, y: Float): KeyDef? {
+        var best: KeyDef? = null
+        var bestDist = Float.MAX_VALUE
+        val threshold = SNAP_RADIUS_DP * density
         for (pk in keys) {
-            if (pk.rect.contains(x, y)) return pk.key
+            val kr = pk.rect
+            if (kr.contains(x, y)) return pk.key
+            val dx = maxOf(kr.left - x, 0f, x - kr.right)
+            val dy = maxOf(kr.top - y, 0f, y - kr.bottom)
+            val dist = dx * dx + dy * dy
+            if (dist < bestDist) {
+                bestDist = dist
+                best = pk.key
+            }
         }
-        return null
+        return if (bestDist <= threshold * threshold) best else null
     }
 
     // ── Constants ─────────────────────────────────────────────────────────────
@@ -351,5 +362,6 @@ class NativeKeyboardView @JvmOverloads constructor(
         private const val REPEAT_INITIAL_DELAY_MS = 400L
         private const val REPEAT_INTERVAL_MS = 50L
         private const val TAPPING_TERM_MS = 150L
+        private const val SNAP_RADIUS_DP = 3f
     }
 }
