@@ -37,11 +37,13 @@ class NativeKeyboardView @JvmOverloads constructor(
     private var repeatKeyDef: KeyDef? = null
     private var repeatPointerId = -1
 
-    private val repeatRunnable = Runnable {
-        val key = repeatKeyDef ?: return@Runnable
-        performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
-        onKeyTapped?.invoke(key)
-        repeatHandler.postDelayed(this, REPEAT_INTERVAL_MS)
+    private val repeatRunnable = object : Runnable {
+        override fun run() {
+            val key = repeatKeyDef ?: return
+            performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+            onKeyTapped?.invoke(key)
+            repeatHandler.postDelayed(this, REPEAT_INTERVAL_MS)
+        }
     }
 
     var computer: KeyboardLayoutComputer? = null
