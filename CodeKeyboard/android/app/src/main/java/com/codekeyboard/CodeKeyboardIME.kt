@@ -75,17 +75,18 @@ class CodeKeyboardIME : InputMethodService() {
 
     private fun handleKey(key: KeyDef) {
         val ic = currentInputConnection
+        val action = key.action ?: ""
 
-        when (key.action) {
+        when (action) {
             // ── Layer keys ────────────────────────────────────────────────────
             in KeyboardState.LAYER_HOLDS -> {
-                kbState.cycleLayer(key.action)
+                kbState.cycleLayer(action)
                 keyboardView.notifyStateChanged(kbState)
             }
 
             // ── Modifier state keys ──────────────────────────────────────────
             in CYCLE_AND_TOGGLE -> {
-                kbState.cycleModifier(key.action)
+                kbState.cycleModifier(action)
                 keyboardView.notifyStateChanged(kbState)
             }
 
