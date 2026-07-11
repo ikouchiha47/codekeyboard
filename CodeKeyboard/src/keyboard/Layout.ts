@@ -7,6 +7,7 @@ export interface KeySpec {
   c?: string;
   width: number;
   stagger?: number;
+  holdAction?: string;
 }
 
 export interface StandardLayer {
