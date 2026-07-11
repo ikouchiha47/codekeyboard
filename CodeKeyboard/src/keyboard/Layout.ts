@@ -397,7 +397,7 @@ export function buildFromNativeJson(json: string): SplitLayout {
     const rightPad = 5 - layer.topRow.slice(5).length;
     const rightTop = [
       ...layer.topRow.slice(5).map((k: any) => nativeKeyToSpec(k)),
-      ...Array.from({length: Math.max(0, rightPad)}, () => ({label: ''})),
+      ...Array.from({length: Math.max(0, rightPad)}, () => ({label: '', width: 1})),
     ];
 
     layers[name] = {
