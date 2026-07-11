@@ -301,7 +301,7 @@ class NativeKeyboardView @JvmOverloads constructor(
             MotionEvent.ACTION_CANCEL -> {
                 cancelRepeat()
                 if (holdTapKeyDef != null) {
-                    val key = holdTapKeyDef
+                    val key = holdTapKeyDef!!
                     holdTapHandler.removeCallbacksAndMessages(null)
                     if (!holdTapFired) {
                         onKeyTapped?.invoke(key)
