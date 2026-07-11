@@ -371,3 +371,53 @@ export function getLayer(layout: KeyboardLayout, name: string): StandardLayer | 
   if (!l) throw new Error(`Unknown layer "${name}" in layout "${layout.name}"`);
   return l;
 }
+
+/** Convert a native KeyDef (from Kotlin exportLayout JSON) to RN KeySpec. */
+function nativeKeyToSpec(k: any): KeySpec {
+  return {
+    label: k.label ?? '',
+    action: k.action ?? undefined,
+    shift: k.shift ?? undefined,
+    width: k.width ?? 1,
+  };
+}
+
+/**
+ * Build a SplitLayout from the JSON string returned by
+ * `NativeModules.CodeKeyboardModule.getLayout()`.
+ * Merges the native topRow into left/right halves (5 cols left, 5 cols right).
+ */
+export function buildFromNativeJson(json: string): SplitLayout {
+  const data = JSON.parse(json);
+  const layers: Record<string, SplitLayer> = {};
+
+  for (const [name, ld] of Object.entries(data.layers)) {
+    const layer = ld as {topRow: any[]; left: any[][]; right: any[][]};
+
+    const rightPad = 5 - layer.topRow.slice(5).length;
+    const rightTop = [
+      ...layer.topRow.slice(5).map((k: any) => nativeKeyToSpec(k)),
+      ...Array.from({length: Math.max(0, rightPad)}, () => ({label: ''})),
+    ];
+
+    layers[name] = {
+      left: [
+        layer.topRow.slice(0, 5).map((k: any) => nativeKeyToSpec(k)),
+        ...layer.left.map((row: any[]) => row.map((k: any) => nativeKeyToSpec(k))),
+      ],
+      right: [
+        rightTop,
+        ...layer.right.map((row: any[]) => row.map((k: any) => nativeKeyToSpec(k))),
+      ],
+    };
+  }
+
+  return {
+    type: 'split',
+    name: 'Sofle V5',
+    stagger: data.stagger,
+    layers,
+  };
+}
+
+

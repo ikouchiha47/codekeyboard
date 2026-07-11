@@ -1,9 +1,9 @@
-import React, {useState, useCallback, useRef} from 'react';
+import React, {useState, useCallback, useRef, useEffect} from 'react';
 import {View, TextInput, StyleSheet, NativeModules} from 'react-native';
 import {
   KeyboardLayout, KeySpec, isModifier, isLetter, isLayerAction,
   LAYOUT_SOFLE, isSplit, SplitLayout, StandardLayout, StandardLayer,
-  getLayer,
+  getLayer, buildFromNativeJson,
 } from './Layout';
 import {
   ModState, L, createModState, toggleMod, clearLatched, effective,
@@ -157,7 +157,7 @@ function renderRows(
   ));
 }
 
-export function Keyboard({layout = LAYOUT_SOFLE, mode}: Props) {
+export function Keyboard({layout: _layout, mode}: Props) {
   const isIME = mode === 'ime';
   const [mods, setMods] = useState<ModState>(createModState());
   const [layer, setLayer] = useState<LayerState>(createLayerState());
@@ -166,6 +166,19 @@ export function Keyboard({layout = LAYOUT_SOFLE, mode}: Props) {
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const inputRef = useRef<TextInput>(null);
   const nativeModule = NativeModules.CodeKeyboardModule;
+
+  // Try to load layout from the native bridge (in-app keyboard in IME mode),
+  // falling back to the hardcoded LAYOUT_SOFLE.
+  const [layout, setLayout] = useState<KeyboardLayout>(_layout ?? LAYOUT_SOFLE);
+  useEffect(() => {
+    if (isIME && nativeModule?.getLayout) {
+      nativeModule.getLayout().then((json: string) => {
+        setLayout(buildFromNativeJson(json));
+      }).catch(() => {
+        // Native module exists but getLayout failed — keep fallback
+      });
+    }
+  }, [isIME, nativeModule]);
 
   const ctxRef = useRef<ActionCtx>(null!);
 
