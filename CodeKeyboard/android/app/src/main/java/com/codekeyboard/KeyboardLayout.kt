@@ -12,7 +12,8 @@ data class KeyDef(
     val label: String,
     val action: String? = null,
     val shift: String? = null,
-    val width: Float = 1f
+    val width: Float = 1f,
+    val holdAction: String? = null
 )
 
 /**

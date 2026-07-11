@@ -21,6 +21,8 @@ class CodeKeyboardIME : InputMethodService() {
         keyboardView.computer    = SofleLayoutComputer(density)
         keyboardView.kbState     = kbState
         keyboardView.onKeyTapped = { key -> handleKey(key) }
+        keyboardView.onKeyHeld   = { key -> handleHold(key) }
+        keyboardView.onKeyReleased = { key -> handleRelease(key) }
 
         // Wrap the keyboard in a container that adds bottom padding for the
         // navigation bar so the bottom row of keys is never hidden.
@@ -44,7 +46,7 @@ class CodeKeyboardIME : InputMethodService() {
         // view has real dimensions.
         val w = resources.displayMetrics.widthPixels
         val c = keyboardView.computer!!
-        keyboardView.setKeys(c.compute(w, kbState.layer), kbState, c.heightPx(w))
+        keyboardView.setKeys(c.compute(w, kbState.effectiveLayer), kbState, c.heightPx(w))
 
         return wrapper
     }
@@ -122,6 +124,38 @@ class CodeKeyboardIME : InputMethodService() {
             return resources.getDimensionPixelSize(resId)
         }
         return (48f * resources.displayMetrics.density + 0.5f).toInt()
+    }
+
+    // ── Hold-tap handlers ──────────────────────────────────────────────────────
+
+    private fun handleHold(key: KeyDef) {
+        val action = key.holdAction ?: return
+        when (action) {
+            "ctrl", "shift", "alt", "meta",
+            "lower", "raise", "adj", "func" -> {
+                kbState.applyHold(action)
+                kbState.heldKeyLabel = key.label
+                keyboardView.notifyStateChanged(kbState)
+            }
+            else -> {
+                if (action.isNotEmpty()) {
+                    handleKey(KeyDef("", action = action))
+                }
+            }
+        }
+    }
+
+    private fun handleRelease(key: KeyDef) {
+        val action = key.holdAction ?: return
+        when (action) {
+            "ctrl", "shift", "alt", "meta",
+            "lower", "raise", "adj", "func" -> {
+                kbState.releaseHold(action)
+                kbState.heldKeyLabel = null
+                keyboardView.notifyStateChanged(kbState)
+            }
+            else -> { /* no-op for non-state actions */ }
+        }
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

@@ -120,6 +120,7 @@ class SofleLayoutComputer(density: Float) : KeyboardLayoutComputer {
             append("\"label\":".plus(label.toJson()))
             if (action != null) append(",\"action\":".plus(action.toJson()))
             if (shift != null) append(",\"shift\":".plus(shift.toJson()))
+            if (holdAction != null) append(",\"holdAction\":".plus(holdAction.toJson()))
             if (width != 1f) append(",\"width\":".plus(width.toString()))
             append("}")
         }

@@ -378,6 +378,7 @@ function nativeKeyToSpec(k: any): KeySpec {
     label: k.label ?? '',
     action: k.action ?? undefined,
     shift: k.shift ?? undefined,
+    holdAction: k.holdAction ?? undefined,
     width: k.width ?? 1,
   };
 }

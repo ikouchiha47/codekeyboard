@@ -18,10 +18,22 @@ class KeyboardState {
     var alt: LatchState = LatchState.NONE
         private set
 
+    // Transient hold-tap state (active only while finger is held)
+    var layerHeld: String? = null
+    var shiftHeld: Boolean = false
+    var ctrlHeld: Boolean = false
+    var altHeld: Boolean = false
+    var metaHeld: Boolean = false
+
+    // Label of the key currently being held (for visual feedback)
+    var heldKeyLabel: String? = null
+
     private val layerTap = TapMachine()
     private val shiftTap = TapMachine()
     private val ctrlTap  = TapMachine()
     private val altTap   = TapMachine()
+
+    val effectiveLayer: String get() = layerHeld ?: layer
 
     fun cycleLayer(name: String): Boolean {
         val now = System.currentTimeMillis()
@@ -139,10 +151,33 @@ class KeyboardState {
         alt = LatchState.LATCHED
     }
 
-    val isShiftActive: Boolean get() = shift != LatchState.NONE
+    val isShiftActive: Boolean get() = shift != LatchState.NONE || shiftHeld
     val isCapsActive:  Boolean get() = caps  != LatchState.NONE
-    val isCtrlActive:  Boolean get() = ctrl  != LatchState.NONE
-    val isAltActive:   Boolean get() = alt   != LatchState.NONE
+    val isCtrlActive:  Boolean get() = ctrl  != LatchState.NONE || ctrlHeld
+    val isAltActive:   Boolean get() = alt   != LatchState.NONE || altHeld
+    val isMetaActive:  Boolean get() = metaHeld
+
+    fun applyHold(action: String) {
+        when (action) {
+            "ctrl"   -> ctrlHeld   = true
+            "shift"  -> shiftHeld  = true
+            "alt"    -> altHeld    = true
+            "meta"   -> metaHeld   = true
+            "lower", "raise", "adj", "func" -> layerHeld = action
+        }
+    }
+
+    fun releaseHold(action: String) {
+        when (action) {
+            "ctrl"   -> ctrlHeld   = false
+            "shift"  -> shiftHeld  = false
+            "alt"    -> altHeld    = false
+            "meta"   -> metaHeld   = false
+            "lower", "raise", "adj", "func" -> {
+                if (layerHeld == action) layerHeld = null
+            }
+        }
+    }
 
     fun resolveLabel(key: KeyDef): String? {
         val useShift = isShiftActive || isCapsActive
@@ -162,6 +197,12 @@ class KeyboardState {
         caps       = LatchState.NONE
         ctrl       = LatchState.NONE
         alt        = LatchState.NONE
+        layerHeld  = null
+        shiftHeld  = false
+        ctrlHeld   = false
+        altHeld    = false
+        metaHeld   = false
+        heldKeyLabel = null
         layerTap.reset()
         shiftTap.reset()
         ctrlTap.reset()

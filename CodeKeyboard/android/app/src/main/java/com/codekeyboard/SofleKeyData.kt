@@ -8,16 +8,17 @@ package com.codekeyboard
  *   left    4 rows × 5 cols   — stagger [0, .25, .5, .75, 1.0]
  *   right   4 rows × 5 cols   — stagger [1.0, .75, .5, .25, 0]
  *
- * Hold-tap annotations (home row mods, thumb layer-holds) are NOT defined
- * here yet — this is the visual skeleton. They will be added as a separate
- * pass once the geometry is confirmed correct.
+ * Hold-tap annotations (home row mods, thumb layer-holds) are defined
+ * on the BASE layer: a→ctrl, s→meta, d→alt, f→shift, h→shift, j→alt,
+ * k→meta, l→ctrl (home row). Left Spc→lower, right Spc→raise (thumb).
+ * Tapping-term = 150ms, managed by HoldTapTracker in NativeKeyboardView.
  *
  * No geometry, no pixel values, no rendering concerns.
  */
 object SofleKeyData {
 
-    private fun k(label: String, action: String? = null, shift: String? = null) =
-        KeyDef(label, action, shift)
+    private fun k(label: String, action: String? = null, shift: String? = null, hold: String? = null) =
+        KeyDef(label, action, shift, holdAction = hold)
 
     private fun empty() = KeyDef("")
 
@@ -33,16 +34,18 @@ object SofleKeyData {
         ),
         left = listOf(
             listOf(k("q"),     k("w"),     k("e"),     k("r"),     k("t")),
-            listOf(k("a"),     k("s"),     k("d"),     k("f"),     k("g")),
+            listOf(k("a", hold="ctrl"),  k("s", hold="meta"),
+                   k("d", hold="alt"),   k("f", hold="shift"), k("g")),
             listOf(k("z"),     k("x"),     k("c"),     k("v"),     k("b")),
-            listOf(k("Shift","shift"), k("Spc","space"), k("LWR","lower"),
+            listOf(k("Shift","shift"), k("Spc","space", hold="lower"), k("LWR","lower"),
                    k("Ctrl","ctrl"),  k("Alt","alt"))
         ),
         right = listOf(
             listOf(k("y"),     k("u"),     k("i"),     k("o"),     k("p")),
-            listOf(k("h"),     k("j"),     k("k"),     k("l"),     k(";", shift=":")),
+            listOf(k("h", hold="shift"),  k("j", hold="alt"),
+                   k("k", hold="meta"),   k("l", hold="ctrl"), k(";", shift=":")),
             listOf(k("n"),     k("m"),     k(",", shift="<"), k(".", shift=">"), k("Bksp","backspace")),
-            listOf(k("RSE","raise"), k("Enter","enter"), k("Spc","space"),
+            listOf(k("RSE","raise"), k("Enter","enter"), k("Spc","space", hold="raise"),
                    k("FUNC","func"),  k("ADJ","adj"))
         )
     )

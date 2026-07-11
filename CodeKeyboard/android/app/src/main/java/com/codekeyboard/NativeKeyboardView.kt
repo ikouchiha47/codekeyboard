@@ -23,9 +23,11 @@ class NativeKeyboardView @JvmOverloads constructor(
     defStyleAttr: Int = 0
 ) : View(context, attrs, defStyleAttr) {
 
-    // ── Callback ──────────────────────────────────────────────────────────────
+    // ── Callbacks ─────────────────────────────────────────────────────────────
 
-    var onKeyTapped: ((KeyDef) -> Unit)? = null
+    var onKeyTapped:   ((KeyDef) -> Unit)? = null
+    var onKeyHeld:     ((KeyDef) -> Unit)? = null
+    var onKeyReleased: ((KeyDef) -> Unit)? = null
 
     // ── Data ──────────────────────────────────────────────────────────────────
 
@@ -33,6 +35,7 @@ class NativeKeyboardView @JvmOverloads constructor(
     private var state: KeyboardState = KeyboardState()
     private var viewHeightPx: Int = 0
 
+    // Auto-repeat (backspace/delete)
     private val repeatHandler = Handler(Looper.getMainLooper())
     private var repeatKeyDef: KeyDef? = null
     private var repeatPointerId = -1
@@ -44,6 +47,18 @@ class NativeKeyboardView @JvmOverloads constructor(
             onKeyTapped?.invoke(key)
             repeatHandler.postDelayed(this, REPEAT_INTERVAL_MS)
         }
+    }
+
+    // Hold-tap (home row mods, thumb layer-holds)
+    private val holdTapHandler = Handler(Looper.getMainLooper())
+    private var holdTapKeyDef: KeyDef? = null
+    private var holdTapPointerId = -1
+    private var holdTapFired: Boolean = false
+
+    private val holdTapRunnable = Runnable {
+        val key = holdTapKeyDef ?: return@Runnable
+        holdTapFired = true
+        onKeyHeld?.invoke(key)
     }
 
     var computer: KeyboardLayoutComputer? = null
@@ -69,7 +84,7 @@ class NativeKeyboardView @JvmOverloads constructor(
 
     private fun recompute(w: Int) {
         val c = computer ?: return
-        setKeys(c.compute(w, kbState.layer), kbState, c.heightPx(w))
+        setKeys(c.compute(w, kbState.effectiveLayer), kbState, c.heightPx(w))
     }
 
     // ── Measure ───────────────────────────────────────────────────────────────
@@ -137,14 +152,17 @@ class NativeKeyboardView @JvmOverloads constructor(
             action == "ctrl"  && state.isCtrlActive  -> true
             action == "alt"   && state.isAltActive   -> true
             action in LAYER_ACTIONS && state.layer == action -> true
+            key.holdAction != null && state.heldKeyLabel == key.label -> true
             else -> false
         }
         if (isActive) {
-            accentBarPaint.color = when (action) {
-                "func"          -> Color.parseColor("#ff9800")
-                in LAYER_ACTIONS -> Color.parseColor("#4caf50")
-                else            -> Color.parseColor("#4a9eff")
+            val barColor = when {
+                key.holdAction != null && state.heldKeyLabel == key.label -> Color.parseColor("#4a9eff")
+                action == "func"          -> Color.parseColor("#ff9800")
+                action in LAYER_ACTIONS   -> Color.parseColor("#4caf50")
+                else                      -> Color.parseColor("#4a9eff")
             }
+            accentBarPaint.color = barColor
             canvas.drawRect(drawRect.left, drawRect.bottom - 2f * density,
                             drawRect.right, drawRect.bottom, accentBarPaint)
         }
@@ -193,21 +211,82 @@ class NativeKeyboardView @JvmOverloads constructor(
                 val pid = event.getPointerId(idx)
                 hitTest(event.getX(idx), event.getY(idx))?.let { key ->
                     performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
-                    onKeyTapped?.invoke(key)
-                    if (key.action in REPEATABLE_ACTIONS) {
-                        repeatKeyDef = key
-                        repeatPointerId = pid
-                        repeatHandler.postDelayed(repeatRunnable, REPEAT_INITIAL_DELAY_MS)
+
+                    if (key.holdAction != null) {
+                        // Hold-tap key: defer action, start tapping-term timer
+                        if (holdTapKeyDef != null) {
+                            holdTapHandler.removeCallbacksAndMessages(null)
+                            if (!holdTapFired) {
+                                onKeyTapped?.invoke(holdTapKeyDef!!)
+                            } else {
+                                onKeyReleased?.invoke(holdTapKeyDef!!)
+                            }
+                        }
+                        holdTapKeyDef = key
+                        holdTapPointerId = pid
+                        holdTapFired = false
+                        holdTapHandler.postDelayed(holdTapRunnable, TAPPING_TERM_MS)
+                    } else {
+                        // Regular key: fire immediately
+                        onKeyTapped?.invoke(key)
+                        if (key.action in REPEATABLE_ACTIONS) {
+                            repeatKeyDef = key
+                            repeatPointerId = pid
+                            repeatHandler.postDelayed(repeatRunnable, REPEAT_INITIAL_DELAY_MS)
+                        }
                     }
                 }
             }
             MotionEvent.ACTION_UP,
             MotionEvent.ACTION_POINTER_UP -> {
-                if (event.getPointerId(event.actionIndex) == repeatPointerId) {
+                val pid = event.getPointerId(event.actionIndex)
+
+                if (pid == holdTapPointerId) {
+                    val key = holdTapKeyDef
+                    val fired = holdTapFired
+                    holdTapHandler.removeCallbacksAndMessages(null)
+                    holdTapKeyDef = null
+                    holdTapPointerId = -1
+                    holdTapFired = false
+                    if (key != null) {
+                        if (!fired) {
+                            onKeyTapped?.invoke(key)
+                        } else {
+                            onKeyReleased?.invoke(key)
+                        }
+                    }
+                }
+
+                if (pid == repeatPointerId) {
                     cancelRepeat()
                 }
             }
             MotionEvent.ACTION_MOVE -> {
+                if (holdTapKeyDef != null) {
+                    var onHoldKey = false
+                    for (i in 0 until event.pointerCount) {
+                        if (event.getPointerId(i) == holdTapPointerId) {
+                            onHoldKey = hitTest(event.getX(i), event.getY(i)) === holdTapKeyDef
+                            break
+                        }
+                    }
+                    if (!onHoldKey) {
+                        val key = holdTapKeyDef
+                        val fired = holdTapFired
+                        holdTapHandler.removeCallbacksAndMessages(null)
+                        holdTapKeyDef = null
+                        holdTapPointerId = -1
+                        holdTapFired = false
+                        if (key != null) {
+                            if (!fired) {
+                                onKeyTapped?.invoke(key)
+                            } else {
+                                onKeyReleased?.invoke(key)
+                            }
+                        }
+                    }
+                }
+
                 if (repeatKeyDef != null) {
                     var onKey = false
                     for (i in 0 until event.pointerCount) {
@@ -219,7 +298,21 @@ class NativeKeyboardView @JvmOverloads constructor(
                     if (!onKey) cancelRepeat()
                 }
             }
-            MotionEvent.ACTION_CANCEL -> cancelRepeat()
+            MotionEvent.ACTION_CANCEL -> {
+                cancelRepeat()
+                if (holdTapKeyDef != null) {
+                    val key = holdTapKeyDef
+                    holdTapHandler.removeCallbacksAndMessages(null)
+                    if (!holdTapFired) {
+                        onKeyTapped?.invoke(key)
+                    } else {
+                        onKeyReleased?.invoke(key)
+                    }
+                    holdTapKeyDef = null
+                    holdTapPointerId = -1
+                    holdTapFired = false
+                }
+            }
         }
         return true
     }
@@ -233,6 +326,10 @@ class NativeKeyboardView @JvmOverloads constructor(
     override fun onDetachedFromWindow() {
         super.onDetachedFromWindow()
         cancelRepeat()
+        holdTapHandler.removeCallbacksAndMessages(null)
+        holdTapKeyDef = null
+        holdTapPointerId = -1
+        holdTapFired = false
     }
 
     private fun hitTest(x: Float, y: Float): KeyDef? {
@@ -253,5 +350,6 @@ class NativeKeyboardView @JvmOverloads constructor(
         private val REPEATABLE_ACTIONS = setOf("backspace", "delete")
         private const val REPEAT_INITIAL_DELAY_MS = 400L
         private const val REPEAT_INTERVAL_MS = 50L
+        private const val TAPPING_TERM_MS = 150L
     }
 }

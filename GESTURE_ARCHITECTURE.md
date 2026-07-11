@@ -105,41 +105,64 @@ tap on the same key starts fresh.
 ## Decision tree per key action
 
 | Action | Fire on DOWN? | Double-tap? | Long-press? | Tap-dance? |
-|---|---|---|---|---|
+|---|---|---|---|---|---|
 | `backspace` | Yes (1 char) | No | Yes (auto-repeat) | No |
 | `tab`, `escape`, `enter` | Yes | No | No | No |
-| letter keys | Yes | No | Future (hold→mod) | Future |
+| letter keys | Yes (unless holdAction) | No | Hold-tap if holdAction set | Future |
 | `shift`, `ctrl`, `alt` | Yes (LATCHED) | Yes (→ LOCKED) | No | No |
 | `lower`, `raise`, `adj`, `func` | Yes (latches layer) | Yes (→ LOCKED) | No | No |
-| `space` | Yes | No | Future (hold→layer) | Future |
+| `space` | Yes (unless holdAction) | No | Hold-tap if holdAction set | Future |
 | `caps` | Toggle LOCKED | No | No | No |
 | `meta` | Yes | Future | No | No |
+| hold-tap key (any) | No (starts timer) | Yes (via TapMachine on tap path) | Yes (150ms → HOLD) | Future |
 
-## Hold-tap (future)
+## Hold-tap (implemented)
 
 Hold-tap keys (home row `a`/`s`/`d`/`f` etc., thumb `Spc`) defer the
 action. Instead of firing on DOWN, they start a `tapping-term-ms` timer:
 
-- **Released before timer**: TAP action (character).
+- **Released before timer**: TAP action (character/key's normal action).
 - **Timer fires while held**: HOLD action (modifier/layer).
 
-This adds `tapping-term-ms` latency to the tap (50–100ms default,
+This adds `tapping-term-ms` latency to the tap (150ms default,
 configurable later).
 
-The same `GesturePipeline` handles this: a static `IS_HOLD_TAP` flag on
-`KeyDef` (not yet defined) tells the touch handler to defer.
+### How it works
 
-### Compatibility with present code
+`KeyDef.holdAction` marks a key as hold-tap. The `NativeKeyboardView`
+touch handler checks this field on DOWN:
 
-`tapping-term-ms` and `doubleTapMs` are independent:
-- `tapping-term-ms` (50–100ms) = per-hold decision on a single DOWN.
-- `doubleTapMs` (300ms) = window between two separate UP events in
-  `TapMachine`.
+1. **holdAction == null** — fire `onKeyTapped` immediately (original behavior).
+2. **holdAction != null** — start a 150ms `Handler` timer. On UP before
+   expiry → fire `onKeyTapped` (TAP). On timer expiry → fire `onKeyHeld`
+   (HOLD), mark `holdTapFired = true`. On UP after HOLD → fire
+   `onKeyReleased` to deactivate the transient state.
 
-Since 50–100ms << 300ms, a fast double-tap is still detected as double-tap
-(the first tap completes before the hold timer fires). Present `TapMachine`
-and `KeyboardState` are unaffected — `KeyDef` has no hold-tap field yet,
-so all keys still fire on DOWN as before.
+### State management
+
+`KeyboardState` tracks transient state separately from latched/locked:
+
+- `layerHeld: String?` — set when a layer hold fires, cleared on release.
+- `ctrlHeld`, `shiftHeld`, `altHeld`, `metaHeld: Boolean` — same for mods.
+- `effectiveLayer` — returns `layerHeld ?: layer` (held layer takes priority).
+- `isCtrlActive`, etc. — OR the permanent LATCHED/LOCKED with held state.
+
+`onCharCommitted()` does **not** clear held state — only the touch handler
+lifecycle (UP/MOVE off-key) does, via `onKeyReleased`.
+
+### Hold-tap key annotations (Sofle BASE layer)
+
+Home row mods: a→ctrl, s→meta, d→alt, f→shift, h→shift, j→alt, k→meta, l→ctrl.
+Thumb layer-holds: left Spc→lower, right Spc→raise.
+
+### Compatibility
+
+`tapping-term-ms` (150ms) and `doubleTapMs` (300ms) are independent:
+- A fast double-tap on a hold-tap key works: first tap completes (UP
+  before 150ms) and `TapMachine` records it; second tap is detected as
+  double-tap by `TapMachine` in `KeyboardState`.
+- A hold (held >150ms) on a hold-tap key fires the HOLD action once;
+  subsequent taps on other keys behave as if the modifier/layer is active.
 
 ## Tap-dance (future)
 
@@ -162,12 +185,12 @@ response to `count`.
 
 | File | Role |
 |---|---|
-| `KeyboardLayout.kt` | `KeyDef`, `KeyRect`, `PositionedKey`, `SofleLayerData`, `KeyboardLayoutComputer` — no Android imports |
+| `KeyboardLayout.kt` | `KeyDef`, `KeyRect`, `PositionedKey`, `SofleLayerData`, `KeyboardLayoutComputer` — no Android imports. `KeyDef.holdAction` for hold-tap annotation. |
 | `TapMachine.kt` | Pure-Kotlin double-tap detector. One per latchable action. |
-| `KeyboardState.kt` | Latch/lock state machine. Owns TapMachine instances. Pure Kotlin. |
-| `NativeKeyboardView.kt` | Canvas renderer + touch handler. Converts MotionEvent → hit test → callback. |
-| `SofleKeyData.kt` | Layer definitions (5 layers, V5 layout). Pure Kotlin. |
-| `SofleLayoutComputer.kt` | Geometry calculator. Pure Kotlin (+ `density` float constructor param). |
+| `KeyboardState.kt` | Latch/lock state machine. Owns TapMachine instances. Plus `applyHold`/`releaseHold` for transient hold-tap state, `effectiveLayer`. Pure Kotlin. |
+| `NativeKeyboardView.kt` | Canvas renderer + touch handler. Converts MotionEvent → hit test → callback. HoldTapTracker (Handler-based, 150ms TAPPING_TERM_MS) defers hold-tap keys. Auto-repeat for backspace/delete. |
+| `SofleKeyData.kt` | Layer definitions (5 layers, V5 layout). Home row mods + thumb layer-holds annotated with `holdAction`. Pure Kotlin. |
+| `SofleLayoutComputer.kt` | Geometry calculator. Exports `holdAction` in JSON. Pure Kotlin (+ `density` float constructor param). |
 
 ## Current state
 
@@ -177,7 +200,11 @@ response to `count`.
 - Long-press auto-repeat (backspace, delete): `Handler`-based timer,
   400ms initial delay then 50ms repeat, cancels on UP or MOVE off-key.
   Tracked per pointer ID for multi-touch safety.
-- Hold-tap: designed but not implemented. Needs `tapping-term-ms`, a
-  `IS_HOLD_TAP` flag on `KeyDef`, and deferred action dispatch.
+- Hold-tap: `KeyDef.holdAction` + `HoldTapTracker` in `NativeKeyboardView`.
+  150ms `TAPPING_TERM_MS` timer on DOWN; released before timer → TAP,
+  timer fires while held → HOLD. `KeyboardState.applyHold`/`releaseHold`
+  manage transient modifier/layer state (`ctrlHeld`, `shiftHeld`, etc.,
+  and `layerHeld`). Home row mods on BASE layer (a/s/d/f/h/j/k/l) and
+  thumb layer-holds (both Spc keys) are annotated.
 - Tap-dance: designed but not implemented. Same mechanism as double-tap
   with more counters.
