@@ -14,6 +14,11 @@ class CodeKeyboardIME : InputMethodService() {
 
     // ── Lifecycle ─────────────────────────────────────────────────────────────
 
+    override fun onCreate() {
+        super.onCreate()
+        KeyboardSettings.init(this)
+    }
+
     override fun onCreateInputView(): View {
         val density = resources.displayMetrics.density
 
