@@ -81,7 +81,8 @@ class NativeKeyboardView @JvmOverloads constructor(
     private val funcPaint   = Paint().apply { color = Color.parseColor("#2a1a1a"); style = Paint.Style.FILL; isAntiAlias = true }
     private val labelPaint  = Paint().apply { color = Color.parseColor("#e0e0e0"); textAlign = Paint.Align.CENTER; isAntiAlias = true }
     private val subPaint    = Paint().apply { color = Color.parseColor("#777777"); textAlign = Paint.Align.RIGHT;  isAntiAlias = true }
-    private val accentPaint = Paint().apply { color = Color.parseColor("#4a9eff"); textAlign = Paint.Align.CENTER; isAntiAlias = true }
+    private val accentPaint    = Paint().apply { color = Color.parseColor("#4a9eff"); textAlign = Paint.Align.CENTER; isAntiAlias = true }
+    private val accentBarPaint = Paint().apply { style = Paint.Style.FILL }
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
@@ -113,6 +114,21 @@ class NativeKeyboardView @JvmOverloads constructor(
             else                    -> keyPaint
         }
         canvas.drawRoundRect(drawRect, cornerR, cornerR, bg)
+
+        // ── Bottom accent bar ─────────────────────────────────────────────────
+        val accentColor = when (action) {
+            "func"          -> Color.parseColor("#ff9800")
+            in LAYER_ACTIONS -> Color.parseColor("#4caf50")
+            in THUMB_ACTIONS -> Color.parseColor("#4a9eff")
+            "ctrl", "alt", "meta" -> Color.parseColor("#4a9eff")
+            "tab", "escape" -> Color.parseColor("#666666")
+            else -> null
+        }
+        if (accentColor != null) {
+            accentBarPaint.color = accentColor
+            val barH = 2f * density
+            canvas.drawRect(drawRect.left, drawRect.bottom - barH, drawRect.right, drawRect.bottom, accentBarPaint)
+        }
 
         // ── Label ─────────────────────────────────────────────────────────────
         val label    = state.resolveLabel(key) ?: key.label
