@@ -94,13 +94,19 @@ class CodeKeyboardIME : InputMethodService() {
             }
             "enter"       -> {
                 val editorInfo = currentInputEditorInfo
-                val imeOptions = editorInfo?.imeOptions ?: 0
-                val action = imeOptions and EditorInfo.IME_MASK_ACTION
-                val noEnterAction = imeOptions and EditorInfo.IME_FLAG_NO_ENTER_ACTION != 0
-                if (noEnterAction || action == EditorInfo.IME_ACTION_UNSPECIFIED || action == EditorInfo.IME_ACTION_NONE) {
-                    ic?.commitText("\n", 1)
+                val action = editorInfo?.let { it.imeOptions and EditorInfo.IME_MASK_ACTION } ?: EditorInfo.IME_ACTION_UNSPECIFIED
+                val noEnterAction = editorInfo?.let { it.imeOptions and EditorInfo.IME_FLAG_NO_ENTER_ACTION } ?: 0
+                if (noEnterAction != 0 || action == EditorInfo.IME_ACTION_UNSPECIFIED || action == EditorInfo.IME_ACTION_NONE) {
+                    // No editor action requested - send normal newline
+                    ic?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_ENTER))
+                    ic?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_UP,   KeyEvent.KEYCODE_ENTER))
                 } else {
-                    ic?.performEditorAction(action)
+                    // Editor wants an action (search, done, go, etc.)
+                    if (ic?.performEditorAction(action) != true) {
+                        // Fallback to ENTER key if performEditorAction not handled
+                        ic?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_ENTER))
+                        ic?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_UP,   KeyEvent.KEYCODE_ENTER))
+                    }
                 }
             }
             "tab"         -> {
@@ -116,6 +122,17 @@ class CodeKeyboardIME : InputMethodService() {
             "meta"        -> ic?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_META_LEFT))
             "comment"     -> sendCtrl(ic, KeyEvent.KEYCODE_SLASH)
             "duplicate"   -> { sendCtrl(ic, KeyEvent.KEYCODE_C); sendCtrl(ic, KeyEvent.KEYCODE_V) }
+
+            // Media / system
+            "volume-mute"      -> ic?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_VOLUME_MUTE))
+            "volume-down"      -> ic?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_VOLUME_DOWN))
+            "volume-up"        -> ic?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_VOLUME_UP))
+            "media-play"       -> ic?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_MEDIA_PLAY))
+            "media-pause"      -> ic?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_MEDIA_PAUSE))
+            "media-next"       -> ic?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_MEDIA_NEXT))
+            "media-previous"   -> ic?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_MEDIA_PREVIOUS))
+            "brightness-down"  -> ic?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_BRIGHTNESS_DOWN))
+            "brightness-up"    -> ic?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_BRIGHTNESS_UP))
 
             // ── Character keys ────────────────────────────────────────────────
             else -> {
