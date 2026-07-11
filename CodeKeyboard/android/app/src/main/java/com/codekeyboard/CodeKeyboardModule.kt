@@ -55,7 +55,7 @@ class CodeKeyboardModule(reactContext: ReactApplicationContext) :
   }
 
   @ReactMethod
-  fun getSofleLayout(): String {
+  fun getLayout(): String {
     return SofleLayoutComputer.exportLayoutJson()
   }
 }
