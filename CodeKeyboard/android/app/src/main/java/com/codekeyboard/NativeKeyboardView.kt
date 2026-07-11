@@ -5,6 +5,8 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.RectF
+import android.os.Handler
+import android.os.Looper
 import android.util.AttributeSet
 import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
@@ -30,6 +32,17 @@ class NativeKeyboardView @JvmOverloads constructor(
     private var keys: List<PositionedKey> = emptyList()
     private var state: KeyboardState = KeyboardState()
     private var viewHeightPx: Int = 0
+
+    private val repeatHandler = Handler(Looper.getMainLooper())
+    private var repeatKeyDef: KeyDef? = null
+    private var repeatPointerId = -1
+
+    private val repeatRunnable = Runnable {
+        val key = repeatKeyDef ?: return@Runnable
+        performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+        onKeyTapped?.invoke(key)
+        repeatHandler.postDelayed(this, REPEAT_INTERVAL_MS)
+    }
 
     var computer: KeyboardLayoutComputer? = null
     var kbState: KeyboardState = KeyboardState()
@@ -175,13 +188,49 @@ class NativeKeyboardView @JvmOverloads constructor(
             MotionEvent.ACTION_DOWN,
             MotionEvent.ACTION_POINTER_DOWN -> {
                 val idx = event.actionIndex
-                hitTest(event.getX(idx), event.getY(idx))?.let {
+                val pid = event.getPointerId(idx)
+                hitTest(event.getX(idx), event.getY(idx))?.let { key ->
                     performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
-                    onKeyTapped?.invoke(it)
+                    onKeyTapped?.invoke(key)
+                    if (key.action in REPEATABLE_ACTIONS) {
+                        repeatKeyDef = key
+                        repeatPointerId = pid
+                        repeatHandler.postDelayed(repeatRunnable, REPEAT_INITIAL_DELAY_MS)
+                    }
                 }
             }
+            MotionEvent.ACTION_UP,
+            MotionEvent.ACTION_POINTER_UP -> {
+                if (event.getPointerId(event.actionIndex) == repeatPointerId) {
+                    cancelRepeat()
+                }
+            }
+            MotionEvent.ACTION_MOVE -> {
+                if (repeatKeyDef != null) {
+                    var onKey = false
+                    for (i in 0 until event.pointerCount) {
+                        if (event.getPointerId(i) == repeatPointerId) {
+                            onKey = hitTest(event.getX(i), event.getY(i)) === repeatKeyDef
+                            break
+                        }
+                    }
+                    if (!onKey) cancelRepeat()
+                }
+            }
+            MotionEvent.ACTION_CANCEL -> cancelRepeat()
         }
         return true
+    }
+
+    private fun cancelRepeat() {
+        repeatHandler.removeCallbacks(repeatRunnable)
+        repeatKeyDef = null
+        repeatPointerId = -1
+    }
+
+    override fun onDetachedFromWindow() {
+        super.onDetachedFromWindow()
+        cancelRepeat()
     }
 
     private fun hitTest(x: Float, y: Float): KeyDef? {
@@ -199,5 +248,8 @@ class NativeKeyboardView @JvmOverloads constructor(
         private val MOD_ACTIONS   = setOf("shift", "caps", "ctrl", "alt", "enter",
                                           "backspace", "delete", "tab", "escape",
                                           "arrow-left", "arrow-right", "arrow-up", "arrow-down")
+        private val REPEATABLE_ACTIONS = setOf("backspace", "delete")
+        private const val REPEAT_INITIAL_DELAY_MS = 400L
+        private const val REPEAT_INTERVAL_MS = 50L
     }
 }
