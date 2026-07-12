@@ -229,7 +229,7 @@ class KeyboardStateTest {
         assertEquals(0, state.computeMetaState(emptyMap()))
     }
 
-    @Test fun `metaState survives regr: meta unknown to _latch but held`() {
+    @Test fun `metaState survives regr - meta unknown to _latch but held`() {
         // The exact scenario that caused the original bug:
         // "meta" is NOT in _latch (only in _hold when held).
         // Before the fix, isModifierActive("meta") returned true even
