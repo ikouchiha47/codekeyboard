@@ -61,6 +61,28 @@ class KeyboardStateTest {
         assertEquals(LatchState.LATCHED, state.layerState)
     }
 
+    @Test fun `tapping different layer from locked latches new without locking it`() {
+        // Lock lower, then tap raise — should latch raise, not keep lower locked
+        state.cycleLayer("lower")
+        state.cycleLayer("lower")                  // lower LOCKED (double-tap)
+        assertEquals(LatchState.LOCKED, state.layerState)
+        state.cycleLayer("raise")
+        assertEquals("raise", state.layer)
+        assertEquals(LatchState.LATCHED, state.layerState)
+    }
+
+    @Test fun `third tap on latched layer (after lock) returns to base`() {
+        // Tap 1 → LATCHED, double-tap → LOCKED, tap again → base.
+        // This is distinct from the sequential three-tap test and confirms
+        // the locked→base transition is reachable via the real call path.
+        state.cycleLayer("lower")                  // LATCHED
+        state.cycleLayer("lower")                  // double-tap → LOCKED
+        assertEquals(LatchState.LOCKED, state.layerState)
+        state.cycleLayer("lower")                  // tap while locked → base
+        assertEquals("base", state.layer)
+        assertEquals(LatchState.NONE, state.layerState)
+    }
+
     @Test fun `latched layer returns to base after char committed`() {
         state.cycleLayer("lower")   // LATCHED
         state.onCharCommitted()
