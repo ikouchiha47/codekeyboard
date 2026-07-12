@@ -171,4 +171,82 @@ class KeyboardStateTest {
         assertFalse(state.isShiftActive)
         assertFalse(state.isCtrlActive)
     }
+
+    // ── computeMetaState (the fold that decides commitText vs sendKeyEvent) ──
+
+    // Use arbitrary bit flags so the test stays pure-Kotlin (no Android import).
+    private val testFlags = mapOf("ctrl" to 0x1, "alt" to 0x2, "meta" to 0x4)
+
+    @Test fun `metaState is 0 when nothing active`() {
+        // Regression guard for the bug where isModifierActive("meta") was
+        // always true because _latch["meta"] returned null != LatchState.NONE.
+        assertEquals(0, state.computeMetaState(testFlags))
+    }
+
+    @Test fun `metaState has only ctrl flag when ctrl latched`() {
+        state.cycleModifier("ctrl")
+        assertEquals(0x1, state.computeMetaState(testFlags))
+    }
+
+    @Test fun `metaState has only alt flag when alt latched`() {
+        state.cycleModifier("alt")
+        assertEquals(0x2, state.computeMetaState(testFlags))
+    }
+
+    @Test fun `metaState has only meta flag when meta held`() {
+        state.applyHold("meta")
+        assertEquals(0x4, state.computeMetaState(testFlags))
+    }
+
+    @Test fun `metaState is 0 after held meta released`() {
+        state.applyHold("meta")
+        state.releaseHold("meta")
+        assertEquals(0, state.computeMetaState(testFlags))
+    }
+
+    @Test fun `metaState combines ctrl held plus alt latched`() {
+        state.applyHold("ctrl")
+        state.cycleModifier("alt")
+        assertEquals(0x1 or 0x2, state.computeMetaState(testFlags))
+    }
+
+    @Test fun `metaState clears latched ctrl after char committed but keeps held meta`() {
+        state.cycleModifier("ctrl")      // LATCHED
+        state.applyHold("meta")         // held
+        state.onCharCommitted()         // clears LATCHED ctrl, does NOT clear held meta
+        assertEquals(0x4, state.computeMetaState(testFlags))
+    }
+
+    @Test fun `metaState ignores caps and shift (handled via resolveLabel, not key events)`() {
+        state.cycleModifier("shift")
+        state.cycleModifier("caps")
+        assertEquals(0, state.computeMetaState(testFlags))
+    }
+
+    @Test fun `metaState with empty flags map is always 0`() {
+        state.applyHold("ctrl")
+        state.applyHold("meta")
+        assertEquals(0, state.computeMetaState(emptyMap()))
+    }
+
+    @Test fun `metaState survives regr: meta unknown to _latch but held`() {
+        // The exact scenario that caused the original bug:
+        // "meta" is NOT in _latch (only in _hold when held).
+        // Before the fix, isModifierActive("meta") returned true even
+        // when nothing was held, because null != LatchState.NONE == true.
+        assertFalse(state.isModifierActive("meta"))
+        state.applyHold("meta")
+        assertTrue(state.isModifierActive("meta"))
+        state.releaseHold("meta")
+        assertFalse(state.isModifierActive("meta"))
+    }
+
+    @Test fun `metaState with never-heard-of modifier name is 0`() {
+        // A modifier in the flags map but with NO corresponding state in
+        // KeyboardState must not accidentally activate via null comparison.
+        val flagsWithUnknown = mapOf("ctrl" to 0x1, "hyper" to 0x8)
+        assertEquals(0, state.computeMetaState(flagsWithUnknown))
+        state.applyHold("ctrl")
+        assertEquals(0x1, state.computeMetaState(flagsWithUnknown))
+    }
 }

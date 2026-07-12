@@ -150,9 +150,7 @@ class CodeKeyboardIME : InputMethodService() {
             else -> {
                 val text = kbState.resolveLabel(key) ?: key.label
                 if (text.isNotEmpty()) {
-                    val metaState = MODIFIER_META_FLAGS.entries.fold(0) { acc, (name, flag) ->
-                        if (kbState.isModifierActive(name)) acc or flag else acc
-                    }
+                    val metaState = kbState.computeMetaState(MODIFIER_META_FLAGS)
                     if (text.length == 1 && metaState != 0) {
                         val keyCode = charToKeyCode(text[0])
                         if (keyCode != null) {

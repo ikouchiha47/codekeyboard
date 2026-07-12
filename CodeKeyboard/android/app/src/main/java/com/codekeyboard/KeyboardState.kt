@@ -68,6 +68,18 @@ class KeyboardState {
             addAll(_hold)
         }
 
+    /**
+     * Fold active modifiers into a combined meta-state integer.
+     *
+     * [flags] maps modifier name → bit-flag (e.g. KeyEvent.META_CTRL_ON).
+     * Returns 0 when no modifier is active, which signals "use commitText"
+     * instead of sending a key event.
+     */
+    fun computeMetaState(flags: Map<String, Int>): Int =
+        flags.entries.fold(0) { acc, (name, flag) ->
+            if (isModifierActive(name)) acc or flag else acc
+        }
+
     // ── Generic modifier cycling ─────────────────────────────────────────
     fun cycleModifier(name: String) {
         if (name == "caps") {
