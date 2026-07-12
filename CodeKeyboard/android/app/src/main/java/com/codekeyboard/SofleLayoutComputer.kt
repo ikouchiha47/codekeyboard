@@ -18,7 +18,7 @@ package com.codekeyboard
  *
  * No Android imports — fully testable with pure JUnit.
  */
-class SofleLayoutComputer(density: Float) : KeyboardLayoutComputer {
+class SofleLayoutComputer(internal val density: Float) : KeyboardLayoutComputer {
 
     override val name   = "Sofle V5"
     override val layers = SofleKeyData.LAYERS.keys.toList()
@@ -32,6 +32,22 @@ class SofleLayoutComputer(density: Float) : KeyboardLayoutComputer {
 
     /** Gap between the left and right halves as a fraction of screen width. */
     internal fun halfGap(screenW: Int): Float = screenW * 0.05f
+
+    /**
+     * Maximum snap radius in physical pixels that is guaranteed not to bridge
+     * the inter-half gap at the given screen width and density.
+     *
+     * Safe bound = half the gap width, minus a 1dp safety margin.
+     * We cap at 8dp because beyond that we start covering the full key width
+     * (29dp) which would misattribute cross-column taps.
+     */
+    internal fun maxSafeSnapPx(screenW: Int): Float {
+        val halfGapPx   = halfGap(screenW) / 2f        // distance from each inner edge to gap centre
+        val marginPx    = 1f * density                  // 1dp safety margin
+        val geometricMax = halfGapPx - marginPx
+        val capPx        = 8f * density                 // 8dp cap — beyond this we'd span a full key width
+        return minOf(geometricMax, capPx)
+    }
 
     // ── Stagger ───────────────────────────────────────────────────────────────
     internal val staggerLeft  = listOf(0f, 0.25f, 0.50f, 0.75f, 1.00f)

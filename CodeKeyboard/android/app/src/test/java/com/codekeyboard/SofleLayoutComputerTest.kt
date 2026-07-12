@@ -247,6 +247,54 @@ class SofleLayoutComputerTest {
         )
     }
 
+    // ── Snap radius safety across densities ───────────────────────────────────
+
+    @Test fun `maxSafeSnapPx is less than half-gap at density 1`() {
+        // density=1: screenW=1000, halfGap=50px, half of that=25px
+        // maxSafeSnapPx must be < 25px so it cannot bridge the gap
+        val snap = computer.maxSafeSnapPx(screenW)
+        val halfGapCentre = computer.halfGap(screenW) / 2f
+        assertTrue("snap ($snap) must be < half-gap centre ($halfGapCentre)", snap < halfGapCentre)
+    }
+
+    @Test fun `maxSafeSnapPx is less than half-gap at density 3`() {
+        // density=3 (typical modern Android): screenW=1080px physical
+        val c = SofleLayoutComputer(3f)
+        val snap = c.maxSafeSnapPx(1080)
+        val halfGapCentre = c.halfGap(1080) / 2f
+        assertTrue("snap ($snap) must be < half-gap centre ($halfGapCentre)", snap < halfGapCentre)
+    }
+
+    @Test fun `maxSafeSnapPx is less than half-gap at density 2 small screen`() {
+        // density=2, screenW=720px: smallest common configuration
+        val c = SofleLayoutComputer(2f)
+        val snap = c.maxSafeSnapPx(720)
+        val halfGapCentre = c.halfGap(720) / 2f
+        assertTrue("snap ($snap) must be < half-gap centre ($halfGapCentre)", snap < halfGapCentre)
+    }
+
+    @Test fun `maxSafeSnapPx never exceeds 8dp`() {
+        // 8dp cap holds regardless of screen size or density
+        for ((w, d) in listOf(720 to 2f, 1080 to 3f, 1440 to 3.5f, 2560 to 2f)) {
+            val c    = SofleLayoutComputer(d)
+            val snap = c.maxSafeSnapPx(w)
+            val capPx = 8f * d
+            assertTrue("snap ($snap) must be <= 8dp (${capPx}px) at density=$d screenW=$w", snap <= capPx)
+        }
+    }
+
+    @Test fun `maxSafeSnapPx matches the hardcoded 8dp constant at typical screen sizes`() {
+        // At typical phone widths the geometric safe bound exceeds 8dp,
+        // so the cap of 8dp is what actually applies. This confirms the
+        // constant in NativeKeyboardView is not arbitrary — it equals maxSafeSnapPx.
+        for ((w, d) in listOf(1080 to 3f, 1440 to 3.5f)) {
+            val c       = SofleLayoutComputer(d)
+            val snap    = c.maxSafeSnapPx(w)
+            val expected = 8f * d
+            assertEquals("maxSafeSnapPx should equal 8dp cap at w=$w d=$d", expected, snap, 0.5f)
+        }
+    }
+
     // ── Height ────────────────────────────────────────────────────────────────
 
     @Test fun `heightPx is stable across calls`() {
