@@ -96,4 +96,10 @@ interface KeyboardLayoutComputer {
      * Used by the RN bridge to share layout data without duplication.
      */
     fun exportLayout(): String
+
+    /**
+     * Maximum snap radius in physical pixels that is safe for this layout
+     * at the given screen width — guaranteed not to bridge the inter-half gap.
+     */
+    fun maxSafeSnapPx(screenWidthPx: Int): Float
 }

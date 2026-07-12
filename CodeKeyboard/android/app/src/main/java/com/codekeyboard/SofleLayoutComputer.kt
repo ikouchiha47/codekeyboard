@@ -41,7 +41,7 @@ class SofleLayoutComputer(internal val density: Float) : KeyboardLayoutComputer 
      * We cap at 8dp because beyond that we start covering the full key width
      * (29dp) which would misattribute cross-column taps.
      */
-    internal fun maxSafeSnapPx(screenW: Int): Float {
+    override fun maxSafeSnapPx(screenW: Int): Float {
         val halfGapPx   = halfGap(screenW) / 2f        // distance from each inner edge to gap centre
         val marginPx    = 1f * density                  // 1dp safety margin
         val geometricMax = halfGapPx - marginPx

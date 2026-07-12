@@ -34,6 +34,7 @@ class NativeKeyboardView @JvmOverloads constructor(
     private var keys: List<PositionedKey> = emptyList()
     private var state: KeyboardState = KeyboardState()
     private var viewHeightPx: Int = 0
+    private var snapThresholdPx: Float = 0f
 
     // Auto-repeat (backspace/delete)
     private val repeatHandler = Handler(Looper.getMainLooper())
@@ -65,9 +66,10 @@ class NativeKeyboardView @JvmOverloads constructor(
     var kbState: KeyboardState = KeyboardState()
 
     fun setKeys(keys: List<PositionedKey>, state: KeyboardState, heightPx: Int) {
-        this.keys         = keys
-        this.state        = state
-        this.viewHeightPx = heightPx
+        this.keys            = keys
+        this.state           = state
+        this.viewHeightPx    = heightPx
+        this.snapThresholdPx = computer?.maxSafeSnapPx(if (width > 0) width else heightPx) ?: 0f
         requestLayout()
         invalidate()
     }
@@ -335,7 +337,6 @@ class NativeKeyboardView @JvmOverloads constructor(
     private fun hitTest(x: Float, y: Float): KeyDef? {
         var best: KeyDef? = null
         var bestDist = Float.MAX_VALUE
-        val threshold = SNAP_RADIUS_DP * density
         for (pk in keys) {
             val kr = pk.rect
             if (kr.contains(x, y)) return pk.key
@@ -347,7 +348,7 @@ class NativeKeyboardView @JvmOverloads constructor(
                 best = pk.key
             }
         }
-        return if (bestDist <= threshold * threshold) best else null
+        return if (bestDist <= snapThresholdPx * snapThresholdPx) best else null
     }
 
     // ── Constants ─────────────────────────────────────────────────────────────
@@ -362,6 +363,6 @@ class NativeKeyboardView @JvmOverloads constructor(
         private const val REPEAT_INITIAL_DELAY_MS = 400L
         private const val REPEAT_INTERVAL_MS = 50L
         private const val TAPPING_TERM_MS = 150L
-        private const val SNAP_RADIUS_DP = 8f
+        // Snap radius is now computed dynamically via SofleLayoutComputer.maxSafeSnapPx
     }
 }
