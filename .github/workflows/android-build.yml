@@ -54,9 +54,13 @@ jobs:
         working-directory: CodeKeyboard
         run: npm ci
 
-      - name: Run unit tests
+      - name: Run JS unit tests
         working-directory: CodeKeyboard
         run: node --test __tests__/*.test.js
+
+      - name: Run Kotlin unit tests
+        working-directory: CodeKeyboard/android
+        run: ./gradlew testDebugUnitTest --console=plain
 
       - name: TypeScript check
         working-directory: CodeKeyboard

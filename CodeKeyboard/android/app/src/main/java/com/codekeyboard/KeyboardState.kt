@@ -49,7 +49,7 @@ class KeyboardState {
 
     // ── Active checks ─────────────────────────────────────────────────────
     fun isModifierActive(name: String): Boolean =
-        _latch[name] != LatchState.NONE || name in _hold
+        (_latch[name] ?: LatchState.NONE) != LatchState.NONE || name in _hold
 
     val isShiftActive: Boolean get() = isModifierActive("shift") || isModifierActive("caps")
     val isCapsActive:  Boolean get() = caps != LatchState.NONE

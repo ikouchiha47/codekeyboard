@@ -21,6 +21,14 @@ class KeyboardStateTest {
         assertFalse(state.isCapsActive)
         assertFalse(state.isCtrlActive)
         assertFalse(state.isAltActive)
+        assertFalse(state.isMetaActive)
+        // Regression: isModifierActive with a name not in _latch map must NOT
+        // return true. Earlier bug: null != LatchState.NONE evaluated to true,
+        // so "meta" was always "active", causing character keys to send key
+        // events with META_META_ON instead of commitText.
+        assertFalse(state.isModifierActive("meta"))
+        assertFalse(state.isModifierActive("hyper"))
+        assertFalse(state.isModifierActive("nonexistent"))
     }
 
     // ── Layer cycling ─────────────────────────────────────────────────────────
@@ -98,6 +106,19 @@ class KeyboardStateTest {
         state.cycleModifier("ctrl")
         state.onCharCommitted()
         assertEquals(LatchState.NONE, state.ctrl)
+    }
+
+    @Test fun `applyHold activates modifier not in _latch map`() {
+        state.applyHold("meta")
+        assertTrue(state.isModifierActive("meta"))
+        assertTrue(state.isMetaActive)
+    }
+
+    @Test fun `releaseHold deactivates held modifier`() {
+        state.applyHold("meta")
+        state.releaseHold("meta")
+        assertFalse(state.isModifierActive("meta"))
+        assertFalse(state.isMetaActive)
     }
 
     // ── Label resolution ──────────────────────────────────────────────────────
