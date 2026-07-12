@@ -199,42 +199,39 @@ class SofleLayoutComputerTest {
     }
 
     @Test fun `snap radius does not bridge the full half-gap`() {
-        // The gap between halves is halfGap(screenW) wide (~50px at screenW=1000).
-        // SNAP_RADIUS_DP = 3dp = 3px at density=1. A touch 4px inside the gap
-        // (just past snap range) must NOT hit any key via exact containment.
-        // This documents the boundary: touches deep in the gap are not snapped.
+        // Gap between halves = halfGap(screenW) = ~50px at screenW=1000, density=1.
+        // Half of that is ~25px from each edge to gap centre.
+        // SNAP_RADIUS_DP = 8dp = 8px at density=1.
+        // Gap centre is 25px from each half edge — well beyond 8dp snap radius.
+        // Verifies the nearest-neighbour algorithm can't accidentally cross the gap.
         val keys  = computer.compute(screenW, "base")
         val gap   = computer.halfGap(screenW)
         val hw    = (screenW - 2 * computer.padding - gap) / 2f
         val leftMax  = computer.padding + hw
         val deepGapX = leftMax + gap / 2f   // dead centre of the gap
         val gapY  = computer.padding + computer.keyHeight + computer.rowGap + computer.keyHeight / 2f
-        // No key rect should contain this point (exact hit-test only, no snapping here)
         val exactHit = keys.firstOrNull { it.rect.contains(deepGapX, gapY) }
         assertNull("Centre of gap must not contain any key rect", exactHit)
-        // The nearest key is ~gap/2 away — well beyond any reasonable snap radius
         val nearestDist = keys.minOf { pk ->
             val dx = maxOf(pk.rect.left - deepGapX, 0f, deepGapX - pk.rect.right)
             val dy = maxOf(pk.rect.top  - gapY,     0f, gapY     - pk.rect.bottom)
             Math.sqrt((dx * dx + dy * dy).toDouble()).toFloat()
         }
         assertTrue(
-            "Nearest key from gap centre ($nearestDist px) must be > 3dp snap radius",
-            nearestDist > 3f
+            "Nearest key from gap centre ($nearestDist px) must be > 8dp snap radius",
+            nearestDist > 8f
         )
     }
 
     @Test fun `gap edge is within snap radius of adjacent key`() {
-        // A touch 1px outside the left half's rightmost key IS within snap range.
-        // The rightmost left column (col 4) has stagger 1.0, so its top Y is
-        // mainTopY + 1.0 * keyHeight. We sample at its vertical centre.
+        // A touch 1px outside the left half's rightmost key must be within 8dp snap.
+        // The rightmost left column (col 4) has stagger 1.0, so we sample at its centre Y.
         val keys     = computer.compute(screenW, "base")
         val gap      = computer.halfGap(screenW)
         val hw       = (screenW - 2 * computer.padding - gap) / 2f
         val leftMax  = computer.padding + hw
-        val justOutsideX = leftMax + 1f   // 1px into the gap
+        val justOutsideX = leftMax + 1f
 
-        // Centre-Y of the left half col-4 key (max stagger = 1.0)
         val mainTopY  = computer.padding + computer.keyHeight + computer.rowGap
         val col4TopY  = mainTopY + computer.staggerLeft[4] * computer.keyHeight
         val col4MidY  = col4TopY + computer.keyHeight / 2f
@@ -245,8 +242,8 @@ class SofleLayoutComputerTest {
             Math.sqrt((dx * dx + dy * dy).toDouble()).toFloat()
         }
         assertTrue(
-            "A touch 1px into the gap ($nearestDist px from nearest key) should be within 3dp snap",
-            nearestDist <= 3f
+            "A touch 1px into the gap ($nearestDist px from nearest key) should be within 8dp snap",
+            nearestDist <= 8f
         )
     }
 

@@ -362,6 +362,6 @@ class NativeKeyboardView @JvmOverloads constructor(
         private const val REPEAT_INITIAL_DELAY_MS = 400L
         private const val REPEAT_INTERVAL_MS = 50L
         private const val TAPPING_TERM_MS = 150L
-        private const val SNAP_RADIUS_DP = 3f
+        private const val SNAP_RADIUS_DP = 8f
     }
 }
