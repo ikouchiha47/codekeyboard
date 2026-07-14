@@ -80,20 +80,26 @@ object SofleKeyData {
     private val RAISE = SofleLayerData(
         topRow = listOf(
             ANCHOR_TAB, ANCHOR_ESC,
-            k("F1"), k("F2"), k("F3"), k("F4"), k("F5"), k("F6")
+            k("F1","f1"), k("F2","f2"), k("F3","f3"),
+            k("F4","f4"), k("F5","f5"), k("F6","f6")
         ),
         left = listOf(
-            listOf(k("F7"),  k("F8"),   k("F9"),   k("F10"),  k("F11")),
-            listOf(k("F12"), k("Ins"),  k("Home"), k("PgUp"), k("PgDn")),
-            listOf(k("End"), k("Cut"),  k("Copy"), k("Paste"),k("Undo")),
+            listOf(k("F7","f7"),  k("F8","f8"),   k("F9","f9"),
+                   k("F10","f10"), k("F11","f11")),
+            listOf(k("F12","f12"), k("Ins","insert"), k("Home","home"),
+                   k("PgUp","page-up"), k("PgDn","page-down")),
+            listOf(k("End","end"), k("Cut","cut"), k("Copy","copy"),
+                   k("Paste","paste"), k("Undo","undo")),
             listOf(k("Shift","shift"), k("Spc","space"), k("LWR","lower"),
                    k("Ctrl","ctrl"),  k("Alt","alt"))
         ),
         right = listOf(
             listOf(k("←","arrow-left"), k("↓","arrow-down"),
-                   k("↑","arrow-up"),   k("→","arrow-right"), k("PgDn")),
-            listOf(k("Home"), k("End"), k("PgUp"), k("PgDn"), empty()),
-            listOf(k("Cut"),  k("Copy"),k("Paste"),k("Undo"), k("Bksp","backspace")),
+                   k("↑","arrow-up"),   k("→","arrow-right"), k("PgDn","page-down")),
+            listOf(k("Home","home"), k("End","end"),
+                   k("PgUp","page-up"), k("PgDn","page-down"), empty()),
+            listOf(k("Cut","cut"), k("Copy","copy"), k("Paste","paste"),
+                   k("Undo","undo"), k("Bksp","backspace")),
             listOf(k("RSE","raise"), k("Enter","enter"), k("Spc","space"),
                    k("FUNC","func"),  k("ADJ","adj"))
         )

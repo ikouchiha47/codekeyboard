@@ -1,5 +1,6 @@
 package com.codekeyboard
 
+import android.graphics.Color
 import android.inputmethodservice.InputMethodService
 import android.view.View
 import android.view.ViewGroup
@@ -47,6 +48,9 @@ class CodeKeyboardIME : InputMethodService() {
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
             )
+            // Must be opaque — transparent wrapper lets app content bleed through
+            // the nav-bar padding area below the keys.
+            setBackgroundColor(Color.parseColor("#111111"))
         }
         wrapper.addView(keyboardView)
 
@@ -90,61 +94,83 @@ class CodeKeyboardIME : InputMethodService() {
                 keyboardView.notifyStateChanged(kbState)
             }
 
-            // ── Backspace ─────────────────────────────────────────────────────
-            // deleteSurroundingText(1,0) works across all editor types.
-            // Fall back to KEYCODE_DEL for editors that reject it (e.g. WebViews).
+            // ── Backspace / Delete ────────────────────────────────────────────────
             "backspace" -> {
-                if (ic?.deleteSurroundingText(1, 0) != true) {
-                    ic?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DEL))
-                    ic?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_UP,   KeyEvent.KEYCODE_DEL))
-                }
+                val sel = ic?.getSelectedText(0)
+                if (!sel.isNullOrEmpty()) ic?.commitText("", 1)
+                else if (ic?.deleteSurroundingText(1, 0) != true) sendDownUp(ic, KeyEvent.KEYCODE_DEL)
+            }
+            "delete" -> {
+                val sel = ic?.getSelectedText(0)
+                if (!sel.isNullOrEmpty()) ic?.commitText("", 1)
+                else if (ic?.deleteSurroundingText(0, 1) != true) sendDownUp(ic, KeyEvent.KEYCODE_FORWARD_DEL)
             }
 
             // ── Other action keys ─────────────────────────────────────────────
-            "delete"      -> {
-                if (ic?.deleteSurroundingText(0, 1) != true) {
-                    ic?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_FORWARD_DEL))
-                    ic?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_UP,   KeyEvent.KEYCODE_FORWARD_DEL))
-                }
-            }
-            "enter"       -> {
+            "enter" -> {
                 val editorInfo = currentInputEditorInfo
                 val action = editorInfo?.let { it.imeOptions and EditorInfo.IME_MASK_ACTION } ?: EditorInfo.IME_ACTION_UNSPECIFIED
                 val noEnterAction = editorInfo?.let { it.imeOptions and EditorInfo.IME_FLAG_NO_ENTER_ACTION } ?: 0
                 if (noEnterAction != 0 || action == EditorInfo.IME_ACTION_UNSPECIFIED || action == EditorInfo.IME_ACTION_NONE) {
-                    ic?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_ENTER))
-                    ic?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_UP,   KeyEvent.KEYCODE_ENTER))
+                    sendDownUp(ic, KeyEvent.KEYCODE_ENTER)
                 } else {
-                    if (ic?.performEditorAction(action) != true) {
-                        ic?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_ENTER))
-                        ic?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_UP,   KeyEvent.KEYCODE_ENTER))
-                    }
+                    if (ic?.performEditorAction(action) != true) sendDownUp(ic, KeyEvent.KEYCODE_ENTER)
                 }
             }
-            "tab"         -> {
-                ic?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_TAB))
-                ic?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_UP,   KeyEvent.KEYCODE_TAB))
-            }
+            "tab"         -> sendDownUp(ic, KeyEvent.KEYCODE_TAB)
             "space"       -> ic?.commitText(" ", 1)
-            "escape"      -> ic?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_ESCAPE))
-            "arrow-left"  -> ic?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_LEFT))
-            "arrow-right" -> ic?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_RIGHT))
-            "arrow-up"    -> ic?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_UP))
-            "arrow-down"  -> ic?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DPAD_DOWN))
-            "meta"        -> ic?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_META_LEFT))
-            "comment"     -> sendCtrl(ic, KeyEvent.KEYCODE_SLASH)
-            "duplicate"   -> { sendCtrl(ic, KeyEvent.KEYCODE_C); sendCtrl(ic, KeyEvent.KEYCODE_V) }
+            "escape"      -> sendDownUp(ic, KeyEvent.KEYCODE_ESCAPE)
+            "arrow-left"  -> sendDownUp(ic, KeyEvent.KEYCODE_DPAD_LEFT)
+            "arrow-right" -> sendDownUp(ic, KeyEvent.KEYCODE_DPAD_RIGHT)
+            "arrow-up"    -> sendDownUp(ic, KeyEvent.KEYCODE_DPAD_UP)
+            "arrow-down"  -> sendDownUp(ic, KeyEvent.KEYCODE_DPAD_DOWN)
+            "meta"        -> sendDownUp(ic, KeyEvent.KEYCODE_META_LEFT)
 
-            // Media / system
-            "volume-mute"      -> ic?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_VOLUME_MUTE))
-            "volume-down"      -> ic?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_VOLUME_DOWN))
-            "volume-up"        -> ic?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_VOLUME_UP))
-            "media-play"       -> ic?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_MEDIA_PLAY))
-            "media-pause"      -> ic?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_MEDIA_PAUSE))
-            "media-next"       -> ic?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_MEDIA_NEXT))
-            "media-previous"   -> ic?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_MEDIA_PREVIOUS))
-            "brightness-down"  -> ic?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_BRIGHTNESS_DOWN))
-            "brightness-up"    -> ic?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_BRIGHTNESS_UP))
+            // ── Edit actions ──────────────────────────────────────────────────
+            "cut"        -> ic?.performContextMenuAction(android.R.id.cut)
+            "copy"       -> ic?.performContextMenuAction(android.R.id.copy)
+            "paste"      -> ic?.performContextMenuAction(android.R.id.paste)
+            "select-all" -> ic?.performContextMenuAction(android.R.id.selectAll)
+            "undo"       -> ic?.performContextMenuAction(android.R.id.undo)
+            "redo"       -> ic?.performContextMenuAction(android.R.id.redo)
+            "save"       -> sendCtrl(ic, KeyEvent.KEYCODE_S)
+            "find"       -> sendCtrl(ic, KeyEvent.KEYCODE_F)
+            "replace"    -> sendCtrl(ic, KeyEvent.KEYCODE_H)
+            "format"     -> sendCtrlShift(ic, KeyEvent.KEYCODE_F)
+            "comment"    -> sendCtrl(ic, KeyEvent.KEYCODE_SLASH)
+            "duplicate"  -> { sendCtrl(ic, KeyEvent.KEYCODE_C); sendCtrl(ic, KeyEvent.KEYCODE_V) }
+
+            // ── Navigation ────────────────────────────────────────────────────
+            "home"      -> sendDownUp(ic, KeyEvent.KEYCODE_MOVE_HOME)
+            "end"       -> sendDownUp(ic, KeyEvent.KEYCODE_MOVE_END)
+            "page-up"   -> sendDownUp(ic, KeyEvent.KEYCODE_PAGE_UP)
+            "page-down" -> sendDownUp(ic, KeyEvent.KEYCODE_PAGE_DOWN)
+            "insert"    -> sendDownUp(ic, KeyEvent.KEYCODE_INSERT)
+
+            // ── F-keys ────────────────────────────────────────────────────────
+            "f1"  -> sendDownUp(ic, KeyEvent.KEYCODE_F1)
+            "f2"  -> sendDownUp(ic, KeyEvent.KEYCODE_F2)
+            "f3"  -> sendDownUp(ic, KeyEvent.KEYCODE_F3)
+            "f4"  -> sendDownUp(ic, KeyEvent.KEYCODE_F4)
+            "f5"  -> sendDownUp(ic, KeyEvent.KEYCODE_F5)
+            "f6"  -> sendDownUp(ic, KeyEvent.KEYCODE_F6)
+            "f7"  -> sendDownUp(ic, KeyEvent.KEYCODE_F7)
+            "f8"  -> sendDownUp(ic, KeyEvent.KEYCODE_F8)
+            "f9"  -> sendDownUp(ic, KeyEvent.KEYCODE_F9)
+            "f10" -> sendDownUp(ic, KeyEvent.KEYCODE_F10)
+            "f11" -> sendDownUp(ic, KeyEvent.KEYCODE_F11)
+            "f12" -> sendDownUp(ic, KeyEvent.KEYCODE_F12)
+
+            // ── Media / system ────────────────────────────────────────────────
+            "volume-mute"     -> sendDownUp(ic, KeyEvent.KEYCODE_VOLUME_MUTE)
+            "volume-down"     -> sendDownUp(ic, KeyEvent.KEYCODE_VOLUME_DOWN)
+            "volume-up"       -> sendDownUp(ic, KeyEvent.KEYCODE_VOLUME_UP)
+            "media-play"      -> sendDownUp(ic, KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE)
+            "media-next"      -> sendDownUp(ic, KeyEvent.KEYCODE_MEDIA_NEXT)
+            "media-previous"  -> sendDownUp(ic, KeyEvent.KEYCODE_MEDIA_PREVIOUS)
+            "brightness-down" -> sendDownUp(ic, KeyEvent.KEYCODE_BRIGHTNESS_DOWN)
+            "brightness-up"   -> sendDownUp(ic, KeyEvent.KEYCODE_BRIGHTNESS_UP)
+            "bt", "wifi"      -> { /* system-level — no IME key event available */ }
 
             // ── Character keys ────────────────────────────────────────────────
             else -> {
@@ -203,9 +229,20 @@ class CodeKeyboardIME : InputMethodService() {
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
+    private fun sendDownUp(ic: android.view.inputmethod.InputConnection?, keyCode: Int) {
+        ic?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, keyCode))
+        ic?.sendKeyEvent(KeyEvent(KeyEvent.ACTION_UP,   keyCode))
+    }
+
     private fun sendCtrl(ic: android.view.inputmethod.InputConnection?, keyCode: Int) {
         ic?.sendKeyEvent(KeyEvent(0, 0, KeyEvent.ACTION_DOWN, keyCode, 0, KeyEvent.META_CTRL_ON))
         ic?.sendKeyEvent(KeyEvent(0, 0, KeyEvent.ACTION_UP,   keyCode, 0, KeyEvent.META_CTRL_ON))
+    }
+
+    private fun sendCtrlShift(ic: android.view.inputmethod.InputConnection?, keyCode: Int) {
+        val meta = KeyEvent.META_CTRL_ON or KeyEvent.META_SHIFT_ON
+        ic?.sendKeyEvent(KeyEvent(0, 0, KeyEvent.ACTION_DOWN, keyCode, 0, meta))
+        ic?.sendKeyEvent(KeyEvent(0, 0, KeyEvent.ACTION_UP,   keyCode, 0, meta))
     }
 
     private fun charToKeyCode(c: Char): Int? = when (c.uppercaseChar()) {
