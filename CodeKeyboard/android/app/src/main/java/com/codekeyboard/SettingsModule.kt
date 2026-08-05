@@ -3,6 +3,7 @@ package com.codekeyboard
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
+import com.facebook.react.bridge.WritableNativeArray
 
 class SettingsModule(reactContext: ReactApplicationContext) :
     ReactContextBaseJavaModule(reactContext) {
@@ -41,5 +42,17 @@ class SettingsModule(reactContext: ReactApplicationContext) :
     @ReactMethod
     fun setInt(key: String, value: Int) {
         KeyboardSettings.setInt(key, value)
+    }
+
+    @ReactMethod
+    fun getSnippetKeys(callback: com.facebook.react.bridge.Callback) {
+        val arr = WritableNativeArray()
+        SnippetStore.allShortcodes().forEach { arr.pushString(it) }
+        callback.invoke(arr)
+    }
+
+    @ReactMethod
+    fun deleteSnippet(shortcode: String) {
+        SnippetStore.delete(shortcode)
     }
 }

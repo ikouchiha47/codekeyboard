@@ -15,58 +15,122 @@ import {Keyboard} from './src/keyboard/Keyboard';
 
 type Tab = 'keyboard' | 'settings' | 'themes' | 'languages';
 
-const SNIPPET_KEYS = [
-  {key: 'em',   label: 'Email',    hint: 'your@email.com'},
-  {key: 'ph',   label: 'Phone',    hint: '+1 555 ...'},
-  {key: 'addr', label: 'Address',  hint: '123 Main St ...'},
-  {key: 'me',   label: 'Name',     hint: 'Full name'},
-  {key: 'gh',   label: 'GitHub',   hint: 'https://github.com/...'},
-  {key: 'li',   label: 'LinkedIn', hint: 'https://linkedin.com/in/...'},
-];
-
 function SnippetsEditor() {
-  const [values, setValues] = useState<Record<string, string>>({});
+  const [snippets, setSnippets] = useState<Record<string, string>>({});
+  const [newKey, setNewKey] = useState('');
+  const [newVal, setNewVal] = useState('');
+  const [addError, setAddError] = useState('');
+  const [editErrors, setEditErrors] = useState<Record<string, string>>({});
 
-  useEffect(() => {
-    SNIPPET_KEYS.forEach(({key}) => {
-      NativeModules.SettingsModule?.getString(`snippet_${key}`, (value: string) => {
-        setValues(prev => ({...prev, [key]: value ?? ''}));
+  const loadKeys = useCallback(() => {
+    NativeModules.SettingsModule?.getSnippetKeys((keys: string[]) => {
+      const next: Record<string, string> = {};
+      let pending = keys.length;
+      if (pending === 0) { setSnippets({}); return; }
+      keys.forEach(k => {
+        NativeModules.SettingsModule?.getString(`snippet_${k}`, (val: string) => {
+          next[k] = val ?? '';
+          pending -= 1;
+          if (pending === 0) setSnippets({...next});
+        });
       });
     });
   }, []);
 
-  const handleChange = (key: string, text: string) => {
-    setValues(prev => ({...prev, [key]: text}));
-  };
+  useEffect(() => { loadKeys(); }, [loadKeys]);
 
-  const handleSave = (key: string) => {
-    NativeModules.SettingsModule?.setString(`snippet_${key}`, values[key] ?? '');
-  };
+  const handleAdd = useCallback(() => {
+    const key = newKey.trim();
+    const val = newVal.trim();
+    if (!key) { setAddError('Shortcode cannot be empty'); return; }
+    if (!val) { setAddError('Expansion cannot be empty'); return; }
+    if (snippets.hasOwnProperty(key)) { setAddError(`';${key}' already exists`); return; }
+    NativeModules.SettingsModule?.setString(`snippet_${key}`, val);
+    setNewKey('');
+    setNewVal('');
+    setAddError('');
+    loadKeys();
+  }, [newKey, newVal, snippets, loadKeys]);
+
+  const handleUpdate = useCallback((key: string, val: string) => {
+    if (!val.trim()) {
+      setEditErrors(prev => ({...prev, [key]: 'Expansion cannot be empty'}));
+      return;
+    }
+    setEditErrors(prev => {
+      const next = {...prev};
+      delete next[key];
+      return next;
+    });
+    NativeModules.SettingsModule?.setString(`snippet_${key}`, val.trim());
+    setSnippets(prev => ({...prev, [key]: val.trim()}));
+  }, []);
+
+  const handleDelete = useCallback((key: string) => {
+    NativeModules.SettingsModule?.deleteSnippet(key);
+    setSnippets(prev => {
+      const next = {...prev};
+      delete next[key];
+      return next;
+    });
+  }, []);
 
   return (
     <View style={styles.snippetsContainer}>
       <Text style={styles.snippetsSectionTitle}>Snippets</Text>
       <Text style={styles.snippetsHint}>
-        Type ;shortcode in any field to expand. Tap a slot in the suggestion bar to commit.
+        Type ;shortcode in any text field to expand. Tap the suggestion bar to commit.
       </Text>
-      {SNIPPET_KEYS.map(({key, label, hint}) => (
+
+      {Object.entries(snippets).map(([key, val]) => (
         <View key={key} style={styles.snippetRow}>
-          <Text style={styles.snippetLabel}>
-            <Text style={styles.snippetShortcode}>;{key}</Text>{'  '}{label}
-          </Text>
+          <Text style={styles.snippetShortcode}>;{key}</Text>
           <TextInput
-            style={styles.snippetInput}
-            value={values[key] ?? ''}
-            placeholder={hint}
+            style={[styles.snippetInput, styles.snippetInputFlex, editErrors[key] ? styles.inputError : null]}
+            value={val}
+            placeholder="expansion"
             placeholderTextColor="#555"
             autoCapitalize="none"
             autoCorrect={false}
-            onChangeText={text => handleChange(key, text)}
-            onBlur={() => handleSave(key)}
-            onSubmitEditing={() => handleSave(key)}
+            onChangeText={text => setSnippets(prev => ({...prev, [key]: text}))}
+            onBlur={() => handleUpdate(key, val)}
+            onSubmitEditing={() => handleUpdate(key, val)}
           />
+          <TouchableOpacity style={styles.deleteButton} onPress={() => handleDelete(key)}>
+            <Text style={styles.deleteButtonText}>x</Text>
+          </TouchableOpacity>
+          {editErrors[key] ? <Text style={styles.errorText}>{editErrors[key]}</Text> : null}
         </View>
       ))}
+
+      <View style={styles.addRow}>
+        <TextInput
+          style={[styles.snippetInput, styles.addKeyInput]}
+          value={newKey}
+          placeholder=";shortcode"
+          placeholderTextColor="#555"
+          autoCapitalize="none"
+          autoCorrect={false}
+          onChangeText={t => { setNewKey(t); setAddError(''); }}
+        />
+        <TextInput
+          style={[styles.snippetInput, styles.snippetInputFlex]}
+          value={newVal}
+          placeholder="expansion"
+          placeholderTextColor="#555"
+          autoCapitalize="none"
+          autoCorrect={false}
+          onChangeText={t => { setNewVal(t); setAddError(''); }}
+          onSubmitEditing={handleAdd}
+        />
+        <TouchableOpacity
+          style={[styles.addButton, (!newKey.trim() || !newVal.trim()) && styles.addButtonDisabled]}
+          onPress={handleAdd}
+          disabled={!newKey.trim() || !newVal.trim()}>
+          <Text style={styles.addButtonText}>Add</Text>
+        </TouchableOpacity>
+      </View>
+      {addError ? <Text style={styles.errorText}>{addError}</Text> : null}
     </View>
   );
 }
@@ -256,16 +320,16 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   snippetRow: {
-    marginBottom: 16,
-  },
-  snippetLabel: {
-    color: '#aaa',
-    fontSize: 13,
-    marginBottom: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+    flexWrap: 'wrap',
   },
   snippetShortcode: {
     color: '#4a9eff',
     fontFamily: 'monospace',
+    fontSize: 13,
+    width: 56,
   },
   snippetInput: {
     backgroundColor: '#1e1e1e',
@@ -273,10 +337,57 @@ const styles = StyleSheet.create({
     borderColor: '#333',
     borderRadius: 6,
     color: '#e0e0e0',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 14,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    fontSize: 13,
     fontFamily: 'monospace',
+  },
+  snippetInputFlex: {
+    flex: 1,
+  },
+  inputError: {
+    borderColor: '#c0392b',
+  },
+  deleteButton: {
+    marginLeft: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    backgroundColor: '#2a1a1a',
+    borderRadius: 6,
+  },
+  deleteButtonText: {
+    color: '#c0392b',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  addRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 12,
+    gap: 6,
+  },
+  addKeyInput: {
+    width: 88,
+  },
+  addButton: {
+    backgroundColor: '#2d6b3f',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 6,
+  },
+  addButtonDisabled: {
+    backgroundColor: '#1a3a28',
+  },
+  addButtonText: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  errorText: {
+    color: '#c0392b',
+    fontSize: 12,
+    width: '100%',
+    marginTop: 4,
   },
 });
 

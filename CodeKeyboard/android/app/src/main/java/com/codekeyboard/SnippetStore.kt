@@ -3,10 +3,11 @@ package com.codekeyboard
 object SnippetStore {
 
     private val DEFAULTS = listOf("em", "ph", "addr", "me", "gh", "li")
+    private const val PREFIX = "snippet_"
 
     fun init() {
         if (KeyboardSettings.getBoolean("snippets_seeded", false)) return
-        DEFAULTS.forEach { key -> KeyboardSettings.setString("snippet_$key", "") }
+        DEFAULTS.forEach { key -> KeyboardSettings.setString("$PREFIX$key", "") }
         KeyboardSettings.setBoolean("snippets_seeded", true)
     }
 
@@ -18,15 +19,39 @@ object SnippetStore {
             .take(3)
     }
 
-    fun set(shortcode: String, expansion: String) {
-        KeyboardSettings.setString("snippet_$shortcode", expansion)
+    // Returns false if shortcode or expansion is blank, or shortcode already exists.
+    fun add(shortcode: String, expansion: String): Boolean {
+        if (shortcode.isBlank() || expansion.isBlank()) return false
+        if (exists(shortcode)) return false
+        KeyboardSettings.setString("$PREFIX$shortcode", expansion)
+        return true
+    }
+
+    // Returns false if shortcode or expansion is blank. Overwrites existing value.
+    fun update(shortcode: String, expansion: String): Boolean {
+        if (shortcode.isBlank() || expansion.isBlank()) return false
+        KeyboardSettings.setString("$PREFIX$shortcode", expansion)
+        return true
+    }
+
+    fun delete(shortcode: String) {
+        KeyboardSettings.remove("$PREFIX$shortcode")
     }
 
     fun get(shortcode: String): String =
-        KeyboardSettings.getString("snippet_$shortcode", "")
+        KeyboardSettings.getString("$PREFIX$shortcode", "")
+
+    fun exists(shortcode: String): Boolean =
+        KeyboardSettings.allKeys().contains("$PREFIX$shortcode")
+
+    fun allShortcodes(): List<String> =
+        KeyboardSettings.allKeys()
+            .filter { it.startsWith(PREFIX) }
+            .map { it.removePrefix(PREFIX) }
+            .sorted()
 
     fun all(): List<Pair<String, String>> =
-        DEFAULTS.map { key -> key to KeyboardSettings.getString("snippet_$key", "") }
+        allShortcodes().map { key -> key to KeyboardSettings.getString("$PREFIX$key", "") }
 
     private fun allNonEmpty(): List<Pair<String, String>> =
         all().filter { (_, v) -> v.isNotEmpty() }

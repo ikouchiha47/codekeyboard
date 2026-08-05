@@ -34,4 +34,10 @@ object KeyboardSettings {
     fun setInt(key: String, value: Int) {
         prefs?.edit()?.putInt(key, value)?.apply()
     }
+
+    fun allKeys(): Set<String> = prefs?.all?.keys ?: emptySet()
+
+    fun remove(key: String) {
+        prefs?.edit()?.remove(key)?.apply()
+    }
 }
