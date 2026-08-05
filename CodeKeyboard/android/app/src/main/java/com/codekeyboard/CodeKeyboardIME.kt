@@ -13,6 +13,7 @@ import android.text.InputType
 class CodeKeyboardIME : InputMethodService() {
 
     private lateinit var keyboardView: NativeKeyboardView
+    private lateinit var trie: Trie
     private val kbState = KeyboardState()
     private val composing = ComposingBuffer()
     private var supportsComposing = true
@@ -32,6 +33,7 @@ class CodeKeyboardIME : InputMethodService() {
     override fun onCreate() {
         super.onCreate()
         KeyboardSettings.init(this)
+        trie = Trie.load(this)
     }
 
     override fun onCreateInputView(): View {
