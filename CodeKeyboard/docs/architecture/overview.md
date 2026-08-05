@@ -50,7 +50,8 @@
 | Plan | Status |
 |---|---|
 | plan-suggestions-snippets.md | Phase breakdown for suggestions + snippets feature |
-| plan-phase1-composing.md | Detailed breakdown: setComposingText + ComposingEngine |
+| plan-phase1-composing.md | Detailed breakdown: setComposingText + ComposingBuffer |
+| plan-phase2-trie.md | Detailed breakdown: TRIE2 format spec, Trie.kt, test cases |
 
 ## What is transitional (will be removed)
 
