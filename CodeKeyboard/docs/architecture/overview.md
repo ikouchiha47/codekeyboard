@@ -52,6 +52,7 @@
 | plan-suggestions-snippets.md | Phase breakdown for suggestions + snippets feature |
 | plan-phase1-composing.md | Detailed breakdown: setComposingText + ComposingBuffer |
 | plan-phase2-trie.md | Detailed breakdown: TRIE2 format spec, Trie.kt, test cases |
+| plan-phase3-suggestion-bar.md | Detailed breakdown: SuggestionBarView, slot logic, RN suppression |
 
 ## What is transitional (will be removed)
 
