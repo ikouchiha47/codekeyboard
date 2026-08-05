@@ -12,8 +12,11 @@ class SnippetStoreTest {
 
     private val store = mutableMapOf<String, String>()
 
+    private val SHORTCODE_RE = Regex("^[a-z0-9_]+$")
+
     private fun add(shortcode: String, expansion: String): Boolean {
         if (shortcode.isBlank() || expansion.isBlank()) return false
+        if (!SHORTCODE_RE.matches(shortcode)) return false
         if (store.containsKey(shortcode)) return false
         store[shortcode] = expansion
         return true
@@ -63,6 +66,26 @@ class SnippetStoreTest {
 
     @Test fun `add returns false for both blank`() {
         assertFalse(add("", ""))
+    }
+
+    @Test fun `add rejects shortcode with space`() {
+        assertFalse(add("my key", "value"))
+        assertFalse(store.containsKey("my key"))
+    }
+
+    @Test fun `add rejects shortcode with uppercase`() {
+        assertFalse(add("Em", "value"))
+    }
+
+    @Test fun `add rejects shortcode with special characters`() {
+        assertFalse(add("em!", "value"))
+        assertFalse(add("em@", "value"))
+        assertFalse(add(";em", "value"))
+    }
+
+    @Test fun `add accepts alphanumeric and underscore shortcode`() {
+        assertTrue(add("my_key2", "value"))
+        assertEquals("value", store["my_key2"])
     }
 
     // ── update() ─────────────────────────────────────────────────────────────

@@ -43,6 +43,7 @@ function SnippetsEditor() {
     const key = newKey.trim();
     const val = newVal.trim();
     if (!key) { setAddError('Shortcode cannot be empty'); return; }
+    if (!/^[a-z0-9_]+$/.test(key)) { setAddError('Shortcode: lowercase letters, digits, underscore only'); return; }
     if (!val) { setAddError('Expansion cannot be empty'); return; }
     if (snippets.hasOwnProperty(key)) { setAddError(`';${key}' already exists`); return; }
     NativeModules.SettingsModule?.setString(`snippet_${key}`, val);

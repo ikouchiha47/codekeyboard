@@ -12,6 +12,7 @@ class SettingsModule(reactContext: ReactApplicationContext) :
 
     init {
         KeyboardSettings.init(reactContext)
+        SnippetStore.init()
     }
 
     @ReactMethod

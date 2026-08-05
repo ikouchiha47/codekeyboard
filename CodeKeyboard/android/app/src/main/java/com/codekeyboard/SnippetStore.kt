@@ -19,9 +19,13 @@ object SnippetStore {
             .take(3)
     }
 
-    // Returns false if shortcode or expansion is blank, or shortcode already exists.
+    private val SHORTCODE_RE = Regex("^[a-z0-9_]+$")
+
+    // Returns false if shortcode or expansion is blank, shortcode contains invalid
+    // characters, or shortcode already exists.
     fun add(shortcode: String, expansion: String): Boolean {
         if (shortcode.isBlank() || expansion.isBlank()) return false
+        if (!SHORTCODE_RE.matches(shortcode)) return false
         if (exists(shortcode)) return false
         KeyboardSettings.setString("$PREFIX$shortcode", expansion)
         return true
