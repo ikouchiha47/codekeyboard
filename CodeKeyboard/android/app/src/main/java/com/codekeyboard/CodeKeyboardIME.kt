@@ -13,6 +13,7 @@ import android.text.InputType
 class CodeKeyboardIME : InputMethodService() {
 
     private lateinit var keyboardView: NativeKeyboardView
+    private lateinit var suggestionBar: SuggestionBarView
     private lateinit var trie: Trie
     private val kbState = KeyboardState()
     private val composing = ComposingBuffer()
@@ -48,6 +49,14 @@ class CodeKeyboardIME : InputMethodService() {
 
         // Wrap the keyboard in a container that adds bottom padding for the
         // navigation bar so the bottom row of keys is never hidden.
+        suggestionBar = SuggestionBarView(this).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                (40 * density).toInt()
+            )
+            onSlotTapped = { word -> handleSuggestionTap(word) }
+        }
+
         val wrapper = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             layoutParams = ViewGroup.LayoutParams(
@@ -58,6 +67,7 @@ class CodeKeyboardIME : InputMethodService() {
             // the nav-bar padding area below the keys.
             setBackgroundColor(Color.parseColor("#111111"))
         }
+        wrapper.addView(suggestionBar)
         wrapper.addView(keyboardView)
 
         // Read navigation bar height from system resource (always reliable
@@ -88,12 +98,14 @@ class CodeKeyboardIME : InputMethodService() {
         }
         composing.clear()
         currentInputConnection?.finishComposingText()
+        if (::suggestionBar.isInitialized) suggestionBar.clear()
     }
 
     override fun onFinishInput() {
         super.onFinishInput()
         currentInputConnection?.finishComposingText()
         composing.clear()
+        if (::suggestionBar.isInitialized) suggestionBar.clear()
     }
 
     private fun isPasswordField(info: EditorInfo): Boolean {
@@ -134,7 +146,10 @@ class CodeKeyboardIME : InputMethodService() {
                 val sel = ic?.getSelectedText(0)
                 when {
                     !sel.isNullOrEmpty() -> ic?.commitText("", 1)
-                    composing.backspace() -> ic?.setComposingText(composing.text, 1)
+                    composing.backspace() -> {
+                        ic?.setComposingText(composing.text, 1)
+                        suggestionBar.update(composing.text, trie.suggest(composing.text, 3))
+                    }
                     else -> if (ic?.deleteSurroundingText(1, 0) != true) sendDownUp(ic, KeyEvent.KEYCODE_DEL)
                 }
             }
@@ -230,6 +245,7 @@ class CodeKeyboardIME : InputMethodService() {
                     if (supportsComposing && text.length == 1 && !isPunctuation(text[0])) {
                         val word = composing.append(text)
                         ic?.setComposingText(word, 1)
+                        suggestionBar.update(word, trie.suggest(word, 3))
                     } else {
                         flushComposing(ic)
                         ic?.commitText(text, 1)
@@ -298,6 +314,17 @@ class CodeKeyboardIME : InputMethodService() {
             kbState.onCharCommitted()
             keyboardView.notifyStateChanged(kbState)
         }
+        suggestionBar.clear()
+    }
+
+    private fun handleSuggestionTap(word: String) {
+        val ic = currentInputConnection ?: return
+        ic.finishComposingText()
+        ic.commitText("$word ", 1)
+        composing.clear()
+        kbState.onCharCommitted()
+        keyboardView.notifyStateChanged(kbState)
+        suggestionBar.clear()
     }
 
     private val PUNCTUATION = setOf(
