@@ -1,10 +1,12 @@
-import React, {useState, useCallback} from 'react';
+import React, {useState, useCallback, useEffect} from 'react';
 import {
   View,
   Text,
+  TextInput,
   TouchableOpacity,
   StyleSheet,
   StatusBar,
+  ScrollView,
   useColorScheme,
   NativeModules,
 } from 'react-native';
@@ -12,6 +14,62 @@ import {SafeAreaProvider, SafeAreaView} from 'react-native-safe-area-context';
 import {Keyboard} from './src/keyboard/Keyboard';
 
 type Tab = 'keyboard' | 'settings' | 'themes' | 'languages';
+
+const SNIPPET_KEYS = [
+  {key: 'em',   label: 'Email',    hint: 'your@email.com'},
+  {key: 'ph',   label: 'Phone',    hint: '+1 555 ...'},
+  {key: 'addr', label: 'Address',  hint: '123 Main St ...'},
+  {key: 'me',   label: 'Name',     hint: 'Full name'},
+  {key: 'gh',   label: 'GitHub',   hint: 'https://github.com/...'},
+  {key: 'li',   label: 'LinkedIn', hint: 'https://linkedin.com/in/...'},
+];
+
+function SnippetsEditor() {
+  const [values, setValues] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    SNIPPET_KEYS.forEach(({key}) => {
+      NativeModules.SettingsModule?.getString(`snippet_${key}`, (value: string) => {
+        setValues(prev => ({...prev, [key]: value ?? ''}));
+      });
+    });
+  }, []);
+
+  const handleChange = (key: string, text: string) => {
+    setValues(prev => ({...prev, [key]: text}));
+  };
+
+  const handleSave = (key: string) => {
+    NativeModules.SettingsModule?.setString(`snippet_${key}`, values[key] ?? '');
+  };
+
+  return (
+    <View style={styles.snippetsContainer}>
+      <Text style={styles.snippetsSectionTitle}>Snippets</Text>
+      <Text style={styles.snippetsHint}>
+        Type ;shortcode in any field to expand. Tap a slot in the suggestion bar to commit.
+      </Text>
+      {SNIPPET_KEYS.map(({key, label, hint}) => (
+        <View key={key} style={styles.snippetRow}>
+          <Text style={styles.snippetLabel}>
+            <Text style={styles.snippetShortcode}>;{key}</Text>{'  '}{label}
+          </Text>
+          <TextInput
+            style={styles.snippetInput}
+            value={values[key] ?? ''}
+            placeholder={hint}
+            placeholderTextColor="#555"
+            autoCapitalize="none"
+            autoCorrect={false}
+            onChangeText={text => handleChange(key, text)}
+            onBlur={() => handleSave(key)}
+            onSubmitEditing={() => handleSave(key)}
+          />
+        </View>
+      ))}
+    </View>
+  );
+}
 
 function SettingsScreen() {
   const handleEnable = useCallback(() => {
@@ -23,7 +81,7 @@ function SettingsScreen() {
   }, []);
 
   return (
-    <View style={styles.settingsContainer}>
+    <ScrollView style={styles.settingsScroll} contentContainerStyle={styles.settingsContainer}>
       <Text style={styles.settingsTitle}>Settings</Text>
       <TouchableOpacity style={styles.settingsButton} onPress={handleEnable}>
         <Text style={styles.settingsButtonText}>Manage Keyboards</Text>
@@ -39,7 +97,9 @@ function SettingsScreen() {
       <Text style={styles.settingsHint}>
         Opens IME picker to switch active keyboard.
       </Text>
-    </View>
+      <View style={styles.divider} />
+      <SnippetsEditor />
+    </ScrollView>
   );
 }
 
@@ -128,11 +188,13 @@ const styles = StyleSheet.create({
   activeTabText: {
     color: '#4a9eff',
   },
-  settingsContainer: {
+  settingsScroll: {
     flex: 1,
-    justifyContent: 'center',
+  },
+  settingsContainer: {
     alignItems: 'center',
     padding: 24,
+    paddingBottom: 48,
   },
   settingsTitle: {
     color: '#e0e0e0',
@@ -171,6 +233,50 @@ const styles = StyleSheet.create({
   placeholderText: {
     color: '#555',
     fontSize: 16,
+  },
+  divider: {
+    width: '100%',
+    height: 1,
+    backgroundColor: '#2a2a2a',
+    marginVertical: 24,
+  },
+  snippetsContainer: {
+    width: '100%',
+  },
+  snippetsSectionTitle: {
+    color: '#e0e0e0',
+    fontSize: 18,
+    fontWeight: '600',
+    marginBottom: 6,
+  },
+  snippetsHint: {
+    color: '#666',
+    fontSize: 12,
+    lineHeight: 18,
+    marginBottom: 20,
+  },
+  snippetRow: {
+    marginBottom: 16,
+  },
+  snippetLabel: {
+    color: '#aaa',
+    fontSize: 13,
+    marginBottom: 6,
+  },
+  snippetShortcode: {
+    color: '#4a9eff',
+    fontFamily: 'monospace',
+  },
+  snippetInput: {
+    backgroundColor: '#1e1e1e',
+    borderWidth: 1,
+    borderColor: '#333',
+    borderRadius: 6,
+    color: '#e0e0e0',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    fontFamily: 'monospace',
   },
 });
 

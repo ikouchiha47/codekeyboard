@@ -34,6 +34,7 @@ class CodeKeyboardIME : InputMethodService() {
     override fun onCreate() {
         super.onCreate()
         KeyboardSettings.init(this)
+        SnippetStore.init()
         trie = Trie.load(this)
     }
 
@@ -147,8 +148,14 @@ class CodeKeyboardIME : InputMethodService() {
                 when {
                     !sel.isNullOrEmpty() -> ic?.commitText("", 1)
                     composing.backspace() -> {
-                        ic?.setComposingText(composing.text, 1)
-                        suggestionBar.update(composing.text, trie.suggest(composing.text, 3))
+                        val word = composing.text
+                        ic?.setComposingText(word, 1)
+                        val suggestions = if (word.startsWith(";")) {
+                            SnippetStore.matching(word.drop(1))
+                        } else {
+                            trie.suggest(word, 3)
+                        }
+                        suggestionBar.update(word, suggestions)
                     }
                     else -> if (ic?.deleteSurroundingText(1, 0) != true) sendDownUp(ic, KeyEvent.KEYCODE_DEL)
                 }
@@ -242,10 +249,20 @@ class CodeKeyboardIME : InputMethodService() {
                             return
                         }
                     }
-                    if (supportsComposing && text.length == 1 && !isPunctuation(text[0])) {
+                    if (supportsComposing && text == ";") {
+                        val word = composing.append(";")
+                        ic?.setComposingText(word, 1)
+                        val suggestions = SnippetStore.matching("")
+                        suggestionBar.update(word, suggestions)
+                    } else if (supportsComposing && text.length == 1 && !isPunctuation(text[0])) {
                         val word = composing.append(text)
                         ic?.setComposingText(word, 1)
-                        suggestionBar.update(word, trie.suggest(word, 3))
+                        val suggestions = if (word.startsWith(";")) {
+                            SnippetStore.matching(word.drop(1))
+                        } else {
+                            trie.suggest(word, 3)
+                        }
+                        suggestionBar.update(word, suggestions)
                     } else {
                         flushComposing(ic)
                         ic?.commitText(text, 1)
@@ -328,7 +345,7 @@ class CodeKeyboardIME : InputMethodService() {
     }
 
     private val PUNCTUATION = setOf(
-        '.', ',', '!', '?', ':', ';', '\'', '"', '(', ')', '[', ']', '{', '}',
+        '.', ',', '!', '?', ':', '\'', '"', '(', ')', '[', ']', '{', '}',
         '/', '\\', '-', '_', '=', '+', '*', '&', '^', '%', '$', '#', '@', '~', '`', '|'
     )
 
