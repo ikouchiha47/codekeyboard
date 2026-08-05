@@ -5,13 +5,17 @@ import android.inputmethodservice.InputMethodService
 import android.view.View
 import android.view.ViewGroup
 import android.view.inputmethod.EditorInfo
+import android.view.inputmethod.InputConnection
 import android.view.KeyEvent
 import android.widget.LinearLayout
+import android.text.InputType
 
 class CodeKeyboardIME : InputMethodService() {
 
     private lateinit var keyboardView: NativeKeyboardView
     private val kbState = KeyboardState()
+    private val composing = ComposingBuffer()
+    private var supportsComposing = true
 
     // Modifier name → KeyEvent meta flag — extend this map to add new modifiers.
     private val MODIFIER_META_FLAGS = mapOf(
@@ -73,6 +77,35 @@ class CodeKeyboardIME : InputMethodService() {
     override fun onStartInput(editorInfo: EditorInfo?, restarting: Boolean) {
         super.onStartInput(editorInfo, restarting)
         CodeKeyboardModuleHolder.module?.inputConnection = currentInputConnection
+        supportsComposing = when {
+            editorInfo == null -> false
+            editorInfo.inputType == InputType.TYPE_NULL -> false
+            isPasswordField(editorInfo) -> false
+            isNumericField(editorInfo) -> false
+            else -> true
+        }
+        composing.clear()
+        currentInputConnection?.finishComposingText()
+    }
+
+    override fun onFinishInput() {
+        super.onFinishInput()
+        currentInputConnection?.finishComposingText()
+        composing.clear()
+    }
+
+    private fun isPasswordField(info: EditorInfo): Boolean {
+        val variation = info.inputType and InputType.TYPE_MASK_VARIATION
+        return variation == InputType.TYPE_TEXT_VARIATION_PASSWORD ||
+               variation == InputType.TYPE_TEXT_VARIATION_WEB_PASSWORD ||
+               variation == InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD
+    }
+
+    private fun isNumericField(info: EditorInfo): Boolean {
+        val cls = info.inputType and InputType.TYPE_MASK_CLASS
+        return cls == InputType.TYPE_CLASS_NUMBER ||
+               cls == InputType.TYPE_CLASS_PHONE ||
+               cls == InputType.TYPE_CLASS_DATETIME
     }
 
     // ── Key handling ──────────────────────────────────────────────────────────
@@ -97,8 +130,11 @@ class CodeKeyboardIME : InputMethodService() {
             // ── Backspace / Delete ────────────────────────────────────────────────
             "backspace" -> {
                 val sel = ic?.getSelectedText(0)
-                if (!sel.isNullOrEmpty()) ic?.commitText("", 1)
-                else if (ic?.deleteSurroundingText(1, 0) != true) sendDownUp(ic, KeyEvent.KEYCODE_DEL)
+                when {
+                    !sel.isNullOrEmpty() -> ic?.commitText("", 1)
+                    composing.backspace() -> ic?.setComposingText(composing.text, 1)
+                    else -> if (ic?.deleteSurroundingText(1, 0) != true) sendDownUp(ic, KeyEvent.KEYCODE_DEL)
+                }
             }
             "delete" -> {
                 val sel = ic?.getSelectedText(0)
@@ -108,6 +144,7 @@ class CodeKeyboardIME : InputMethodService() {
 
             // ── Other action keys ─────────────────────────────────────────────
             "enter" -> {
+                flushComposing(ic)
                 val editorInfo = currentInputEditorInfo
                 val action = editorInfo?.let { it.imeOptions and EditorInfo.IME_MASK_ACTION } ?: EditorInfo.IME_ACTION_UNSPECIFIED
                 val noEnterAction = editorInfo?.let { it.imeOptions and EditorInfo.IME_FLAG_NO_ENTER_ACTION } ?: 0
@@ -117,8 +154,8 @@ class CodeKeyboardIME : InputMethodService() {
                     if (ic?.performEditorAction(action) != true) sendDownUp(ic, KeyEvent.KEYCODE_ENTER)
                 }
             }
-            "tab"         -> sendDownUp(ic, KeyEvent.KEYCODE_TAB)
-            "space"       -> ic?.commitText(" ", 1)
+            "tab"         -> { flushComposing(ic); sendDownUp(ic, KeyEvent.KEYCODE_TAB) }
+            "space"       -> { flushComposing(ic); ic?.commitText(" ", 1) }
             "escape"      -> sendDownUp(ic, KeyEvent.KEYCODE_ESCAPE)
             "arrow-left"  -> sendDownUp(ic, KeyEvent.KEYCODE_DPAD_LEFT)
             "arrow-right" -> sendDownUp(ic, KeyEvent.KEYCODE_DPAD_RIGHT)
@@ -180,6 +217,7 @@ class CodeKeyboardIME : InputMethodService() {
                     if (text.length == 1 && metaState != 0) {
                         val keyCode = charToKeyCode(text[0])
                         if (keyCode != null) {
+                            flushComposing(ic)
                             ic?.sendKeyEvent(KeyEvent(0, 0, KeyEvent.ACTION_DOWN, keyCode, 0, metaState))
                             ic?.sendKeyEvent(KeyEvent(0, 0, KeyEvent.ACTION_UP,   keyCode, 0, metaState))
                             kbState.onCharCommitted()
@@ -187,7 +225,13 @@ class CodeKeyboardIME : InputMethodService() {
                             return
                         }
                     }
-                    ic?.commitText(text, 1)
+                    if (supportsComposing && text.length == 1 && !isPunctuation(text[0])) {
+                        val word = composing.append(text)
+                        ic?.setComposingText(word, 1)
+                    } else {
+                        flushComposing(ic)
+                        ic?.commitText(text, 1)
+                    }
                     kbState.onCharCommitted()
                     keyboardView.notifyStateChanged(kbState)
                 }
@@ -244,6 +288,22 @@ class CodeKeyboardIME : InputMethodService() {
         ic?.sendKeyEvent(KeyEvent(0, 0, KeyEvent.ACTION_DOWN, keyCode, 0, meta))
         ic?.sendKeyEvent(KeyEvent(0, 0, KeyEvent.ACTION_UP,   keyCode, 0, meta))
     }
+
+    private fun flushComposing(ic: InputConnection?) {
+        val word = composing.flush()
+        if (word.isNotEmpty()) {
+            ic?.commitText(word, 1)
+            kbState.onCharCommitted()
+            keyboardView.notifyStateChanged(kbState)
+        }
+    }
+
+    private val PUNCTUATION = setOf(
+        '.', ',', '!', '?', ':', ';', '\'', '"', '(', ')', '[', ']', '{', '}',
+        '/', '\\', '-', '_', '=', '+', '*', '&', '^', '%', '$', '#', '@', '~', '`', '|'
+    )
+
+    private fun isPunctuation(c: Char) = c in PUNCTUATION
 
     private fun charToKeyCode(c: Char): Int? = when (c.uppercaseChar()) {
         'A' -> KeyEvent.KEYCODE_A
