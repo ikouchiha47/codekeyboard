@@ -30,7 +30,7 @@ object SofleKeyData {
     private val BASE = SofleLayerData(
         topRow = listOf(
             ANCHOR_TAB, ANCHOR_ESC,
-            k("`"), k("^"), k("Ctrl","ctrl"), k("Alt","alt"), k("Cmd","meta"), k("Bksp","backspace")
+            k("`"), k("^"), k("Ctrl","ctrl"), k("Alt","alt"), k("😊","emoji"), k("Bksp","backspace")
         ),
         left = listOf(
             listOf(k("q"),     k("w"),     k("e"),     k("r"),     k("t")),

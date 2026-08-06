@@ -38,6 +38,14 @@ cd android && ./gradlew assembleRelease --warning-mode all
 - `android/app/src/main/java/com/codekeyboard/` — IME native layer (Kotlin)
 - `.github/workflows/build.yml` — CI pipeline
 
+# IMPORTANT: Dual Layout Rule
+The keyboard layout is defined in TWO places that must be kept in sync:
+1. `src/keyboard/Layout.ts` — React Native UI (settings/preview screens)
+2. `android/app/src/main/java/com/codekeyboard/SofleKeyData.kt` — native IME (what the user actually types on)
+
+Any key added, removed, or changed in one file MUST be updated in the other.
+The IME does NOT read from Layout.ts at runtime — they are completely independent.
+
 # Tech Stack
 - React Native 0.86, Kotlin 2.1.20, Android SDK 36, NDK 27.1
 - Hermes engine, New Architecture (Fabric) enabled
