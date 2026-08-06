@@ -14,6 +14,11 @@ import java.util.concurrent.Executors
 
 class CodeKeyboardIME : InputMethodService() {
 
+    companion object {
+        // Longest plausible English word is 45 chars; 50 gives a safe margin.
+        private const val RECOMPOSE_SCAN_CHARS = 50
+    }
+
     private lateinit var keyboardView: NativeKeyboardView
     private lateinit var suggestionBar: SuggestionBarView
     private lateinit var trie: Trie
@@ -201,7 +206,14 @@ class CodeKeyboardIME : InputMethodService() {
             "backspace" -> {
                 val sel = ic?.getSelectedText(0)
                 when {
-                    !sel.isNullOrEmpty() -> ic?.commitText("", 1)
+                    !sel.isNullOrEmpty() -> {
+                        ic?.beginBatchEdit()
+                        ic?.finishComposingText()
+                        composing.clear()
+                        ic?.commitText("", 1)
+                        ic?.endBatchEdit()
+                        suggestionBar.clear()
+                    }
                     composing.backspace() -> {
                         val word = composing.text
                         ic?.setComposingText(word, 1)
@@ -214,16 +226,7 @@ class CodeKeyboardIME : InputMethodService() {
                     }
                     else -> {
                         if (ic?.deleteSurroundingText(1, 0) != true) sendDownUp(ic, KeyEvent.KEYCODE_DEL)
-                        // LOG ONLY — no composing changes yet, just observe values
-                        val before = ic?.getTextBeforeCursor(50, 0)?.toString()
-                        val fragment = before?.takeLastWhile { it.isLetterOrDigit() || it == '\'' } ?: ""
-                        val req = android.view.inputmethod.ExtractedTextRequest().apply { token = 0 }
-                        val extracted = ic?.getExtractedText(req, 0)
-                        val absCursor = extracted?.selectionStart
-                        android.util.Log.d("CKB_RECOMPOSE",
-                            "before=[$before] fragment=[$fragment] absCursor=$absCursor " +
-                            "wouldSetRegion=[${if (fragment.isNotEmpty() && absCursor != null) "${absCursor - fragment.length}..${absCursor}" else "skip"}]"
-                        )
+                        recomposeWordAtCursor(ic)
                     }
                 }
             }
@@ -390,6 +393,22 @@ class CodeKeyboardIME : InputMethodService() {
         val meta = KeyEvent.META_CTRL_ON or KeyEvent.META_SHIFT_ON
         ic?.sendKeyEvent(KeyEvent(0, 0, KeyEvent.ACTION_DOWN, keyCode, 0, meta))
         ic?.sendKeyEvent(KeyEvent(0, 0, KeyEvent.ACTION_UP,   keyCode, 0, meta))
+    }
+
+    private fun recomposeWordAtCursor(ic: InputConnection?) {
+        ic ?: return
+        val before = ic.getTextBeforeCursor(RECOMPOSE_SCAN_CHARS, 0)?.toString() ?: return
+        val fragment = before.takeLastWhile { it.isLetterOrDigit() || it == '\'' }
+        if (fragment.isEmpty()) return
+        val req = android.view.inputmethod.ExtractedTextRequest().apply { token = 0 }
+        val absCursor = ic.getExtractedText(req, 0)?.selectionStart ?: return
+        ic.beginBatchEdit()
+        ic.finishComposingText()
+        ic.setComposingRegion(absCursor - fragment.length, absCursor)
+        composing.setText(fragment)
+        ic.endBatchEdit()
+        val suggestions = suggestionStrategy.suggest(fragment, 5)
+        suggestionBar.update(fragment, suggestions)
     }
 
     private fun flushComposing(ic: InputConnection?) {
