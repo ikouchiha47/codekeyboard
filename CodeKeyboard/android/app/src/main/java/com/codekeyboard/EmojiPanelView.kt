@@ -8,7 +8,6 @@ import android.graphics.drawable.StateListDrawable
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
-import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
 import android.widget.PopupWindow
 import android.widget.ScrollView
@@ -112,15 +111,12 @@ class EmojiPanelView(
     private fun buildTabBar(context: Context, categories: List<Category>, dp: Float): View {
         val tabPx = (TAB_DP * dp).toInt()
 
-        val hsv = HorizontalScrollView(context).apply {
-            setBackgroundColor(BG_BAR)
-            isHorizontalScrollBarEnabled = false
-            layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, tabPx)
-        }
-
+        // Plain LinearLayout — weights work correctly here.
+        // HorizontalScrollView gives unlimited width so weight=1 collapses.
         val row = LinearLayout(context).apply {
             orientation = HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
+            setBackgroundColor(BG_BAR)
             layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, tabPx)
         }
 
@@ -138,9 +134,8 @@ class EmojiPanelView(
             row.addView(tab)
         }
 
-        hsv.addView(row)
         setTabActive(0)
-        return hsv
+        return row
     }
 
     private fun setTabActive(idx: Int) {
