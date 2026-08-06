@@ -23,6 +23,11 @@ class ComposingBuffer {
         return t
     }
 
+    fun setText(s: String) {
+        buf.clear()
+        buf.append(s)
+    }
+
     fun clear() {
         buf.clear()
     }

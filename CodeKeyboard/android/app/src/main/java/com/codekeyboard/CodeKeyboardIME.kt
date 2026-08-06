@@ -14,6 +14,12 @@ import java.util.concurrent.Executors
 
 class CodeKeyboardIME : InputMethodService() {
 
+    companion object {
+        // How far back we scan when re-establishing a composing region after backspace.
+        // Covers the longest plausible English word (pneumonoultramicroscopicsilicovolcanoconiosis = 45).
+        private const val RECOMPOSE_SCAN_CHARS = 50
+    }
+
     private lateinit var keyboardView: NativeKeyboardView
     private lateinit var suggestionBar: SuggestionBarView
     private lateinit var trie: Trie
@@ -212,7 +218,12 @@ class CodeKeyboardIME : InputMethodService() {
                         }
                         suggestionBar.update(word, suggestions)
                     }
-                    else -> if (ic?.deleteSurroundingText(1, 0) != true) sendDownUp(ic, KeyEvent.KEYCODE_DEL)
+                    else -> {
+                        if (ic?.deleteSurroundingText(1, 0) != true) sendDownUp(ic, KeyEvent.KEYCODE_DEL)
+                        // Re-establish composing region on the word fragment now at the cursor,
+                        // so suggestions reflect the full word rather than starting fresh.
+                        recomposeWordAtCursor(ic)
+                    }
                 }
             }
             "delete" -> {
@@ -378,6 +389,22 @@ class CodeKeyboardIME : InputMethodService() {
         val meta = KeyEvent.META_CTRL_ON or KeyEvent.META_SHIFT_ON
         ic?.sendKeyEvent(KeyEvent(0, 0, KeyEvent.ACTION_DOWN, keyCode, 0, meta))
         ic?.sendKeyEvent(KeyEvent(0, 0, KeyEvent.ACTION_UP,   keyCode, 0, meta))
+    }
+
+    private fun recomposeWordAtCursor(ic: InputConnection?) {
+        ic ?: return
+        val before = ic.getTextBeforeCursor(RECOMPOSE_SCAN_CHARS, 0)?.toString() ?: return
+        // Find the word fragment immediately before the cursor (stop at whitespace/punctuation)
+        val fragment = before.takeLastWhile { it.isLetterOrDigit() || it == '\'' }
+        if (fragment.isEmpty()) return
+        // setComposingRegion offsets are relative to the start of the text,
+        // but we know cursor position = before.length chars from start of our window.
+        // Use negative offsets from cursor: -(fragment.length) to 0.
+        val cursorPos = before.length
+        ic.setComposingRegion(cursorPos - fragment.length, cursorPos)
+        composing.setText(fragment)
+        val suggestions = suggestionStrategy.suggest(fragment, 5)
+        suggestionBar.update(fragment, suggestions)
     }
 
     private fun flushComposing(ic: InputConnection?) {
