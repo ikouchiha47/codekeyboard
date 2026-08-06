@@ -32,8 +32,8 @@ class MergedSuggestionStrategy(
     }
 
     private fun fuzzyFill(word: String, threshold: Int, limit: Int): List<String> {
-        val userFuzzy = FuzzyTrieSearch.search(userAdapter, word, threshold, limit)
-        val baseFuzzy = FuzzyTrieSearch.search(baseAdapter, word, threshold, limit)
+        val userFuzzy = BevaTrieSearch.search(userAdapter, word, threshold, limit)
+        val baseFuzzy = BevaTrieSearch.search(baseAdapter, word, threshold, limit)
         val userWords = userFuzzy.map { it.word }.toSet()
         return (userFuzzy + baseFuzzy.filter { it.word !in userWords })
             .sortedWith(compareBy({ it.editDistance }, { -it.frequency }))

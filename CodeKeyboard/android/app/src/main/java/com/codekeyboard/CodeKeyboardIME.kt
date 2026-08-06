@@ -354,7 +354,6 @@ class CodeKeyboardIME : InputMethodService() {
 
     private fun handleSuggestionTap(word: String) {
         val ic = currentInputConnection ?: return
-        ic.finishComposingText()
         ic.commitText("$word ", 1)
         composing.clear()
         wordLearner.learnFromTap(word)
