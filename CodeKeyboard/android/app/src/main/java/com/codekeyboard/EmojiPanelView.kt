@@ -60,6 +60,9 @@ class EmojiPanelView(
     init {
         orientation = VERTICAL
         setBackgroundColor(BG_DARK)
+        // Prevent any child from stealing focus — focus leaving the text field dismisses the IME.
+        descendantFocusability = FOCUS_BLOCK_DESCENDANTS
+        isFocusable = false
         val dp = resources.displayMetrics.density
 
         val categories = loadEmoji(context)
@@ -128,7 +131,7 @@ class EmojiPanelView(
                 gravity = Gravity.CENTER
                 layoutParams = LayoutParams(0, tabPx, 1f)
                 isClickable = true
-                isFocusable = true
+                isFocusable = false
                 setOnClickListener { selectTab(i, dp) }
             }
             tabButtons += tab
@@ -233,7 +236,7 @@ class EmojiPanelView(
             // width=0 + weight=1 so 8 cells divide the row width exactly — no trailing gap
             layoutParams = LayoutParams(0, cellPx, 1f)
             isClickable = true
-            isFocusable = true
+            isFocusable = false
             setOnClickListener {
                 setBackgroundColor(Color.TRANSPARENT)
                 onEmojiSelected?.invoke(entry.base)
@@ -260,7 +263,7 @@ class EmojiPanelView(
                 gravity = Gravity.CENTER
                 layoutParams = LayoutParams(cellPx, cellPx)
                 isClickable = true
-                isFocusable = true
+                isFocusable = false
                 setOnClickListener {
                     onEmojiSelected?.invoke(v)
                     popup?.dismiss()
@@ -301,7 +304,7 @@ class EmojiPanelView(
             setTextColor(Color.WHITE)
             gravity = Gravity.CENTER
             isClickable = true
-            isFocusable = true
+            isFocusable = false
             background = pillBackground(Color.parseColor("#333333"))
             layoutParams = LayoutParams((72 * dp).toInt(), (36 * dp).toInt())
             setOnClickListener { onBackToKeyboard?.invoke() }
@@ -320,7 +323,7 @@ class EmojiPanelView(
             setTextColor(TEXT_GRAY)
             gravity = Gravity.CENTER
             isClickable = true
-            isFocusable = true
+            isFocusable = false
             layoutParams = LayoutParams((48 * dp).toInt(), barH)
             setOnClickListener { onDeletePressed?.invoke() }
         }
