@@ -1,7 +1,7 @@
 package com.codekeyboard
 
 interface SuggestionStrategy {
-    fun suggest(prefix: String, k: Int): List<String>
+    fun suggest(prefix: String, k: Int, context: String = ""): List<String>
 }
 
 class MergedSuggestionStrategy(
@@ -12,7 +12,7 @@ class MergedSuggestionStrategy(
     private val userAdapter = UserTrieAdapter(userTrie)
     private val baseAdapter = BaseTrieAdapter(baseTrie)
 
-    override fun suggest(prefix: String, k: Int): List<String> {
+    override fun suggest(prefix: String, k: Int, context: String): List<String> {
         val exact = exactSuggest(prefix, k)
         if (exact.size >= k) return exact
 
@@ -58,21 +58,20 @@ class MergedSuggestionStrategy(
 }
 
 class BaseSuggestionStrategy(private val baseTrie: Trie) : SuggestionStrategy {
-    override fun suggest(prefix: String, k: Int): List<String> = baseTrie.suggest(prefix, k)
+    override fun suggest(prefix: String, k: Int, context: String): List<String> =
+        baseTrie.suggest(prefix, k)
 }
 
-// Wraps an existing strategy and promotes bigram candidates to the top when context is set.
+// Promotes bigram candidates to the top when context (previous word) is provided.
 class BigramAwareSuggestionStrategy(
     private val base: SuggestionStrategy,
     private val bigram: BigramModel,
 ) : SuggestionStrategy {
 
-    var prevWord: String = ""
-
-    override fun suggest(prefix: String, k: Int): List<String> {
+    override fun suggest(prefix: String, k: Int, context: String): List<String> {
         val baseResults = base.suggest(prefix, k + 5)
-        if (prevWord.isEmpty()) return baseResults.take(k)
-        val bigramMatches = bigram.nextWords(prevWord, prefix = prefix, n = k)
+        if (context.isEmpty()) return baseResults.take(k)
+        val bigramMatches = bigram.nextWords(context, prefix = prefix, n = k)
         val promoted = bigramMatches + baseResults.filter { it !in bigramMatches }
         return promoted.take(k)
     }

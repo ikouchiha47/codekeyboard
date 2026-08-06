@@ -227,7 +227,7 @@ class CodeKeyboardIME : InputMethodService() {
                         val suggestions = if (word.startsWith(";")) {
                             SnippetStore.matching(word.drop(1))
                         } else {
-                            suggestionStrategy.suggest(word, 5)
+                            suggestionStrategy.suggest(word, 5, context = prevCommittedWord)
                         }
                         suggestionBar.update(word, suggestions)
                     }
@@ -345,7 +345,7 @@ class CodeKeyboardIME : InputMethodService() {
                         val suggestions = if (word.startsWith(";")) {
                             SnippetStore.matching(word.drop(1))
                         } else {
-                            suggestionStrategy.suggest(word, 5)
+                            suggestionStrategy.suggest(word, 5, context = prevCommittedWord)
                         }
                         suggestionBar.update(word, suggestions)
                     } else {
@@ -421,7 +421,7 @@ class CodeKeyboardIME : InputMethodService() {
         ic.setComposingRegion(absCursor - fragment.length, absCursor)
         composing.setText(fragment)
         ic.endBatchEdit()
-        val suggestions = suggestionStrategy.suggest(fragment, 5)
+        val suggestions = suggestionStrategy.suggest(fragment, 5, context = prevCommittedWord)
         suggestionBar.update(fragment, suggestions)
     }
 
@@ -437,7 +437,6 @@ class CodeKeyboardIME : InputMethodService() {
             Metrics.incr("keyboard.word.committed", "method" to "typed")
             if (prevCommittedWord.isNotEmpty()) bigramModel.recordTransition(prevCommittedWord, word)
             prevCommittedWord = word
-            (suggestionStrategy as? BigramAwareSuggestionStrategy)?.prevWord = word
         }
         keystrokesSinceCommit = 0
         suggestionBar.clear()
@@ -455,7 +454,6 @@ class CodeKeyboardIME : InputMethodService() {
         Metrics.incr("keyboard.word.committed", "method" to "suggestion")
         if (prevCommittedWord.isNotEmpty()) bigramModel.recordTransition(prevCommittedWord, word)
         prevCommittedWord = word
-        (suggestionStrategy as? BigramAwareSuggestionStrategy)?.prevWord = word
         keystrokesSinceCommit = 0
         // Show next-word suggestions immediately after tap
         val next = bigramModel.nextWords(word, n = 5)
