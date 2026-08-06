@@ -373,7 +373,9 @@ class CodeKeyboardIME : InputMethodService() {
                         flushComposing(ic)
                         ic?.commitText(text, 1)
                     }
+                    android.util.Log.d("CKB_HOLD", "onCharCommitted: layerHeld=${kbState.layerHeld} effectiveLayer=${kbState.effectiveLayer}")
                     kbState.onCharCommitted()
+                    android.util.Log.d("CKB_HOLD", "after onCharCommitted: layerHeld=${kbState.layerHeld} effectiveLayer=${kbState.effectiveLayer}")
                     keyboardView.notifyStateChanged(kbState)
                 }
             }
@@ -394,9 +396,11 @@ class CodeKeyboardIME : InputMethodService() {
 
     private fun handleHold(key: KeyDef) {
         val action = key.holdAction ?: return
+        android.util.Log.d("CKB_HOLD", "handleHold: action=$action layerHeld=${kbState.layerHeld} effectiveLayer=${kbState.effectiveLayer}")
         if (action in STATE_HOLD_ACTIONS) {
             kbState.applyHold(action)
             kbState.heldKeyLabel = key.label
+            android.util.Log.d("CKB_HOLD", "after applyHold: layerHeld=${kbState.layerHeld} effectiveLayer=${kbState.effectiveLayer}")
             keyboardView.notifyStateChanged(kbState)
         } else if (action.isNotEmpty()) {
             handleKey(KeyDef("", action = action))
@@ -405,9 +409,11 @@ class CodeKeyboardIME : InputMethodService() {
 
     private fun handleRelease(key: KeyDef) {
         val action = key.holdAction ?: return
+        android.util.Log.d("CKB_HOLD", "handleRelease: action=$action layerHeld=${kbState.layerHeld} effectiveLayer=${kbState.effectiveLayer}")
         if (action in STATE_HOLD_ACTIONS) {
             kbState.releaseHold(action)
             kbState.heldKeyLabel = null
+            android.util.Log.d("CKB_HOLD", "after releaseHold: layerHeld=${kbState.layerHeld} effectiveLayer=${kbState.effectiveLayer}")
             keyboardView.notifyStateChanged(kbState)
         }
     }

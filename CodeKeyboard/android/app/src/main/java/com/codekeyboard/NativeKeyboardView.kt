@@ -85,6 +85,7 @@ class NativeKeyboardView @JvmOverloads constructor(
 
     fun notifyStateChanged(newState: KeyboardState) {
         this.kbState = newState
+        android.util.Log.d("CKB_HOLD", "notifyStateChanged: effectiveLayer=${newState.effectiveLayer} layerHeld=${newState.layerHeld}")
         if (width > 0) recompute(width) else { state = newState; invalidate() }
     }
 
@@ -292,21 +293,9 @@ class NativeKeyboardView @JvmOverloads constructor(
                 }
             }
             MotionEvent.ACTION_MOVE -> {
-                if (modHoldKeyDef != null) {
-                    var onModKey = false
-                    for (i in 0 until event.pointerCount) {
-                        if (event.getPointerId(i) == modHoldPointerId) {
-                            onModKey = hitTest(event.getX(i), event.getY(i)) === modHoldKeyDef
-                            break
-                        }
-                    }
-                    if (!onModKey) {
-                        onKeyReleased?.invoke(modHoldKeyDef!!)
-                        modHoldKeyDef = null
-                        modHoldPointerId = -1
-                        modHoldOtherKeyPressed = false
-                    }
-                }
+                // Dedicated modifier hold is NOT cancelled on slide-off —
+                // only ACTION_UP releases it. Finger drift while holding LWR
+                // and tapping other keys is expected and must not drop the hold.
 
                 if (holdTapKeyDef != null) {
                     var onHoldKey = false
