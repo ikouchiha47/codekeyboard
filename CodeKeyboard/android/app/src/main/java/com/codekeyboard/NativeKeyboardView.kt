@@ -69,6 +69,7 @@ class NativeKeyboardView @JvmOverloads constructor(
     private var modHoldKeyDef: KeyDef? = null
     private var modHoldPointerId = -1
     private var modHoldOtherKeyPressed = false
+    private var modHoldStartTime = 0L
 
     var computer: KeyboardLayoutComputer? = null
     var kbState: KeyboardState = KeyboardState()
@@ -228,6 +229,7 @@ class NativeKeyboardView @JvmOverloads constructor(
                         modHoldKeyDef = key
                         modHoldPointerId = pid
                         modHoldOtherKeyPressed = false
+                        modHoldStartTime = System.currentTimeMillis()
                         onKeyHeld?.invoke(key)
                     } else if (key.holdAction != null) {
                         // Home-row mod / thumb space: timer path.
@@ -262,11 +264,14 @@ class NativeKeyboardView @JvmOverloads constructor(
                 if (pid == modHoldPointerId) {
                     val key = modHoldKeyDef!!
                     val otherPressed = modHoldOtherKeyPressed
+                    val wasQuickTap = !otherPressed &&
+                        (System.currentTimeMillis() - modHoldStartTime) < TAPPING_TERM_MS
                     modHoldKeyDef = null
                     modHoldPointerId = -1
                     modHoldOtherKeyPressed = false
+                    modHoldStartTime = 0L
                     onKeyReleased?.invoke(key)
-                    if (!otherPressed) onKeyTapped?.invoke(key) // cycle latch state
+                    if (wasQuickTap) onKeyTapped?.invoke(key) // cycle latch state
                 }
 
                 if (pid == holdTapPointerId) {
