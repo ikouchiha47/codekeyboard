@@ -144,25 +144,71 @@ detection required.
 
 ---
 
+## Decay Model (Implemented)
+
+The user layer uses temporal decay ported from librime `algo/dynamics.h`. Each (prev, next)
+entry stores `(dee: Double, lastTick: Int)` instead of a raw count.
+
+### formula_d — dee update on each commit
+
+```
+dee_new = dee + 1.0 * exp((lastTick - currentTick) / 200.0)
+```
+
+`(lastTick - currentTick)` is always negative (past < present), so the exponent is in
+`(-∞, 0)` and `exp(...)` ∈ `(0, 1]`. Recent use → boost ≈ 1.0. Use 200 commits ago →
+boost ≈ 0.37. Use 1000 commits ago → boost ≈ 0.007. The constant `200` is the half-life:
+a gap of 200 total commits halves the contribution.
+
+The result: `dee` accumulates recency-weighted activity. Entries used frequently and
+recently develop high `dee`; entries used rarely or long ago have low `dee` (since dee
+itself carries no memory unless refreshed by a new commit).
+
+### formula_p — dee to [0, 1] score
+
+```
+kM  = 1 / (1 - exp(-0.005))           ≈ 200.67
+m   = s - (s - u) * (1 - exp(-tick/10000))^10
+      where s = 1.0 (ceiling), u = 0.05 (floor)
+
+score = dee < 20  →  m + (0.5 - m) * (dee / kM)
+        dee ≥ 20  →  m + (1 - m) * (4^(dee/kM) - 1) / 3
+```
+
+`m` is the baseline score that decays from `s=1.0` to `u=0.05` as `globalTick` grows.
+At tick 0 (brand new keyboard), `m = 1.0` — all predictions are given high scores to
+compensate for sparse data. As tick grows toward 10,000 total commits, `m → 0.05` — the
+model becomes more selective; only entries with high `dee` (genuinely recent use) score
+well.
+
+The piecewise branch on `dee`:
+- `dee < 20` (low activity): linear push from `m` toward `0.5`. Low-dee entries get
+  sub-baseline scores.
+- `dee ≥ 20` (high activity): exponential push from `m` toward `1.0`. The entry is
+  clearly a dominant pattern and is ranked near the top.
+
+### Global tick
+
+`globalTick` is incremented on every `recordTransition` call — it counts total word
+commits for this user on this device. It is persisted in `user_bigrams.json` alongside the
+entries so the decay state survives app restarts.
+
+### Persistence format (v2)
+
+```json
+{
+  "tick": 1234,
+  "entries": {
+    "want": [["to", 12.4, 1230], ["a", 3.1, 800], ...],
+    "ami":  [["tomake", 8.9, 1229], ...]
+  }
+}
+```
+
+Each entry triple is `[word, dee, lastTick]`. Old v1 files (which stored `[word, count]`)
+are silently ignored on first load and replaced on the next `recordTransition`.
+
 ## What Is NOT Implemented Yet
-
-### Frequency decay
-
-The user layer currently accumulates counts indefinitely. A word typed 50 times six months
-ago scores the same as one typed 5 times last week.
-
-The correct fix is temporal decay from librime's `algo/dynamics.h`:
-
-```
-score = log(formula_p(commits, usages, current_tick, dee))
-```
-
-Where `dee` decays over time and `current_tick` is a global commit counter. This biases
-scores toward recent usage without discarding long-term history entirely.
-
-**Planned:** Add a `tick` counter to `BigramModel`. On each `recordTransition`, update
-`dee` for existing entries using the decay formula. Store `(count, tick, dee)` per entry
-instead of just `count`.
 
 ### Trigram / extended context
 
