@@ -205,8 +205,21 @@ entries so the decay state survives app restarts.
 }
 ```
 
-Each entry triple is `[word, dee, lastTick]`. Old v1 files (which stored `[word, count]`)
-are silently ignored on first load and replaced on the next `recordTransition`.
+Each entry triple is `[word, dee, lastTick]`.
+
+**Breaking change from v1.** Old files stored `[word, count]` with the predecessor words at
+the top level. The new format wraps everything under an `"entries"` key and adds `"tick"` at
+the top level. On first launch after this update, `loadUserBigrams()` calls
+`obj.optJSONObject("entries")` which returns `null` on a v1 file (no such key), hits
+`?: return`, and skips loading entirely. The user layer starts empty and a fresh v2 file is
+written on the next `recordTransition`.
+
+This is intentional: a migration was considered but rejected because the keyboard is in
+active development with no external users, and the seed layer covers cold-start quality.
+No migration code was added — the breakage is narrow and the decay model requires `lastTick`
+which v1 data does not have. If the keyboard is ever distributed to users with accumulated
+v1 data, a migration reading `[word, count]` and initialising `dee = count.toDouble(),
+lastTick = 0` would preserve learned transitions (scored as maximally stale, not wrong).
 
 ## What Is NOT Implemented Yet
 
