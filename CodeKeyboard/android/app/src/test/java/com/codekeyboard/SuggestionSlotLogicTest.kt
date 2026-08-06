@@ -3,55 +3,66 @@ package com.codekeyboard
 import org.junit.Assert.*
 import org.junit.Test
 
+// Mirrors SuggestionBarView.update() slot logic:
+// slot 0 = typed word (always), slots 1..N = suggestions excluding the typed word.
 class SuggestionSlotLogicTest {
 
-    // Mirrors SuggestionBarView.update() slot assignment — pure function, no Android.
-    private fun buildSlots(word: String, suggestions: List<String>): Triple<String, String, String> {
-        val s0 = if (word.isNotEmpty()) suggestions.getOrNull(0) ?: word else ""
-        val s1 = suggestions.getOrNull(1) ?: ""
-        val s2 = suggestions.getOrNull(2) ?: ""
-        return Triple(s0, s1, s2)
+    private fun buildSlots(word: String, suggestions: List<String>): List<String> {
+        if (word.isEmpty()) return emptyList()
+        return listOf(word) + suggestions.filter { it != word }
     }
 
-    private fun highlighted(word: String, suggestions: List<String>): Boolean =
-        suggestions.isNotEmpty() && word.isNotEmpty()
+    private fun slot0Highlighted(items: List<String>): Boolean = items.size > 1
 
-    @Test fun `empty word and no suggestions`() {
-        assertEquals(Triple("", "", ""), buildSlots("", emptyList()))
+    @Test fun `empty word produces no slots`() {
+        assertEquals(emptyList<String>(), buildSlots("", emptyList()))
     }
 
-    @Test fun `word with no suggestions shows word in slot0`() {
-        assertEquals(Triple("xyz", "", ""), buildSlots("xyz", emptyList()))
+    @Test fun `word with no suggestions shows only the word`() {
+        assertEquals(listOf("xyz"), buildSlots("xyz", emptyList()))
     }
 
-    @Test fun `word with 1 suggestion fills slot0 only`() {
-        assertEquals(Triple("help", "", ""), buildSlots("hel", listOf("help")))
+    @Test fun `slot 0 is always the typed word`() {
+        val slots = buildSlots("hel", listOf("help", "helps", "helper"))
+        assertEquals("hel", slots[0])
     }
 
-    @Test fun `word with 2 suggestions fills slot0 and slot1`() {
-        assertEquals(Triple("help", "helps", ""), buildSlots("hel", listOf("help", "helps")))
+    @Test fun `suggestions follow the typed word`() {
+        val slots = buildSlots("hel", listOf("help", "helps", "helper"))
+        assertEquals(listOf("hel", "help", "helps", "helper"), slots)
     }
 
-    @Test fun `word with 3 suggestions fills all slots`() {
-        assertEquals(
-            Triple("help", "helps", "helper"),
-            buildSlots("hel", listOf("help", "helps", "helper"))
-        )
+    @Test fun `typed word is excluded from suggestion slots if it appears in suggestions`() {
+        // trie may return the exact word as a suggestion — it should not be duplicated
+        val slots = buildSlots("help", listOf("help", "helpful", "helpless"))
+        assertEquals(listOf("help", "helpful", "helpless"), slots)
+        assertEquals(3, slots.size)
     }
 
-    @Test fun `word equals top suggestion`() {
-        assertEquals(Triple("help", "", ""), buildSlots("help", listOf("help")))
+    @Test fun `word with one suggestion shows two slots`() {
+        val slots = buildSlots("he", listOf("her"))
+        assertEquals(listOf("he", "her"), slots)
     }
 
-    @Test fun `empty word with non-empty suggestions produces empty slots`() {
-        assertEquals(Triple("", "", ""), buildSlots("", listOf("help")))
+    @Test fun `word with two suggestions shows three slots`() {
+        val slots = buildSlots("he", listOf("her", "here"))
+        assertEquals(listOf("he", "her", "here"), slots)
     }
 
-    @Test fun `slot0 highlighted only when suggestions non-empty and word non-empty`() {
-        assertFalse(highlighted("", emptyList()))
-        assertFalse(highlighted("xyz", emptyList()))
-        assertFalse(highlighted("", listOf("help")))
-        assertTrue(highlighted("hel", listOf("help")))
-        assertTrue(highlighted("hel", listOf("help", "helps", "helper")))
+    @Test fun `slot 0 highlighted only when suggestions present`() {
+        assertFalse(slot0Highlighted(buildSlots("xyz", emptyList())))
+        assertTrue(slot0Highlighted(buildSlots("he", listOf("her", "here"))))
+    }
+
+    @Test fun `empty word with non-empty suggestions produces no slots`() {
+        assertEquals(emptyList<String>(), buildSlots("", listOf("help")))
+    }
+
+    @Test fun `five suggestions all appear after typed word`() {
+        val suggs = listOf("help", "helps", "helper", "helpful", "helpless")
+        val slots = buildSlots("hel", suggs)
+        assertEquals(6, slots.size)
+        assertEquals("hel", slots[0])
+        assertEquals(suggs, slots.drop(1))
     }
 }

@@ -5,22 +5,48 @@ import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
 import android.view.View
+import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
 import android.widget.TextView
 
-class SuggestionBarView(context: Context) : LinearLayout(context) {
+class SuggestionBarView(context: Context) : HorizontalScrollView(context) {
 
-    private val slots: Array<TextView>
+    private val row = LinearLayout(context).apply {
+        orientation = LinearLayout.HORIZONTAL
+    }
+
+    private val slots = mutableListOf<TextView>()
     var onSlotTapped: ((String) -> Unit)? = null
 
     init {
-        orientation = HORIZONTAL
+        isHorizontalScrollBarEnabled = false
+        overScrollMode = OVER_SCROLL_NEVER
         setBackgroundColor(Color.parseColor("#1e1e1e"))
-        val dp = context.resources.displayMetrics.density
+        addView(row, LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.MATCH_PARENT))
+    }
 
-        slots = Array(3) { i ->
+    // slot 0 = typed word (blue, committed as-is)
+    // slots 1..N = suggestions (grey)
+    fun update(word: String, suggestions: List<String>) {
+        if (word.isEmpty()) { clear(); return }
+        val dp = context.resources.displayMetrics.density
+        val items = mutableListOf(word) + suggestions.filter { it != word }
+        rebuildSlots(items, dp)
+    }
+
+    fun clear() {
+        row.removeAllViews()
+        slots.clear()
+    }
+
+    private fun rebuildSlots(items: List<String>, dp: Float) {
+        row.removeAllViews()
+        slots.clear()
+        val slotWidth = (96 * dp).toInt()
+        items.forEachIndexed { i, text ->
+            if (i > 0) row.addView(makeDivider(dp))
             val tv = TextView(context).apply {
-                layoutParams = LayoutParams(0, LayoutParams.MATCH_PARENT, 1f)
+                layoutParams = LinearLayout.LayoutParams(slotWidth, LinearLayout.LayoutParams.MATCH_PARENT)
                 gravity = Gravity.CENTER
                 setTextColor(
                     if (i == 0) Color.parseColor("#4a9eff")
@@ -28,45 +54,30 @@ class SuggestionBarView(context: Context) : LinearLayout(context) {
                 )
                 typeface = android.graphics.Typeface.MONOSPACE
                 textSize = 14f
+                isSingleLine = true
+                ellipsize = android.text.TextUtils.TruncateAt.END
                 setPadding(
                     (8 * dp).toInt(), (6 * dp).toInt(),
                     (8 * dp).toInt(), (6 * dp).toInt()
                 )
-                setOnClickListener { dispatchTap(i) }
+                this.text = text
+                setOnClickListener { onSlotTapped?.invoke(text) }
             }
-            addView(tv)
-            if (i < 2) addView(makeDivider(dp))
-            tv
+            // slot 0 (typed word) gets subtle pill highlight
+            if (i == 0 && items.size > 1) {
+                tv.background = makeRounded(4 * dp, Color.parseColor("#1a3a5c"))
+            }
+            row.addView(tv)
+            slots.add(tv)
         }
-    }
-
-    fun update(word: String, suggestions: List<String>) {
-        val dp = context.resources.displayMetrics.density
-        slots[0].text = if (word.isNotEmpty()) suggestions.getOrNull(0) ?: word else ""
-        slots[1].text = suggestions.getOrNull(1) ?: ""
-        slots[2].text = suggestions.getOrNull(2) ?: ""
-        slots[0].background = if (suggestions.isNotEmpty() && word.isNotEmpty())
-            makeRounded(4 * dp, Color.parseColor("#1a3a5c"))
-        else null
-    }
-
-    fun clear() {
-        slots[0].text = ""
-        slots[1].text = ""
-        slots[2].text = ""
-        slots[0].background = null
-    }
-
-    private fun dispatchTap(index: Int) {
-        val word = slots[index].text.toString()
-        if (word.isNotEmpty()) onSlotTapped?.invoke(word)
+        scrollTo(0, 0)
     }
 
     private fun makeRounded(radiusPx: Float, color: Int): GradientDrawable =
         GradientDrawable().apply { setColor(color); cornerRadius = radiusPx }
 
     private fun makeDivider(dp: Float): View = View(context).apply {
-        layoutParams = LayoutParams(
+        layoutParams = LinearLayout.LayoutParams(
             (1 * dp).toInt().coerceAtLeast(1),
             (28 * dp).toInt()
         ).apply { gravity = Gravity.CENTER_VERTICAL }

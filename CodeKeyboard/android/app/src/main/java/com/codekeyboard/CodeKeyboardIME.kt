@@ -153,7 +153,7 @@ class CodeKeyboardIME : InputMethodService() {
                         val suggestions = if (word.startsWith(";")) {
                             SnippetStore.matching(word.drop(1))
                         } else {
-                            trie.suggest(word, 3)
+                            trie.suggest(word, 5)
                         }
                         suggestionBar.update(word, suggestions)
                     }
@@ -260,7 +260,7 @@ class CodeKeyboardIME : InputMethodService() {
                         val suggestions = if (word.startsWith(";")) {
                             SnippetStore.matching(word.drop(1))
                         } else {
-                            trie.suggest(word, 3)
+                            trie.suggest(word, 5)
                         }
                         suggestionBar.update(word, suggestions)
                     } else {
