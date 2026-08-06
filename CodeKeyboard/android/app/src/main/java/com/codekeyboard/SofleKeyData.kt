@@ -8,12 +8,13 @@ package com.codekeyboard
  *   left    4 rows × 5 cols   — stagger [0, .25, .5, .75, 1.0]
  *   right   4 rows × 5 cols   — stagger [1.0, .75, .5, .25, 0]
  *
- * Hold-tap annotations (home row mods, thumb layer-holds) are defined
- * on the BASE layer: a→ctrl, s→meta, d→alt, f→shift, h→shift, j→alt,
- * k→meta, l→ctrl (home row). Left Spc→lower, right Spc→raise (thumb).
- * Tapping-term = 150ms, managed by HoldTapTracker in NativeKeyboardView.
- *
- * No geometry, no pixel values, no rendering concerns.
+ * Hold-tap annotations:
+ *   Home row mods (a/s/d/f/h/j/k/l): timer path — 150ms to distinguish
+ *     typing the letter from activating the modifier.
+ *   Dedicated modifier keys (Shift, Ctrl, Alt, LWR, RSE, FUNC, ADJ):
+ *     activate-on-down path — hold activates immediately, tap (lift without
+ *     pressing another key) cycles the latch state as before.
+ *   Thumb Space keys: timer path — hold for momentary lower/raise.
  */
 object SofleKeyData {
 
@@ -30,23 +31,25 @@ object SofleKeyData {
     private val BASE = SofleLayerData(
         topRow = listOf(
             ANCHOR_TAB, ANCHOR_ESC,
-            k("`"), k("^"), k("Ctrl","ctrl"), k("Alt","alt"), k("😊","emoji"), k("Bksp","backspace")
+            k("`"), k("^"),
+            k("Ctrl","ctrl", hold="ctrl"), k("Alt","alt", hold="alt"),
+            k("😊","emoji"), k("Bksp","backspace")
         ),
         left = listOf(
             listOf(k("q"),     k("w"),     k("e"),     k("r"),     k("t")),
             listOf(k("a", hold="ctrl"),  k("s", hold="meta"),
                    k("d", hold="alt"),   k("f", hold="shift"), k("g")),
             listOf(k("z"),     k("x"),     k("c"),     k("v"),     k("b")),
-            listOf(k("Shift","shift"), k("Spc","space", hold="lower"), k("LWR","lower"),
-                   k("Ctrl","ctrl"),  k("Alt","alt"))
+            listOf(k("Shift","shift", hold="shift"), k("Spc","space", hold="lower"), k("LWR","lower", hold="lower"),
+                   k("Ctrl","ctrl", hold="ctrl"),  k("Alt","alt", hold="alt"))
         ),
         right = listOf(
             listOf(k("y"),     k("u"),     k("i"),     k("o"),     k("p")),
             listOf(k("h", hold="shift"),  k("j", hold="alt"),
                    k("k", hold="meta"),   k("l", hold="ctrl"), k(";", shift=":")),
             listOf(k("n"),     k("m"),     k(",", shift="<"), k(".", shift=">"), k("Bksp","backspace")),
-            listOf(k("RSE","raise"), k("Enter","enter"), k("Spc","space", hold="raise"),
-                   k("FUNC","func"),  k("ADJ","adj"))
+            listOf(k("RSE","raise", hold="raise"), k("Enter","enter"), k("Spc","space", hold="raise"),
+                   k("FUNC","func", hold="func"),  k("ADJ","adj", hold="adj"))
         )
     )
 
@@ -62,7 +65,7 @@ object SofleKeyData {
             listOf(k("`"), k("-", shift="_"), k("=", shift="+"),
                    k("[", shift="{"), k("]", shift="}")),
             listOf(k("~"), k("\\", shift="|"), k("("), k(")"), k("'", shift="\"")),
-            listOf(k("Shift","shift"), k("Spc","space"), k("LWR","lower"),
+            listOf(k("Shift","shift", hold="shift"), k("Spc","space"), k("LWR","lower", hold="lower"),
                    k("Esc","escape"),  k("Tab","tab"))
         ),
         right = listOf(
@@ -71,8 +74,8 @@ object SofleKeyData {
             listOf(k("/", shift="?"), k(":", shift=";"), k("'", shift="\""),
                    k("<"), k(">")),
             listOf(k("!"), k("@"), k("#"), k("$"), k("Del","delete")),
-            listOf(k("RSE","raise"), k("Enter","enter"), k("Spc","space"),
-                   k("FUNC","func"),  k("ADJ","adj"))
+            listOf(k("RSE","raise", hold="raise"), k("Enter","enter"), k("Spc","space"),
+                   k("FUNC","func", hold="func"),  k("ADJ","adj", hold="adj"))
         )
     )
 
@@ -90,8 +93,8 @@ object SofleKeyData {
                    k("PgUp","page-up"), k("PgDn","page-down")),
             listOf(k("End","end"), k("Cut","cut"), k("Copy","copy"),
                    k("Paste","paste"), k("Undo","undo")),
-            listOf(k("Shift","shift"), k("Spc","space"), k("LWR","lower"),
-                   k("Ctrl","ctrl"),  k("Alt","alt"))
+            listOf(k("Shift","shift", hold="shift"), k("Spc","space"), k("LWR","lower", hold="lower"),
+                   k("Ctrl","ctrl", hold="ctrl"),  k("Alt","alt", hold="alt"))
         ),
         right = listOf(
             listOf(k("←","arrow-left"), k("↓","arrow-down"),
@@ -100,8 +103,8 @@ object SofleKeyData {
                    k("PgUp","page-up"), k("PgDn","page-down"), empty()),
             listOf(k("Cut","cut"), k("Copy","copy"), k("Paste","paste"),
                    k("Undo","undo"), k("Bksp","backspace")),
-            listOf(k("RSE","raise"), k("Enter","enter"), k("Spc","space"),
-                   k("FUNC","func"),  k("ADJ","adj"))
+            listOf(k("RSE","raise", hold="raise"), k("Enter","enter"), k("Spc","space"),
+                   k("FUNC","func", hold="func"),  k("ADJ","adj", hold="adj"))
         )
     )
 
@@ -118,15 +121,15 @@ object SofleKeyData {
                    k("Next", "media-next"), empty(), empty()),
             listOf(empty(),    empty(),    empty(),    empty(),   empty()),
             listOf(empty(),    empty(),    empty(),    empty(),   empty()),
-            listOf(k("Shift","shift"), k("Spc","space"), k("LWR","lower"),
+            listOf(k("Shift","shift", hold="shift"), k("Spc","space"), k("LWR","lower", hold="lower"),
                    empty(),            empty())
         ),
         right = listOf(
             listOf(empty(),    empty(),    empty(),    empty(),   empty()),
             listOf(k("BT"),    k("WiFi"),  empty(),    empty(),   empty()),
             listOf(empty(),    empty(),    empty(),    empty(),   k("Bksp","backspace")),
-            listOf(k("RSE","raise"), k("Enter","enter"), k("Spc","space"),
-                   k("FUNC","func"),  k("ADJ","adj"))
+            listOf(k("RSE","raise", hold="raise"), k("Enter","enter"), k("Spc","space"),
+                   k("FUNC","func", hold="func"),  k("ADJ","adj", hold="adj"))
         )
     )
 
@@ -142,15 +145,15 @@ object SofleKeyData {
                    k("Cmnt","comment"), k("Dup","duplicate")),
             listOf(k("Fmt","format"), empty(), empty(), empty(), empty()),
             listOf(empty(), empty(), empty(), empty(), empty()),
-            listOf(k("Shift","shift"), k("Spc","space"), k("LWR","lower"),
+            listOf(k("Shift","shift", hold="shift"), k("Spc","space"), k("LWR","lower", hold="lower"),
                    empty(), empty())
         ),
         right = listOf(
             listOf(empty(), empty(), empty(), empty(), empty()),
             listOf(empty(), empty(), empty(), empty(), empty()),
             listOf(empty(), empty(), empty(), empty(), k("Bksp","backspace")),
-            listOf(k("RSE","raise"), k("Enter","enter"), k("Spc","space"),
-                   k("FUNC","func"),  k("ADJ","adj"))
+            listOf(k("RSE","raise", hold="raise"), k("Enter","enter"), k("Spc","space"),
+                   k("FUNC","func", hold="func"),  k("ADJ","adj", hold="adj"))
         )
     )
 
