@@ -3,6 +3,7 @@ package com.codekeyboard
 import android.view.inputmethod.InputConnection
 import android.text.SpannableStringBuilder
 import android.view.KeyEvent
+import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
@@ -55,7 +56,7 @@ class CodeKeyboardModule(reactContext: ReactApplicationContext) :
   }
 
   @ReactMethod
-  fun getLayout(): String {
-    return SofleLayoutComputer.exportLayoutJson()
+  fun getLayout(promise: Promise) {
+    promise.resolve(SofleLayoutComputer.exportLayoutJson())
   }
 }
