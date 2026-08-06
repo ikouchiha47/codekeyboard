@@ -212,7 +212,19 @@ class CodeKeyboardIME : InputMethodService() {
                         }
                         suggestionBar.update(word, suggestions)
                     }
-                    else -> if (ic?.deleteSurroundingText(1, 0) != true) sendDownUp(ic, KeyEvent.KEYCODE_DEL)
+                    else -> {
+                        if (ic?.deleteSurroundingText(1, 0) != true) sendDownUp(ic, KeyEvent.KEYCODE_DEL)
+                        // LOG ONLY — no composing changes yet, just observe values
+                        val before = ic?.getTextBeforeCursor(50, 0)?.toString()
+                        val fragment = before?.takeLastWhile { it.isLetterOrDigit() || it == '\'' } ?: ""
+                        val req = android.view.inputmethod.ExtractedTextRequest().apply { token = 0 }
+                        val extracted = ic?.getExtractedText(req, 0)
+                        val absCursor = extracted?.selectionStart
+                        android.util.Log.d("CKB_RECOMPOSE",
+                            "before=[$before] fragment=[$fragment] absCursor=$absCursor " +
+                            "wouldSetRegion=[${if (fragment.isNotEmpty() && absCursor != null) "${absCursor - fragment.length}..${absCursor}" else "skip"}]"
+                        )
+                    }
                 }
             }
             "delete" -> {
