@@ -33,7 +33,10 @@ class CodeKeyboardIME : InputMethodService() {
             emojiPanel = EmojiPanelView(this).apply {
                 onEmojiSelected = { emoji ->
                     currentInputConnection?.commitText(emoji, 1)
-                    hideEmojiPanel()
+                }
+                onBackToKeyboard = { hideEmojiPanel() }
+                onDeletePressed = {
+                    currentInputConnection?.deleteSurroundingText(1, 0)
                 }
             }
         }
