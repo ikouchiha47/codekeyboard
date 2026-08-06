@@ -18,6 +18,7 @@ class CodeKeyboardIME : InputMethodService() {
     private lateinit var suggestionBar: SuggestionBarView
     private lateinit var trie: Trie
     private lateinit var userTrie: UserTrie
+    private lateinit var suggestionStrategy: SuggestionStrategy
     private val kbState = KeyboardState()
     private val composing = ComposingBuffer()
     private var supportsComposing = true
@@ -41,6 +42,7 @@ class CodeKeyboardIME : InputMethodService() {
         SnippetStore.init()
         trie = Trie.load(this)
         userTrie = UserTrie.load(File(filesDir, "user.trie"))
+        suggestionStrategy = MergedSuggestionStrategy(userTrie, trie)
     }
 
     override fun onCreateInputView(): View {
@@ -166,7 +168,7 @@ class CodeKeyboardIME : InputMethodService() {
                         val suggestions = if (word.startsWith(";")) {
                             SnippetStore.matching(word.drop(1))
                         } else {
-                            mergeSuggestions(word, 5)
+                            suggestionStrategy.suggest(word, 5)
                         }
                         suggestionBar.update(word, suggestions)
                     }
@@ -273,7 +275,7 @@ class CodeKeyboardIME : InputMethodService() {
                         val suggestions = if (word.startsWith(";")) {
                             SnippetStore.matching(word.drop(1))
                         } else {
-                            mergeSuggestions(word, 5)
+                            suggestionStrategy.suggest(word, 5)
                         }
                         suggestionBar.update(word, suggestions)
                     } else {
@@ -359,16 +361,7 @@ class CodeKeyboardIME : InputMethodService() {
         suggestionBar.clear()
     }
 
-    private fun mergeSuggestions(prefix: String, k: Int): List<String> {
-        val userResults = userTrie.suggest(prefix, k)
-        val baseResults = trie.suggest(prefix, k)
-        val userWords = userResults.map { it.word }.toSet()
-        val merged = userResults.map { it.word } +
-            baseResults.filter { it !in userWords }
-        return merged.take(k)
-    }
-
-    private val PUNCTUATION = setOf(
+private val PUNCTUATION = setOf(
         '.', ',', '!', '?', ':', '\'', '"', '(', ')', '[', ']', '{', '}',
         '/', '\\', '-', '_', '=', '+', '*', '&', '^', '%', '$', '#', '@', '~', '`', '|'
     )
