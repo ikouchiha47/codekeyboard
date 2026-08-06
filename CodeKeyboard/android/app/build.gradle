@@ -82,8 +82,8 @@ android {
         applicationId "com.codekeyboard"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 6
-        versionName "1.5"
+        versionCode 7
+        versionName "1.6"
     }
     signingConfigs {
         debug {
@@ -116,6 +116,8 @@ dependencies {
     } else {
         implementation jscFlavor
     }
+
+    implementation("androidx.work:work-runtime-ktx:2.9.0")
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit:1.9.0")

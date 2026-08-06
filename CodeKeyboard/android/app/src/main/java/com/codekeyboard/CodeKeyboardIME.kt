@@ -24,6 +24,25 @@ class CodeKeyboardIME : InputMethodService() {
     private val composing = ComposingBuffer()
     private var supportsComposing = true
     private val flushExecutor = Executors.newSingleThreadExecutor()
+    private var emojiPanel: EmojiPanelView? = null
+
+    // ── Emoji panel ───────────────────────────────────────────────────────────
+
+    private fun showEmojiPanel() {
+        if (emojiPanel == null) {
+            emojiPanel = EmojiPanelView(this).apply {
+                onEmojiSelected = { emoji ->
+                    currentInputConnection?.commitText(emoji, 1)
+                    hideEmojiPanel()
+                }
+            }
+        }
+        setInputView(emojiPanel)
+    }
+
+    private fun hideEmojiPanel() {
+        setInputView(onCreateInputView())
+    }
 
     // Modifier name → KeyEvent meta flag — extend this map to add new modifiers.
     private val MODIFIER_META_FLAGS = mapOf(
@@ -197,6 +216,7 @@ class CodeKeyboardIME : InputMethodService() {
             }
             "tab"         -> { flushComposing(ic); sendDownUp(ic, KeyEvent.KEYCODE_TAB) }
             "space"       -> { flushComposing(ic); ic?.commitText(" ", 1) }
+            "emoji"       -> showEmojiPanel()
             "escape"      -> sendDownUp(ic, KeyEvent.KEYCODE_ESCAPE)
             "arrow-left"  -> sendDownUp(ic, KeyEvent.KEYCODE_DPAD_LEFT)
             "arrow-right" -> sendDownUp(ic, KeyEvent.KEYCODE_DPAD_RIGHT)

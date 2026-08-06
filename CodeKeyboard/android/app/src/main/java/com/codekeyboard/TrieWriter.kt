@@ -6,13 +6,19 @@ import java.nio.ByteOrder
 object TrieWriter {
 
     private const val MAGIC = 0x54524933.toInt() // "TRI3"
-    private const val HEADER_SIZE = 16
-    private const val NODE_SIZE = 16
 
-    // ── Serialize ─────────────────────────────────────────────────────────────
+    // Header: magic(4) + nodeCount(4) + totalCommits(4) + decayEpoch(4) = 16 bytes
+    private const val HEADER_SIZE = 16
+
+    // v1 node: childrenOffset(4) + childCount(2) + isTerminal(1) + pad(1) + frequency(4) + maxDescendantFreq(4) = 16 bytes
+    private const val NODE_SIZE_V1 = 16
+
+    // v2 node: same + lastDecayEpoch(4) = 20 bytes
+    private const val NODE_SIZE_V2 = 20
+
+    // ── Serialize (always writes v2) ──────────────────────────────────────────
 
     fun serialize(trie: UserTrie): ByteArray {
-        // BFS to assign each node a stable index and collect children lists.
         val order = mutableListOf<UserTrieNode>()
         val index = HashMap<UserTrieNode, Int>()
         val queue = ArrayDeque<UserTrieNode>()
@@ -21,35 +27,28 @@ object TrieWriter {
             val n = queue.removeFirst()
             index[n] = order.size
             order.add(n)
-            // Sort children by char for deterministic output.
             n.children.keys.sorted().forEach { ch -> queue.add(n.children[ch]!!) }
         }
 
         val nodeCount = order.size
 
-        // Children section: each node's children are a block of (char, childIndex) pairs.
-        // We store them as sequential child-index arrays with a parallel char array.
-        // Layout: for each node, childCount × (char:2 + nodeIndex:4) = 6 bytes per child.
-        // childrenOffset in each node header points into this section (relative to section start).
         data class ChildEntry(val ch: Char, val nodeIdx: Int)
         val childBlocks = order.map { n ->
             n.children.keys.sorted().map { ch -> ChildEntry(ch, index[n.children[ch]!!]!!) }
         }
 
         val childrenSectionSize = childBlocks.sumOf { it.size * 6 }
-        val totalSize = HEADER_SIZE + nodeCount * NODE_SIZE + childrenSectionSize
+        val totalSize = HEADER_SIZE + nodeCount * NODE_SIZE_V2 + childrenSectionSize
 
         val buf = ByteBuffer.allocate(totalSize).order(ByteOrder.LITTLE_ENDIAN)
 
-        // Header
         val totalCommits = order.sumOf { it.frequency }
         buf.putInt(MAGIC)
         buf.putInt(nodeCount)
         buf.putInt(totalCommits)
-        buf.putInt(0) // reserved
+        buf.putInt(trie.decayEpoch)
 
-        // Compute childrenOffset for each node (relative to children section start).
-        val childrenBase = HEADER_SIZE + nodeCount * NODE_SIZE
+        val childrenBase = HEADER_SIZE + nodeCount * NODE_SIZE_V2
         val offsets = IntArray(nodeCount)
         var offset = 0
         childBlocks.forEachIndexed { i, block ->
@@ -57,17 +56,16 @@ object TrieWriter {
             offset += block.size * 6
         }
 
-        // Node array
         order.forEachIndexed { i, n ->
-            buf.putInt(offsets[i])                         // childrenOffset
-            buf.putShort(n.children.size.toShort())        // childCount
-            buf.put(if (n.isTerminal) 1.toByte() else 0)   // isTerminal
-            buf.put(0)                                     // reserved
-            buf.putInt(n.frequency)                        // frequency
-            buf.putInt(n.maxDescendantFreq)                // maxDescendantFreq
+            buf.putInt(offsets[i])
+            buf.putShort(n.children.size.toShort())
+            buf.put(if (n.isTerminal) 1.toByte() else 0)
+            buf.put(0)
+            buf.putInt(n.frequency)
+            buf.putInt(n.maxDescendantFreq)
+            buf.putInt(n.lastDecayEpoch)
         }
 
-        // Children section
         childBlocks.forEach { block ->
             block.forEach { (ch, idx) ->
                 buf.putShort(ch.code.toShort())
@@ -78,7 +76,7 @@ object TrieWriter {
         return buf.array()
     }
 
-    // ── Deserialize ───────────────────────────────────────────────────────────
+    // ── Deserialize (handles v1 and v2) ───────────────────────────────────────
 
     fun deserialize(bytes: ByteArray): UserTrie {
         val buf = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
@@ -86,35 +84,51 @@ object TrieWriter {
         val magic = buf.getInt()
         require(magic == MAGIC) { "Not a TRIE3 file (magic=0x${magic.toString(16)})" }
         val nodeCount = buf.getInt()
-        buf.getInt() // totalCommits — not used on load
-        buf.getInt() // reserved
+        buf.getInt() // totalCommits
+        val decayEpoch = buf.getInt()
 
-        val childrenBase = HEADER_SIZE + nodeCount * NODE_SIZE
+        // Detect format version by file size.
+        val childrenSectionOffset = bytes.size - (bytes.size - HEADER_SIZE - nodeCount * NODE_SIZE_V2)
+        val isV2 = (bytes.size - HEADER_SIZE) % (nodeCount) == 0 &&
+            run {
+                // Check whether node section fits v2 layout: remaining bytes after header must
+                // be divisible with v2 node size once children section is removed.
+                // Simpler: compare expected file size for v2 vs v1.
+                val childrenSectionSize = bytes.size - HEADER_SIZE - nodeCount * NODE_SIZE_V2
+                childrenSectionSize >= 0 && (bytes.size - HEADER_SIZE - nodeCount * NODE_SIZE_V1) != childrenSectionSize
+            }
 
-        // Read node metadata.
+        // Reliable version detection: old v1 files have NODE_SIZE_V1 nodes.
+        // We infer version from which node size produces a non-negative children section.
+        val nodeSize = if (bytes.size >= HEADER_SIZE + nodeCount * NODE_SIZE_V2) NODE_SIZE_V2 else NODE_SIZE_V1
+        val childrenBase = HEADER_SIZE + nodeCount * nodeSize
+
         data class NodeMeta(
             val childrenOffset: Int,
             val childCount: Int,
             val isTerminal: Boolean,
             val frequency: Int,
             val maxDescendantFreq: Int,
+            val lastDecayEpoch: Int,
         )
+
         val metas = Array(nodeCount) {
             val childrenOffset    = buf.getInt()
             val childCount        = buf.getShort().toInt() and 0xFFFF
             val isTerminal        = buf.get().toInt() != 0
-            buf.get()             // reserved
+            buf.get()             // pad
             val frequency         = buf.getInt()
             val maxDescendantFreq = buf.getInt()
-            NodeMeta(childrenOffset, childCount, isTerminal, frequency, maxDescendantFreq)
+            val lastDecayEpoch    = if (nodeSize == NODE_SIZE_V2) buf.getInt() else 0
+            NodeMeta(childrenOffset, childCount, isTerminal, frequency, maxDescendantFreq, lastDecayEpoch)
         }
 
-        // Create nodes first, then wire children.
         val nodes = Array(nodeCount) { UserTrieNode() }
         nodes.forEachIndexed { i, node ->
             val meta = metas[i]
             node.frequency = meta.frequency
             node.maxDescendantFreq = meta.maxDescendantFreq
+            node.lastDecayEpoch = meta.lastDecayEpoch
             val childBase = childrenBase + meta.childrenOffset
             repeat(meta.childCount) { j ->
                 val pos = childBase + j * 6
@@ -125,11 +139,12 @@ object TrieWriter {
         }
 
         val trie = UserTrie()
-        // Replace root's children with the deserialized root's children.
         trie.root.children.clear()
         trie.root.children.putAll(nodes[0].children)
         trie.root.frequency = nodes[0].frequency
         trie.root.maxDescendantFreq = nodes[0].maxDescendantFreq
+        trie.root.lastDecayEpoch = nodes[0].lastDecayEpoch
+        trie.decayEpoch = decayEpoch
         return trie
     }
 }

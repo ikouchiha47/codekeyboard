@@ -162,7 +162,7 @@ const THUMB_L = (stagger: number[]) => [
   k('Alt',  1, stagger, {action:'alt', c:'thumb'}),
   k('Spc',  2, stagger, {action:'space', c:'thumb'}),
   k('LWR',  3, stagger, {action:'lower', c:'layer-key'}),
-  k('Cmd',  4, stagger, {}),
+  k('\u{1F60A}', 4, stagger, {action:'emoji'}),
 ];
 
 const THUMB_L_EMPTY = (stagger: number[]) => [

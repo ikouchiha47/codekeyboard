@@ -18,6 +18,7 @@ class UserTrie {
 
     val root = UserTrieNode()
     private var totalNodes = 1
+    var decayEpoch: Int = 0
 
     // ── Insert ────────────────────────────────────────────────────────────────
 
@@ -105,6 +106,80 @@ class UserTrie {
     private fun collectAll(node: UserTrieNode, word: String, out: MutableList<ScoredWord>) {
         if (node.isTerminal) out.add(ScoredWord(word, node.frequency))
         for ((ch, child) in node.children) collectAll(child, word + ch, out)
+    }
+
+    // ── Decay ─────────────────────────────────────────────────────────────────
+    // Applies exponential frequency decay. Each terminal's frequency is
+    // multiplied by factor^(epochDelta). Terminals reaching freq<1 are zeroed
+    // (non-terminal). Interior nodes with no surviving terminal descendants are
+    // pruned. If the surviving node count exceeds maxNodes, only the top-ranked
+    // terminals by frequency are kept.
+
+    fun applyDecay(factor: Double = 0.9, newEpoch: Int, maxNodes: Int = 50_000) {
+        decayNodes(root, factor, newEpoch)
+        compact(root)
+        recomputeMaxFreq(root)
+        if (totalNodes > maxNodes) pruneToTop(maxNodes)
+        decayEpoch = newEpoch
+    }
+
+    private fun decayNodes(node: UserTrieNode, factor: Double, newEpoch: Int) {
+        if (node.isTerminal) {
+            val delta = newEpoch - node.lastDecayEpoch
+            node.frequency = (node.frequency * Math.pow(factor, delta.toDouble())).toInt()
+            node.lastDecayEpoch = newEpoch
+        }
+        node.children.values.forEach { decayNodes(it, factor, newEpoch) }
+    }
+
+    // Returns true if the subtree has any surviving terminal.
+    private fun compact(node: UserTrieNode): Boolean {
+        val dead = node.children.entries.filter { (_, child) -> !compact(child) }.map { it.key }
+        dead.forEach { ch ->
+            node.children.remove(ch)
+            totalNodes--
+        }
+        return node.isTerminal || node.children.isNotEmpty()
+    }
+
+    private fun recomputeMaxFreq(node: UserTrieNode): Int {
+        val childMax = node.children.values.maxOfOrNull { recomputeMaxFreq(it) } ?: 0
+        node.maxDescendantFreq = maxOf(node.frequency, childMax)
+        return node.maxDescendantFreq
+    }
+
+    private fun pruneToTop(maxNodes: Int) {
+        // Collect all terminals sorted by frequency descending.
+        val terminals = mutableListOf<Pair<String, UserTrieNode>>()
+        fun collect(node: UserTrieNode, prefix: String) {
+            if (node.isTerminal) terminals += prefix to node
+            node.children.forEach { (ch, child) -> collect(child, prefix + ch) }
+        }
+        collect(root, "")
+        terminals.sortByDescending { it.second.frequency }
+
+        // Keep only the top-maxNodes / average-depth words. Use 5000 as a safe cap.
+        val keep = terminals.take(5_000).map { it.first }.toHashSet()
+
+        // Rebuild from scratch with only the kept words.
+        val saved = keep.map { word ->
+            val node = terminals.first { it.first == word }.second
+            Triple(word, node.frequency, node.lastDecayEpoch)
+        }
+        root.children.clear()
+        root.frequency = 0
+        root.maxDescendantFreq = 0
+        totalNodes = 1
+
+        saved.forEach { (word, freq, epoch) ->
+            var cur = root
+            for (ch in word) {
+                cur = cur.children.getOrPut(ch) { UserTrieNode().also { totalNodes++ } }
+            }
+            cur.frequency = freq
+            cur.lastDecayEpoch = epoch
+        }
+        recomputeMaxFreq(root)
     }
 
     // ── Serialization ─────────────────────────────────────────────────────────
