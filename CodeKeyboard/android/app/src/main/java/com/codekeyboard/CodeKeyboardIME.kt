@@ -29,21 +29,27 @@ class CodeKeyboardIME : InputMethodService() {
     // ── Emoji panel ───────────────────────────────────────────────────────────
 
     private fun showEmojiPanel() {
-        if (emojiPanel == null) {
-            emojiPanel = EmojiPanelView(this).apply {
-                onEmojiSelected = { emoji ->
-                    currentInputConnection?.commitText(emoji, 1)
-                }
-                onBackToKeyboard = { hideEmojiPanel() }
-                onDeletePressed = {
-                    currentInputConnection?.deleteSurroundingText(1, 0)
+        try {
+            if (emojiPanel == null) {
+                emojiPanel = EmojiPanelView(this).apply {
+                    onEmojiSelected = { emoji ->
+                        currentInputConnection?.commitText(emoji, 1)
+                    }
+                    onBackToKeyboard = { hideEmojiPanel() }
+                    onDeletePressed = {
+                        currentInputConnection?.deleteSurroundingText(1, 0)
+                    }
                 }
             }
+            setInputView(emojiPanel)
+        } catch (e: Exception) {
+            emojiPanel = null
+            android.util.Log.e("CodeKeyboard", "emoji panel failed: $e")
         }
-        setInputView(emojiPanel)
     }
 
     private fun hideEmojiPanel() {
+        emojiPanel = null
         setInputView(onCreateInputView())
     }
 

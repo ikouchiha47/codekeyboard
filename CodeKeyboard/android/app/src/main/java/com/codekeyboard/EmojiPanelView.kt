@@ -319,18 +319,20 @@ class EmojiPanelView(context: Context) : LinearLayout(context) {
 
     // ── Data loading ──────────────────────────────────────────────────────────
 
-    private val CATEGORY_ICONS = mapOf(
-        "Smileys & Emotion"  to "😀",
-        "People & Body"      to "👋",
-        "Animals & Nature"   to "🐶",
-        "Food & Drink"       to "🍔",
-        "Travel & Places"    to "✈️",
-        "Activities"         to "⚽",
-        "Objects"            to "💡",
-        "Symbols"            to "❤️",
-        "Flags"              to "🏳️",
-        "Component"          to "🎨",
-    )
+    companion object {
+        private val CATEGORY_ICONS = mapOf(
+            "Smileys & Emotion"  to "😀",
+            "People & Body"      to "👋",
+            "Animals & Nature"   to "🐶",
+            "Food & Drink"       to "🍔",
+            "Travel & Places"    to "✈️",
+            "Activities"         to "⚽",
+            "Objects"            to "💡",
+            "Symbols"            to "❤️",
+            "Flags"              to "🏳️",
+            "Component"          to "🎨",
+        )
+    }
 
     private fun loadEmoji(context: Context): List<Category> {
         val stream: InputStream = context.assets.open("emoji.json")
