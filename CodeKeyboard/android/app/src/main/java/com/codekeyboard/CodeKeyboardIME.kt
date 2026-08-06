@@ -31,6 +31,8 @@ class CodeKeyboardIME : InputMethodService() {
     private var supportsComposing = true
     private val flushExecutor = Executors.newSingleThreadExecutor()
     private var emojiPanel: EmojiPanelView? = null
+    private lateinit var bigramModel: BigramModel
+    private var prevCommittedWord = ""
 
     // ── Emoji panel ───────────────────────────────────────────────────────────
 
@@ -90,6 +92,7 @@ class CodeKeyboardIME : InputMethodService() {
         suggestionStrategy = MergedSuggestionStrategy(userTrie, trie)
         wordLearner = WordLearner(userTrie) { word -> trie.suggest(word, 1).firstOrNull() == word }
         Metrics.client = LogMetrics
+        bigramModel = BigramModel(this).also { it.load() }
     }
 
     override fun onCreateInputView(): View {
@@ -152,6 +155,7 @@ class CodeKeyboardIME : InputMethodService() {
             else -> true
         }
         composing.clear()
+        prevCommittedWord = ""
         currentInputConnection?.finishComposingText()
         if (::suggestionBar.isInitialized) suggestionBar.clear()
     }
@@ -251,7 +255,12 @@ class CodeKeyboardIME : InputMethodService() {
                 }
             }
             "tab"         -> { flushComposing(ic); sendDownUp(ic, KeyEvent.KEYCODE_TAB) }
-            "space"       -> { flushComposing(ic); ic?.commitText(" ", 1) }
+            "space"       -> {
+                flushComposing(ic)
+                ic?.commitText(" ", 1)
+                val next = bigramModel.nextWords(prevCommittedWord, n = 5)
+                if (next.isNotEmpty()) suggestionBar.update("", next)
+            }
             "emoji"       -> showEmojiPanel()
             "escape"      -> sendDownUp(ic, KeyEvent.KEYCODE_ESCAPE)
             "arrow-left"  -> sendDownUp(ic, KeyEvent.KEYCODE_DPAD_LEFT)
@@ -425,6 +434,8 @@ class CodeKeyboardIME : InputMethodService() {
             Metrics.histogram("keyboard.word.keystrokes", keystrokesSinceCommit.toDouble(),
                 "method" to "typed")
             Metrics.incr("keyboard.word.committed", "method" to "typed")
+            if (prevCommittedWord.isNotEmpty()) bigramModel.recordTransition(prevCommittedWord, word)
+            prevCommittedWord = word
         }
         keystrokesSinceCommit = 0
         suggestionBar.clear()
@@ -440,8 +451,12 @@ class CodeKeyboardIME : InputMethodService() {
         Metrics.histogram("keyboard.word.keystrokes", keystrokesSinceCommit.toDouble(),
             "method" to "suggestion")
         Metrics.incr("keyboard.word.committed", "method" to "suggestion")
+        if (prevCommittedWord.isNotEmpty()) bigramModel.recordTransition(prevCommittedWord, word)
+        prevCommittedWord = word
         keystrokesSinceCommit = 0
-        suggestionBar.clear()
+        // Show next-word suggestions immediately after tap
+        val next = bigramModel.nextWords(word, n = 5)
+        if (next.isNotEmpty()) suggestionBar.update("", next) else suggestionBar.clear()
     }
 
 private val PUNCTUATION = setOf(
