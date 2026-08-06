@@ -60,3 +60,20 @@ class MergedSuggestionStrategy(
 class BaseSuggestionStrategy(private val baseTrie: Trie) : SuggestionStrategy {
     override fun suggest(prefix: String, k: Int): List<String> = baseTrie.suggest(prefix, k)
 }
+
+// Wraps an existing strategy and promotes bigram candidates to the top when context is set.
+class BigramAwareSuggestionStrategy(
+    private val base: SuggestionStrategy,
+    private val bigram: BigramModel,
+) : SuggestionStrategy {
+
+    var prevWord: String = ""
+
+    override fun suggest(prefix: String, k: Int): List<String> {
+        val baseResults = base.suggest(prefix, k + 5)
+        if (prevWord.isEmpty()) return baseResults.take(k)
+        val bigramMatches = bigram.nextWords(prevWord, prefix = prefix, n = k)
+        val promoted = bigramMatches + baseResults.filter { it !in bigramMatches }
+        return promoted.take(k)
+    }
+}

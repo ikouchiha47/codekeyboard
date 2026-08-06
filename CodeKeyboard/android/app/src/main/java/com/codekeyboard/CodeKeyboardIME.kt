@@ -89,10 +89,11 @@ class CodeKeyboardIME : InputMethodService() {
         SnippetStore.init()
         trie = Trie.load(this)
         userTrie = UserTrie.load(File(filesDir, "user.trie"))
-        suggestionStrategy = MergedSuggestionStrategy(userTrie, trie)
+        bigramModel = BigramModel(this).also { it.load() }
+        suggestionStrategy = BigramAwareSuggestionStrategy(
+            MergedSuggestionStrategy(userTrie, trie), bigramModel)
         wordLearner = WordLearner(userTrie) { word -> trie.suggest(word, 1).firstOrNull() == word }
         Metrics.client = LogMetrics
-        bigramModel = BigramModel(this).also { it.load() }
     }
 
     override fun onCreateInputView(): View {
@@ -436,6 +437,7 @@ class CodeKeyboardIME : InputMethodService() {
             Metrics.incr("keyboard.word.committed", "method" to "typed")
             if (prevCommittedWord.isNotEmpty()) bigramModel.recordTransition(prevCommittedWord, word)
             prevCommittedWord = word
+            (suggestionStrategy as? BigramAwareSuggestionStrategy)?.prevWord = word
         }
         keystrokesSinceCommit = 0
         suggestionBar.clear()
@@ -453,6 +455,7 @@ class CodeKeyboardIME : InputMethodService() {
         Metrics.incr("keyboard.word.committed", "method" to "suggestion")
         if (prevCommittedWord.isNotEmpty()) bigramModel.recordTransition(prevCommittedWord, word)
         prevCommittedWord = word
+        (suggestionStrategy as? BigramAwareSuggestionStrategy)?.prevWord = word
         keystrokesSinceCommit = 0
         // Show next-word suggestions immediately after tap
         val next = bigramModel.nextWords(word, n = 5)

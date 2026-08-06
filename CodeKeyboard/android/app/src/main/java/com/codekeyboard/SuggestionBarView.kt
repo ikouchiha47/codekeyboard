@@ -28,7 +28,13 @@ class SuggestionBarView(context: Context) : HorizontalScrollView(context) {
     // slot 0 = typed word (blue, committed as-is)
     // slots 1..N = suggestions (grey)
     fun update(word: String, suggestions: List<String>) {
-        if (word.isEmpty()) { clear(); return }
+        if (word.isEmpty()) {
+            // Bigram next-word suggestions — no composing word, show suggestions only
+            if (suggestions.isEmpty()) { clear(); return }
+            val dp = context.resources.displayMetrics.density
+            rebuildSlots(suggestions, dp)
+            return
+        }
         val dp = context.resources.displayMetrics.density
         val items = mutableListOf(word) + suggestions.filter { it != word }
         rebuildSlots(items, dp)
