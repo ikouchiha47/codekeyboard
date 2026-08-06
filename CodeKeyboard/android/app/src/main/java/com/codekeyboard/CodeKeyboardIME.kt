@@ -145,6 +145,27 @@ class CodeKeyboardIME : InputMethodService() {
         return wrapper
     }
 
+    // Called by the framework whenever the selection or composing region changes.
+    // If the cursor moved outside the active composing region (user tapped elsewhere),
+    // abandon composing so the next character is inserted at the real cursor position
+    // rather than replacing the stale composing region.
+    override fun onUpdateSelection(
+        oldSelStart: Int, oldSelEnd: Int,
+        newSelStart: Int, newSelEnd: Int,
+        candidatesStart: Int, candidatesEnd: Int,
+    ) {
+        super.onUpdateSelection(oldSelStart, oldSelEnd, newSelStart, newSelEnd, candidatesStart, candidatesEnd)
+        if (composing.text.isEmpty()) return
+        val cursorOutsideComposing = candidatesStart == -1 || candidatesEnd == -1 ||
+            newSelStart < candidatesStart || newSelStart > candidatesEnd ||
+            newSelEnd   < candidatesStart || newSelEnd   > candidatesEnd
+        if (cursorOutsideComposing) {
+            currentInputConnection?.finishComposingText()
+            composing.clear()
+            if (::suggestionBar.isInitialized) suggestionBar.clear()
+        }
+    }
+
     override fun onStartInput(editorInfo: EditorInfo?, restarting: Boolean) {
         super.onStartInput(editorInfo, restarting)
         CodeKeyboardModuleHolder.module?.inputConnection = currentInputConnection

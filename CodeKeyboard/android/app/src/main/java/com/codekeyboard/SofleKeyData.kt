@@ -68,7 +68,7 @@ object SofleKeyData {
         right = listOf(
             listOf(k("6", shift="^"), k("7", shift="&"), k("8", shift="*"),
                    k("9", shift="("), k("0", shift=")")),
-            listOf(k("/", shift="?"), k(";", shift=":"), k("'", shift="\""),
+            listOf(k("/", shift="?"), k(":", shift=";"), k("'", shift="\""),
                    k("<"), k(">")),
             listOf(k("!"), k("@"), k("#"), k("$"), k("Del","delete")),
             listOf(k("RSE","raise"), k("Enter","enter"), k("Spc","space"),
