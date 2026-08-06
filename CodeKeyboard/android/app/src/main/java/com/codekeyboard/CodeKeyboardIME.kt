@@ -27,6 +27,7 @@ class CodeKeyboardIME : InputMethodService() {
     private lateinit var wordLearner: WordLearner
     private val kbState = KeyboardState()
     private val composing = ComposingBuffer()
+    private var keystrokesSinceCommit = 0
     private var supportsComposing = true
     private val flushExecutor = Executors.newSingleThreadExecutor()
     private var emojiPanel: EmojiPanelView? = null
@@ -88,6 +89,7 @@ class CodeKeyboardIME : InputMethodService() {
         userTrie = UserTrie.load(File(filesDir, "user.trie"))
         suggestionStrategy = MergedSuggestionStrategy(userTrie, trie)
         wordLearner = WordLearner(userTrie) { word -> trie.suggest(word, 1).firstOrNull() == word }
+        Metrics.client = LogMetrics
     }
 
     override fun onCreateInputView(): View {
@@ -321,11 +323,13 @@ class CodeKeyboardIME : InputMethodService() {
                         }
                     }
                     if (supportsComposing && text == ";") {
+                        keystrokesSinceCommit++
                         val word = composing.append(";")
                         ic?.setComposingText(word, 1)
                         val suggestions = SnippetStore.matching("")
                         suggestionBar.update(word, suggestions)
                     } else if (supportsComposing && text.length == 1 && !isPunctuation(text[0])) {
+                        keystrokesSinceCommit++
                         val word = composing.append(text)
                         ic?.setComposingText(word, 1)
                         val suggestions = if (word.startsWith(";")) {
@@ -418,7 +422,11 @@ class CodeKeyboardIME : InputMethodService() {
             wordLearner.learnFromFlush(word)
             kbState.onCharCommitted()
             keyboardView.notifyStateChanged(kbState)
+            Metrics.histogram("keyboard.word.keystrokes", keystrokesSinceCommit.toDouble(),
+                "method" to "typed")
+            Metrics.incr("keyboard.word.committed", "method" to "typed")
         }
+        keystrokesSinceCommit = 0
         suggestionBar.clear()
     }
 
@@ -429,6 +437,10 @@ class CodeKeyboardIME : InputMethodService() {
         wordLearner.learnFromTap(word)
         kbState.onCharCommitted()
         keyboardView.notifyStateChanged(kbState)
+        Metrics.histogram("keyboard.word.keystrokes", keystrokesSinceCommit.toDouble(),
+            "method" to "suggestion")
+        Metrics.incr("keyboard.word.committed", "method" to "suggestion")
+        keystrokesSinceCommit = 0
         suggestionBar.clear()
     }
 

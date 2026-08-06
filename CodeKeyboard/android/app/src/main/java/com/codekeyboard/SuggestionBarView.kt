@@ -42,11 +42,13 @@ class SuggestionBarView(context: Context) : HorizontalScrollView(context) {
     private fun rebuildSlots(items: List<String>, dp: Float) {
         row.removeAllViews()
         slots.clear()
-        val slotWidth = (96 * dp).toInt()
         items.forEachIndexed { i, text ->
             if (i > 0) row.addView(makeDivider(dp))
             val tv = TextView(context).apply {
-                layoutParams = LinearLayout.LayoutParams(slotWidth, LinearLayout.LayoutParams.MATCH_PARENT)
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                    LinearLayout.LayoutParams.MATCH_PARENT
+                )
                 gravity = Gravity.CENTER
                 setTextColor(
                     if (i == 0) Color.parseColor("#4a9eff")
@@ -55,10 +57,9 @@ class SuggestionBarView(context: Context) : HorizontalScrollView(context) {
                 typeface = android.graphics.Typeface.MONOSPACE
                 textSize = 14f
                 isSingleLine = true
-                ellipsize = android.text.TextUtils.TruncateAt.END
                 setPadding(
-                    (8 * dp).toInt(), (6 * dp).toInt(),
-                    (8 * dp).toInt(), (6 * dp).toInt()
+                    (12 * dp).toInt(), (6 * dp).toInt(),
+                    (12 * dp).toInt(), (6 * dp).toInt()
                 )
                 this.text = text
                 setOnClickListener { onSlotTapped?.invoke(text) }
