@@ -19,6 +19,7 @@ class CodeKeyboardIME : InputMethodService() {
     private lateinit var trie: Trie
     private lateinit var userTrie: UserTrie
     private lateinit var suggestionStrategy: SuggestionStrategy
+    private lateinit var wordLearner: WordLearner
     private val kbState = KeyboardState()
     private val composing = ComposingBuffer()
     private var supportsComposing = true
@@ -43,6 +44,7 @@ class CodeKeyboardIME : InputMethodService() {
         trie = Trie.load(this)
         userTrie = UserTrie.load(File(filesDir, "user.trie"))
         suggestionStrategy = MergedSuggestionStrategy(userTrie, trie)
+        wordLearner = WordLearner(userTrie) { word -> trie.suggest(word, 1).firstOrNull() == word }
     }
 
     override fun onCreateInputView(): View {
@@ -343,7 +345,7 @@ class CodeKeyboardIME : InputMethodService() {
         val word = composing.flush()
         if (word.isNotEmpty()) {
             ic?.commitText(word, 1)
-            if (!word.startsWith(";") && word.length > 1) userTrie.insert(word)
+            wordLearner.learnFromFlush(word)
             kbState.onCharCommitted()
             keyboardView.notifyStateChanged(kbState)
         }
@@ -355,7 +357,7 @@ class CodeKeyboardIME : InputMethodService() {
         ic.finishComposingText()
         ic.commitText("$word ", 1)
         composing.clear()
-        if (!word.startsWith(";") && word.length > 1) userTrie.insert(word)
+        wordLearner.learnFromTap(word)
         kbState.onCharCommitted()
         keyboardView.notifyStateChanged(kbState)
         suggestionBar.clear()
