@@ -22,6 +22,15 @@ class EmojiPanelView(context: Context) : LinearLayout(context) {
     var onBackToKeyboard: (() -> Unit)? = null
     var onDeletePressed: (() -> Unit)? = null
 
+    // Cap our height to the screen's keyboard slot so we never bleed into system nav.
+    // The IME window is sized to the keyboard height; MATCH_PARENT on a ScrollView
+    // reports unbounded height and the framework lets the window grow full-screen.
+    override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+        val maxH = resources.displayMetrics.heightPixels / 3
+        val h = MeasureSpec.makeMeasureSpec(maxH, MeasureSpec.AT_MOST)
+        super.onMeasure(widthMeasureSpec, h)
+    }
+
     private data class EmojiEntry(val base: String, val variants: List<String>)
     private data class Category(val name: String, val icon: String, val emoji: List<EmojiEntry>)
 
