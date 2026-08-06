@@ -64,6 +64,26 @@ class Trie private constructor(private val buf: ByteBuffer) {
         return idx
     }
 
+    // ── Internal API for FuzzyTrieSearch ─────────────────────────────────────
+
+    internal val rootIdx: Int = 0
+
+    internal fun isTerminal(nodeIdx: Int): Boolean =
+        (nodeFlags(nodeIdx) and 1) != 0
+
+    internal fun iterateChildren(nodeIdx: Int, block: (Char, Int) -> Unit) {
+        val flags = nodeFlags(nodeIdx)
+        if (flags and 2 == 0) return
+        val blockOff = childrenBase + childrenBlockOffset(nodeIdx)
+        val childCount = buf.get(blockOff).toInt() and 0xFF
+        for (i in 0 until childCount) {
+            val base = blockOff + 1 + i * 3
+            val ch = (buf.get(base).toInt() and 0xFF).toChar()
+            val cidx = buf.getShort(base + 1).toInt() and 0xFFFF
+            block(ch, cidx)
+        }
+    }
+
     // Returns true if word exists as a complete word in the trie.
     fun has(word: String): Boolean {
         if (word.isEmpty()) return false
