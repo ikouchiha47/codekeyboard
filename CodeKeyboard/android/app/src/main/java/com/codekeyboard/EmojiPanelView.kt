@@ -16,15 +16,16 @@ import android.widget.TextView
 import org.json.JSONArray
 import java.io.InputStream
 
-class EmojiPanelView(context: Context, private val fixedHeightPx: Int = 0) : LinearLayout(context) {
+class EmojiPanelView(
+    context: Context,
+    private val fixedHeightPx: Int = 0,
+    private val navPaddingPx: Int = 0,
+) : LinearLayout(context) {
 
     var onEmojiSelected: ((String) -> Unit)? = null
     var onBackToKeyboard: (() -> Unit)? = null
     var onDeletePressed: (() -> Unit)? = null
 
-    // Pin height to exactly the keyboard height passed in (measured from the live keyboard view).
-    // This ensures the emoji panel ends at the same boundary as the regular keyboard,
-    // keeping Android's system IME controls (globe, minimize) below our window — not on top.
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         val h = if (fixedHeightPx > 0)
             MeasureSpec.makeMeasureSpec(fixedHeightPx, MeasureSpec.EXACTLY)
@@ -100,7 +101,7 @@ class EmojiPanelView(context: Context, private val fixedHeightPx: Int = 0) : Lin
         })
 
         // ── Bottom bar ────────────────────────────────────────────────────────
-        addView(buildBottomBar(context, dp))
+        addView(buildBottomBar(context, dp, navPaddingPx))
     }
 
     // ── Tab bar ───────────────────────────────────────────────────────────────
@@ -117,6 +118,7 @@ class EmojiPanelView(context: Context, private val fixedHeightPx: Int = 0) : Lin
         val row = LinearLayout(context).apply {
             orientation = HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
+            layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, tabPx)
         }
 
         categories.forEachIndexed { i, cat ->
@@ -124,7 +126,7 @@ class EmojiPanelView(context: Context, private val fixedHeightPx: Int = 0) : Lin
                 text = cat.icon
                 textSize = TAB_FONT_SP
                 gravity = Gravity.CENTER
-                layoutParams = LayoutParams(tabPx, tabPx)
+                layoutParams = LayoutParams(0, tabPx, 1f)
                 isClickable = true
                 isFocusable = true
                 setOnClickListener { selectTab(i, dp) }
@@ -278,15 +280,17 @@ class EmojiPanelView(context: Context, private val fixedHeightPx: Int = 0) : Lin
 
     // ── Bottom bar ────────────────────────────────────────────────────────────
 
-    private fun buildBottomBar(context: Context, dp: Float): View {
+    private fun buildBottomBar(context: Context, dp: Float, navPaddingPx: Int): View {
         val barH = (52 * dp).toInt()
 
         val bar = LinearLayout(context).apply {
             orientation = HORIZONTAL
             setBackgroundColor(BG_BAR)
             gravity = Gravity.CENTER_VERTICAL
-            layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, barH)
-            setPadding((8 * dp).toInt(), 0, (8 * dp).toInt(), 0)
+            layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, barH + navPaddingPx)
+            // Bottom padding = navBarHeight so ABC/backspace stay above the zone where
+            // Android draws its system IME controls (globe, minimize/close).
+            setPadding((8 * dp).toInt(), 0, (8 * dp).toInt(), navPaddingPx)
         }
 
         // ABC button

@@ -30,13 +30,17 @@ class CodeKeyboardIME : InputMethodService() {
 
     private fun showEmojiPanel() {
         try {
-            // Measure the live keyboard height so the emoji panel is exactly the same
-            // size — this ensures it ends at the same boundary above the system nav strip
-            // where Android draws its IME controls (globe, minimize).
-            val kbHeight = keyboardView.measuredHeight + suggestionBar.measuredHeight
+            // The regular keyboard wrapper has setPadding(0,0,0,navBarHeight) which leaves
+            // space at the bottom for the system IME controls (globe, minimize). We must
+            // use the WRAPPER's full height (children + that padding) and apply the same
+            // bottom padding inside the emoji panel so our content never enters that zone.
+            val wrapper = keyboardView.parent as? android.view.View
+            val kbHeight = wrapper?.height
+                ?: (keyboardView.height + suggestionBar.height + getNavBarHeight())
+            val navPad = getNavBarHeight() + (12 * resources.displayMetrics.density).toInt()
 
             if (emojiPanel == null || emojiPanel?.tag != kbHeight) {
-                emojiPanel = EmojiPanelView(this, kbHeight).apply {
+                emojiPanel = EmojiPanelView(this, kbHeight, navPad).apply {
                     tag = kbHeight
                     onEmojiSelected = { emoji ->
                         currentInputConnection?.commitText(emoji, 1)
