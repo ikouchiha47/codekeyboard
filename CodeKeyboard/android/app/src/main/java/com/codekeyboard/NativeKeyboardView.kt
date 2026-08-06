@@ -109,9 +109,19 @@ class NativeKeyboardView @JvmOverloads constructor(
 
     // ── Draw ──────────────────────────────────────────────────────────────────
 
-    private val density     = resources.displayMetrics.density
-    private val cornerR     = 8f * density
-    private val drawRect    = RectF()   // reused per key to avoid allocation
+    private val density       = resources.displayMetrics.density
+    private val cornerR       = 8f * density
+    private val hitExpandPx   = density * HIT_EXPAND_DP
+    private val drawRect      = RectF()   // reused per key to avoid allocation
+
+    var debugHitRects: Boolean = false
+
+    private val hitRectPaint = Paint().apply {
+        color = Color.parseColor("#ff0000")
+        style = Paint.Style.STROKE
+        strokeWidth = 1.5f
+        isAntiAlias = true
+    }
 
     private val bgPaint     = Paint().apply { color = Color.parseColor("#111111"); style = Paint.Style.FILL }
     private val keyPaint    = Paint().apply { color = Color.parseColor("#2c2c2c"); style = Paint.Style.FILL; isAntiAlias = true }
@@ -210,6 +220,12 @@ class NativeKeyboardView @JvmOverloads constructor(
         if (key.shift != null && !state.isShiftActive && !state.isCapsActive) {
             subPaint.textSize = (kr.height * 0.18f).coerceIn(density * 6f, density * 9f)
             canvas.drawText(key.shift, kr.right - density * 3f, kr.top + subPaint.textSize + density, subPaint)
+        }
+
+        // ── Debug hit rect ────────────────────────────────────────────────────
+        if (debugHitRects) {
+            canvas.drawRect(kr.left - hitExpandPx, kr.top - hitExpandPx,
+                            kr.right + hitExpandPx, kr.bottom + hitExpandPx, hitRectPaint)
         }
     }
 
@@ -368,7 +384,8 @@ class NativeKeyboardView @JvmOverloads constructor(
         var bestDist = Float.MAX_VALUE
         for (pk in keys) {
             val kr = pk.rect
-            if (kr.contains(x, y)) return pk.key
+            if (x >= kr.left - hitExpandPx && x <= kr.right + hitExpandPx &&
+                y >= kr.top - hitExpandPx && y <= kr.bottom + hitExpandPx) return pk.key
             val dx = maxOf(kr.left - x, 0f, x - kr.right)
             val dy = maxOf(kr.top - y, 0f, y - kr.bottom)
             val dist = dx * dx + dy * dy
@@ -395,5 +412,6 @@ class NativeKeyboardView @JvmOverloads constructor(
         private const val REPEAT_INTERVAL_MS = 50L
         private const val TAPPING_TERM_MS = 150L
         // Snap radius is now computed dynamically via SofleLayoutComputer.maxSafeSnapPx
+        private const val HIT_EXPAND_DP = 2.5f
     }
 }
