@@ -16,18 +16,23 @@ import android.widget.TextView
 import org.json.JSONArray
 import java.io.InputStream
 
-class EmojiPanelView(context: Context) : LinearLayout(context) {
+class EmojiPanelView(context: Context, private val fixedHeightPx: Int = 0) : LinearLayout(context) {
 
     var onEmojiSelected: ((String) -> Unit)? = null
     var onBackToKeyboard: (() -> Unit)? = null
     var onDeletePressed: (() -> Unit)? = null
 
-    // Cap our height to the screen's keyboard slot so we never bleed into system nav.
-    // The IME window is sized to the keyboard height; MATCH_PARENT on a ScrollView
-    // reports unbounded height and the framework lets the window grow full-screen.
+    // Pin height to exactly the keyboard height passed in (measured from the live keyboard view).
+    // This ensures the emoji panel ends at the same boundary as the regular keyboard,
+    // keeping Android's system IME controls (globe, minimize) below our window — not on top.
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
-        val maxH = resources.displayMetrics.heightPixels / 3
-        val h = MeasureSpec.makeMeasureSpec(maxH, MeasureSpec.AT_MOST)
+        val h = if (fixedHeightPx > 0)
+            MeasureSpec.makeMeasureSpec(fixedHeightPx, MeasureSpec.EXACTLY)
+        else
+            MeasureSpec.makeMeasureSpec(
+                resources.displayMetrics.heightPixels / 3,
+                MeasureSpec.AT_MOST
+            )
         super.onMeasure(widthMeasureSpec, h)
     }
 
@@ -209,7 +214,7 @@ class EmojiPanelView(context: Context) : LinearLayout(context) {
             if (remaining != 0) {
                 repeat(COLS - remaining) {
                     row!!.addView(View(context).apply {
-                        layoutParams = LayoutParams(cellPx, cellPx)
+                        layoutParams = LayoutParams(0, cellPx, 1f)
                     })
                 }
             }
@@ -223,7 +228,8 @@ class EmojiPanelView(context: Context) : LinearLayout(context) {
             text = entry.base
             textSize = FONT_SP
             gravity = Gravity.CENTER
-            layoutParams = LayoutParams(cellPx, cellPx)
+            // width=0 + weight=1 so 8 cells divide the row width exactly — no trailing gap
+            layoutParams = LayoutParams(0, cellPx, 1f)
             isClickable = true
             isFocusable = true
             setOnClickListener {

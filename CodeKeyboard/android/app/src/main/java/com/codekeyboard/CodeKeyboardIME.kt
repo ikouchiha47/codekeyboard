@@ -30,8 +30,14 @@ class CodeKeyboardIME : InputMethodService() {
 
     private fun showEmojiPanel() {
         try {
-            if (emojiPanel == null) {
-                emojiPanel = EmojiPanelView(this).apply {
+            // Measure the live keyboard height so the emoji panel is exactly the same
+            // size — this ensures it ends at the same boundary above the system nav strip
+            // where Android draws its IME controls (globe, minimize).
+            val kbHeight = keyboardView.measuredHeight + suggestionBar.measuredHeight
+
+            if (emojiPanel == null || emojiPanel?.tag != kbHeight) {
+                emojiPanel = EmojiPanelView(this, kbHeight).apply {
+                    tag = kbHeight
                     onEmojiSelected = { emoji ->
                         currentInputConnection?.commitText(emoji, 1)
                     }
