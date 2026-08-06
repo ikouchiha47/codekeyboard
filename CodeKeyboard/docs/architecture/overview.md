@@ -54,6 +54,7 @@
 | plan-phase2-trie.md | Detailed breakdown: TRIE2 format spec, Trie.kt, test cases |
 | plan-phase3-suggestion-bar.md | Detailed breakdown: SuggestionBarView, slot logic, RN suppression |
 | plan-phase4-snippets.md | Detailed breakdown: SnippetStore, ; trigger, edge cases, RN settings UI |
+| plan-phase5-user-trie.md | Detailed breakdown: TRIE3 format, mutable UserTrie, best-first traversal, background flush, benchmarks |
 
 ## What is transitional (will be removed)
 
