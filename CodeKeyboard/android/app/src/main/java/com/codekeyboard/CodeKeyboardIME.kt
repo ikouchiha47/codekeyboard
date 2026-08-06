@@ -9,15 +9,19 @@ import android.view.inputmethod.InputConnection
 import android.view.KeyEvent
 import android.widget.LinearLayout
 import android.text.InputType
+import java.io.File
+import java.util.concurrent.Executors
 
 class CodeKeyboardIME : InputMethodService() {
 
     private lateinit var keyboardView: NativeKeyboardView
     private lateinit var suggestionBar: SuggestionBarView
     private lateinit var trie: Trie
+    private lateinit var userTrie: UserTrie
     private val kbState = KeyboardState()
     private val composing = ComposingBuffer()
     private var supportsComposing = true
+    private val flushExecutor = Executors.newSingleThreadExecutor()
 
     // Modifier name → KeyEvent meta flag — extend this map to add new modifiers.
     private val MODIFIER_META_FLAGS = mapOf(
@@ -36,6 +40,7 @@ class CodeKeyboardIME : InputMethodService() {
         KeyboardSettings.init(this)
         SnippetStore.init()
         trie = Trie.load(this)
+        userTrie = UserTrie.load(File(filesDir, "user.trie"))
     }
 
     override fun onCreateInputView(): View {
@@ -107,6 +112,14 @@ class CodeKeyboardIME : InputMethodService() {
         currentInputConnection?.finishComposingText()
         composing.clear()
         if (::suggestionBar.isInitialized) suggestionBar.clear()
+        scheduleUserTrieFlush()
+    }
+
+    private fun scheduleUserTrieFlush() {
+        if (!::userTrie.isInitialized) return
+        val snapshot = userTrie
+        val target = File(filesDir, "user.trie")
+        flushExecutor.submit { snapshot.save(target) }
     }
 
     private fun isPasswordField(info: EditorInfo): Boolean {
@@ -153,7 +166,7 @@ class CodeKeyboardIME : InputMethodService() {
                         val suggestions = if (word.startsWith(";")) {
                             SnippetStore.matching(word.drop(1))
                         } else {
-                            trie.suggest(word, 5)
+                            mergeSuggestions(word, 5)
                         }
                         suggestionBar.update(word, suggestions)
                     }
@@ -260,7 +273,7 @@ class CodeKeyboardIME : InputMethodService() {
                         val suggestions = if (word.startsWith(";")) {
                             SnippetStore.matching(word.drop(1))
                         } else {
-                            trie.suggest(word, 5)
+                            mergeSuggestions(word, 5)
                         }
                         suggestionBar.update(word, suggestions)
                     } else {
@@ -328,6 +341,7 @@ class CodeKeyboardIME : InputMethodService() {
         val word = composing.flush()
         if (word.isNotEmpty()) {
             ic?.commitText(word, 1)
+            if (!word.startsWith(";") && word.length > 1) userTrie.insert(word)
             kbState.onCharCommitted()
             keyboardView.notifyStateChanged(kbState)
         }
@@ -339,9 +353,19 @@ class CodeKeyboardIME : InputMethodService() {
         ic.finishComposingText()
         ic.commitText("$word ", 1)
         composing.clear()
+        if (!word.startsWith(";") && word.length > 1) userTrie.insert(word)
         kbState.onCharCommitted()
         keyboardView.notifyStateChanged(kbState)
         suggestionBar.clear()
+    }
+
+    private fun mergeSuggestions(prefix: String, k: Int): List<String> {
+        val userResults = userTrie.suggest(prefix, k)
+        val baseResults = trie.suggest(prefix, k)
+        val userWords = userResults.map { it.word }.toSet()
+        val merged = userResults.map { it.word } +
+            baseResults.filter { it !in userWords }
+        return merged.take(k)
     }
 
     private val PUNCTUATION = setOf(
