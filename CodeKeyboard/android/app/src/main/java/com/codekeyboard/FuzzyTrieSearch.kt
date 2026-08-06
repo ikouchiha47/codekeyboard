@@ -22,7 +22,7 @@ class UserTrieAdapter(trie: UserTrie) : TrieAdapter<UserTrieNode> {
 class BaseTrieAdapter(private val trie: Trie) : TrieAdapter<Int> {
     override val root: Int = trie.rootIdx
     override fun isTerminal(node: Int) = trie.isTerminal(node)
-    override fun frequency(node: Int) = 0
+    override fun frequency(node: Int) = trie.nodeFrequency(node)
     override fun iterateChildren(node: Int, block: (Char, Int) -> Unit) =
         trie.iterateChildren(node, block)
 }
