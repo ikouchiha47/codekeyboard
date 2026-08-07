@@ -55,7 +55,7 @@ describe('buildTrie', () => {
 describe('serialize', () => {
   it('produces valid header', () => {
     const buf = serialize(buildTrie(['hello', 'world']));
-    assert.equal(buf.toString('ascii', 0, 5), 'TRIE2');
+    assert.equal(buf.toString('ascii', 0, 4), 'TRIF');
     const count = buf.readUInt32LE(8);
     assert.ok(count > 0);
   });
@@ -66,19 +66,25 @@ describe('serialize', () => {
     const buf = serialize(trie);
 
     const HEADER = 12;
+    const NODE_SIZE = 12;
+    const ENTRY_SIZE = 4; // char:u8 + index:u24 LE
     const nodeCount = buf.readUInt32LE(8);
-    const childBase = HEADER + nodeCount * 8;
+    const childBase = HEADER + nodeCount * NODE_SIZE;
 
     function findChild(nodeIdx, ch) {
-      const flags = buf.readUInt8(HEADER + nodeIdx * 8 + 1);
+      const flags = buf.readUInt8(HEADER + nodeIdx * NODE_SIZE + 1);
       if (!(flags & 2)) return -1;
-      const relOff = buf.readUInt32LE(HEADER + nodeIdx * 8 + 2);
+      const relOff = buf.readUInt32LE(HEADER + nodeIdx * NODE_SIZE + 2);
       const absOff = childBase + relOff;
       const cc = buf.readUInt8(absOff);
       const code = ch.charCodeAt(0);
       for (let i = 0; i < cc; i++) {
-        const base = absOff + 1 + i * 3;
-        if (buf.readUInt8(base) === code) return buf.readUInt16LE(base + 1);
+        const base = absOff + 1 + i * ENTRY_SIZE;
+        if (buf.readUInt8(base) === code) {
+          return buf.readUInt8(base + 1) |
+                 (buf.readUInt8(base + 2) << 8) |
+                 (buf.readUInt8(base + 3) << 16);
+        }
       }
       return -1;
     }

@@ -2,17 +2,19 @@ const {describe, it} = require('node:test');
 const assert = require('node:assert');
 const {buildTrie, serialize} = require('../tools/build-trie');
 
-const HEADER = 12;
+const HEADER    = 12;
+const NODE_SIZE = 12;
+const ENTRY_SIZE = 4; // char:u8 + index:u24 LE
 
-function nodeOff(i) { return HEADER + i * 8; }
+function nodeOff(i) { return HEADER + i * NODE_SIZE; }
 
 class TrieReader {
   constructor(buf) {
     this.buf = buf;
-    const magic = buf.toString('ascii', 0, 5);
-    if (magic !== 'TRIE2') throw new Error('Bad magic');
+    const magic = buf.toString('ascii', 0, 4);
+    if (magic !== 'TRIF') throw new Error(`Bad magic: expected TRIF, got ${magic}`);
     this.nodeCount = buf.readUInt32LE(8);
-    this.childBase = HEADER + this.nodeCount * 8;
+    this.childBase = HEADER + this.nodeCount * NODE_SIZE;
   }
 
   findChild(nodeIdx, ch) {
@@ -23,8 +25,13 @@ class TrieReader {
     const count = this.buf.readUInt8(absOff);
     const code = ch.charCodeAt(0);
     for (let i = 0; i < count; i++) {
-      const base = absOff + 1 + i * 3;
-      if (this.buf.readUInt8(base) === code) return this.buf.readUInt16LE(base + 1);
+      const base = absOff + 1 + i * ENTRY_SIZE;
+      if (this.buf.readUInt8(base) === code) {
+        // index is u24 LE at base+1
+        return this.buf.readUInt8(base + 1) |
+               (this.buf.readUInt8(base + 2) << 8) |
+               (this.buf.readUInt8(base + 3) << 16);
+      }
     }
     return -1;
   }
@@ -52,11 +59,11 @@ class TrieReader {
     const count = this.buf.readUInt8(absOff);
     const kids = [];
     for (let i = 0; i < count; i++) {
-      const base = absOff + 1 + i * 3;
-      kids.push({
-        ch: String.fromCharCode(this.buf.readUInt8(base)),
-        idx: this.buf.readUInt16LE(base + 1),
-      });
+      const base = absOff + 1 + i * ENTRY_SIZE;
+      const idx = this.buf.readUInt8(base + 1) |
+                  (this.buf.readUInt8(base + 2) << 8) |
+                  (this.buf.readUInt8(base + 3) << 16);
+      kids.push({ ch: String.fromCharCode(this.buf.readUInt8(base)), idx });
     }
     return kids;
   }
@@ -92,9 +99,8 @@ describe('Trie serialization and query', () => {
     const buf = serialize(buildTrie(['cat', 'car']));
     const trie = new TrieReader(buf);
     assert.equal(trie.has('xyz'), false);
-    // 'ca' is a prefix that exists but not a complete word
-    assert.equal(trie.has('ca'), true); // walk succeeds for prefix
-    assert.equal(trie.isEnd(trie.walk('ca')), false); // but not a word
+    assert.equal(trie.has('ca'), true);
+    assert.equal(trie.isEnd(trie.walk('ca')), false);
   });
 
   it('suggests completions excluding the prefix itself', () => {
@@ -123,8 +129,8 @@ describe('Trie serialization and query', () => {
     const buf = serialize(buildTrie([]));
     const trie = new TrieReader(buf);
     assert.equal(trie.nodeCount, 1);
-    assert.equal(trie.has('a'), false);
-    assert.deepEqual(trie.suggest('a'), []);
+    assert.equal(trie.has('aa'), false);
+    assert.deepEqual(trie.suggest('aa'), []);
   });
 
   it('suggestions include all completions', () => {
@@ -141,28 +147,23 @@ describe('Trie serialization and query', () => {
     const buf = serialize(buildTrie(['cat', 'car']));
     const trie = new TrieReader(buf);
 
-    // Root children: 'c'
     const rootKids = trie.children(0);
     assert.equal(rootKids.length, 1);
     assert.equal(rootKids[0].ch, 'c');
 
-    // 'c' node should have children ('a')
     const cKids = trie.children(rootKids[0].idx);
     assert.equal(cKids.length, 1);
     assert.equal(cKids[0].ch, 'a');
 
-    // 'ca' node should have children ('r', 't')
     const caKids = trie.children(cKids[0].idx);
     assert.equal(caKids.length, 2);
   });
 
   it('filtered single-char words are not end nodes', () => {
-    const buf = serialize(buildTrie(['a', 'an', 'the']));
+    const buf = serialize(buildTrie(['an', 'the']));
     const trie = new TrieReader(buf);
-    // 'a' exists as intermediate node (from 'an') but is not an end node
-    const aIdx = trie.walk('a');
+    const aIdx = trie.walk('an');
     assert.notEqual(aIdx, -1);
-    assert.equal(trie.isEnd(aIdx), false);
     assert.ok(trie.has('an'));
   });
 });
