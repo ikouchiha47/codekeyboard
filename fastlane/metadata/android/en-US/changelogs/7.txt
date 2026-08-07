@@ -1,0 +1,6 @@
+- Emoji panel with Gboard-style category tabs
+- Skin tone variants on long press
+- Word suggestion bar with fuzzy matching
+- Home-row modifier keys (hold for Ctrl/Alt/Meta/Shift)
+- Function and Adjust layers for media and editor shortcuts
+- Fixed keyboard dismissal and focus handling

@@ -1,0 +1,11 @@
+CodeKeyboard is a programmer-focused Android keyboard inspired by the Sofle split mechanical keyboard layout.
+
+Features:
+- Sofle-style split layout with home-row modifiers (Ctrl, Alt, Meta, Shift on hold)
+- Multiple layers: Base, Lower (symbols/numbers), Raise (navigation/F-keys), Adjust (media), Func (editor shortcuts)
+- Emoji panel with category tabs and skin tone variants
+- Word suggestions with fuzzy matching
+- Dark theme designed for long coding sessions
+- No internet permission, no telemetry, no ads
+
+This is a fully offline, privacy-respecting keyboard. No data ever leaves your device.
