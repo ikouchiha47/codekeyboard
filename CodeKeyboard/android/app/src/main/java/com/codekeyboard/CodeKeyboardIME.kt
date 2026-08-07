@@ -27,6 +27,7 @@ class CodeKeyboardIME : InputMethodService() {
     private lateinit var wordLearner: WordLearner
     private val kbState = KeyboardState()
     private val composing = ComposingBuffer()
+    private var expectSelectionUpdateBy = 0L  // if now < this, onUpdateSelection is IME-driven, not user
     private var keystrokesSinceCommit = 0
     private var supportsComposing = true
     private val flushExecutor = Executors.newSingleThreadExecutor()
@@ -155,11 +156,22 @@ class CodeKeyboardIME : InputMethodService() {
         candidatesStart: Int, candidatesEnd: Int,
     ) {
         super.onUpdateSelection(oldSelStart, oldSelEnd, newSelStart, newSelEnd, candidatesStart, candidatesEnd)
-        if (composing.text.isEmpty()) return
+        val imedriven = android.os.SystemClock.uptimeMillis() < expectSelectionUpdateBy
+        android.util.Log.d("CKB_COMPOSE", "onUpdateSelection: composing='${composing.text}' sel=[$newSelStart,$newSelEnd] candidates=[$candidatesStart,$candidatesEnd] imeDriven=$imedriven")
+        if (composing.text.isEmpty()) {
+            android.util.Log.d("CKB_COMPOSE", "onUpdateSelection: composing empty, skip")
+            return
+        }
+        if (imedriven) {
+            android.util.Log.d("CKB_COMPOSE", "onUpdateSelection: IME-driven update, skip clear")
+            return
+        }
         val cursorOutsideComposing = candidatesStart == -1 || candidatesEnd == -1 ||
             newSelStart < candidatesStart || newSelStart > candidatesEnd ||
             newSelEnd   < candidatesStart || newSelEnd   > candidatesEnd
+        android.util.Log.d("CKB_COMPOSE", "onUpdateSelection: cursorOutsideComposing=$cursorOutsideComposing")
         if (cursorOutsideComposing) {
+            android.util.Log.d("CKB_COMPOSE", "onUpdateSelection: CLEARING composing buffer (was='${composing.text}')")
             currentInputConnection?.finishComposingText()
             composing.clear()
             if (::suggestionBar.isInitialized) suggestionBar.clear()
@@ -244,6 +256,7 @@ class CodeKeyboardIME : InputMethodService() {
                     }
                     composing.backspace() -> {
                         val word = composing.text
+                        android.util.Log.d("CKB_COMPOSE", "backspace: in-composing, buffer now='$word'")
                         ic?.setComposingText(word, 1)
                         val suggestions = if (word.startsWith(";")) {
                             SnippetStore.matching(word.drop(1))
@@ -253,6 +266,7 @@ class CodeKeyboardIME : InputMethodService() {
                         suggestionBar.update(word, suggestions)
                     }
                     else -> {
+                        android.util.Log.d("CKB_COMPOSE", "backspace: composing empty → deleteSurroundingText then recompose")
                         if (ic?.deleteSurroundingText(1, 0) != true) sendDownUp(ic, KeyEvent.KEYCODE_DEL)
                         recomposeWordAtCursor(ic)
                     }
@@ -440,13 +454,17 @@ class CodeKeyboardIME : InputMethodService() {
         ic ?: return
         val before = ic.getTextBeforeCursor(RECOMPOSE_SCAN_CHARS, 0)?.toString() ?: return
         val fragment = before.takeLastWhile { it.isLetterOrDigit() || it == '\'' }
+        android.util.Log.d("CKB_COMPOSE", "recomposeWordAtCursor: before='$before' fragment='$fragment'")
         if (fragment.isEmpty()) return
         val req = android.view.inputmethod.ExtractedTextRequest().apply { token = 0 }
         val absCursor = ic.getExtractedText(req, 0)?.selectionStart ?: return
+        expectSelectionUpdateBy = android.os.SystemClock.uptimeMillis() + 500L
         ic.beginBatchEdit()
         ic.finishComposingText()
+        android.util.Log.d("CKB_COMPOSE", "recomposeWordAtCursor: finishComposingText done, about to setComposingRegion cursor=$absCursor fragment.len=${fragment.length}")
         ic.setComposingRegion(absCursor - fragment.length, absCursor)
         composing.setText(fragment)
+        android.util.Log.d("CKB_COMPOSE", "recomposeWordAtCursor: composing.setText('$fragment') done, endBatchEdit next")
         ic.endBatchEdit()
         val suggestions = suggestionStrategy.suggest(fragment, 5, context = prevCommittedWord)
         suggestionBar.update(fragment, suggestions)

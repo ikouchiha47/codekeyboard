@@ -174,6 +174,27 @@ class FuzzyTrieSearchTest {
         }
     }
 
+    // ── Threshold blind spot: 3-char queries ─────────────────────────────────
+    // FuzzyThreshold.forLength(3) == 0, so fuzzy search is never invoked for
+    // short words. "amd" is edit distance 1 from "and" but will not be corrected.
+
+    @Test fun `amd does NOT suggest and — threshold 0 for 3-char queries`() {
+        insert("and" to 10)
+        val threshold = FuzzyThreshold.forLength("amd".length) // expect 0
+        assertEquals("threshold for length 3 should be 0", 0, threshold)
+        val results = search("amd", threshold)
+        // fuzzy search returns empty at threshold 0 — "and" is never surfaced
+        assertTrue("'and' should not appear because threshold is 0",
+            results.none { it.word == "and" })
+    }
+
+    @Test fun `amd WOULD suggest and if threshold were 1`() {
+        insert("and" to 10)
+        val results = search("amd", threshold = 1)
+        assertTrue("'and' should appear at threshold 1",
+            results.any { it.word == "and" && it.editDistance == 1 })
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private fun levenshtein(a: String, b: String): Int {
