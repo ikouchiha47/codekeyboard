@@ -25,9 +25,16 @@ cd android && ./gradlew assembleRelease --warning-mode all
 6. `./gradlew assembleRelease --console=plain`
 7. `actions/upload-artifact@v4` — uploads `app-release.apk`
 
-# Version Bumping
-- `versionCode` — increment by 1 each release (in `android/app/build.gradle`)
-- `versionName` — bump when shipping visible changes
+# Version Numbering
+Follows **semver**: `vMajor.Minor.Patch` (e.g. `v1.8.0`)
+- **Patch** — bug fixes, no new features
+- **Minor** — new features, backward compatible
+- **Major** — breaking changes or major rewrites
+
+`versionCode` — increment by 1 each release (in `android/app/build.gradle`)
+`versionName` — must match the tag (e.g. tag `v1.8.0` → versionName `1.8.0`)
+
+Always tag releases: `git tag v<Major>.<Minor>.<Patch> && git push origin v<Major>.<Minor>.<Patch>`
 
 # Key Files
 - `App.tsx` — root RN component, tab nav for Keyboard/Settings/Themes/Languages
