@@ -15,6 +15,7 @@ object KeyMapRegistry {
     val ALL: Map<String, KeyMap> = mapOf(
         QwertyKeyMap.id            to QwertyKeyMap,
         ColemakKeyMap.id           to ColemakKeyMap,
+        ColemakDHKeyMap.id         to ColemakDHKeyMap,
         DvorakKeyMap.id            to DvorakKeyMap,
         ProgrammerDvorakKeyMap.id  to ProgrammerDvorakKeyMap,
         ProgrammerColemakKeyMap.id to ProgrammerColemakKeyMap,

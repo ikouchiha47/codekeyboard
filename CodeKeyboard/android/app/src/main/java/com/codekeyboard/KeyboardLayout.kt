@@ -102,4 +102,12 @@ interface KeyboardLayoutComputer {
      * at the given screen width — guaranteed not to bridge the inter-half gap.
      */
     fun maxSafeSnapPx(screenWidthPx: Int): Float
+
+    /**
+     * Extra bottom padding in dp to add below the keyboard wrapper, beyond the
+     * system navigation bar height. Layouts shorter than Sofle (e.g. Ferris Sweep)
+     * need this so the system IME controls (globe + minimize) don't overlap the
+     * bottom row of keys.
+     */
+    val extraBottomPadDp: Int get() = 0
 }

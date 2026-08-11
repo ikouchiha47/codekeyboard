@@ -36,6 +36,14 @@ Follows **semver**: `vMajor.Minor.Patch` (e.g. `v1.8.0`)
 
 Always tag releases: `git tag v<Major>.<Minor>.<Patch> && git push origin v<Major>.<Minor>.<Patch>`
 
+# Keymap Sources
+Alpha-block remap tables in `android/.../KeyMaps.kt` are transcribed from these
+sources — verify against them (not memory) if a table looks wrong:
+- Colemak: https://colemak.com
+- Colemak-DH (Mod-DH): https://colemakmods.github.io/mod-dh/ , https://github.com/ColemakMods/mod-dh
+- Dvorak: https://en.wikipedia.org/wiki/Dvorak_keyboard_layout (ANSI INCITS 207)
+- Programmer Dvorak: https://www.kaufmann.no/roland/dvorak/
+
 # Key Files
 - `App.tsx` — root RN component, tab nav for Keyboard/Settings/Themes/Languages
 - `src/keyboard/Keyboard.tsx` — main keyboard UI, action registry, input area

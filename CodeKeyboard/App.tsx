@@ -140,15 +140,23 @@ const COLEMAK: Record<string, string> = {
   e:'f', r:'p', t:'g', y:'j', u:'l', i:'u', o:'y', p:';',
   s:'r', d:'s', f:'t', g:'d', j:'n', k:'e', l:'i', n:'k',
 };
+// Colemak Mod-DH (ANSI): moves D and H off the home row onto the bottom row.
+// Must match android/.../KeyMaps.kt ColemakDHKeyMap exactly.
+const COLEMAK_DH: Record<string, string> = {
+  e:'f', r:'p', t:'b', y:'j', u:'l', i:'u', o:'y', p:';',
+  s:'r', d:'s', f:'t', h:'m', j:'n', k:'e', l:'i',
+  v:'d', b:'v', n:'k', m:'h',
+};
 const DVORAK: Record<string, string> = {
   q:"'", w:',', e:'.', r:'p', t:'y', y:'f', u:'g', i:'c', o:'r', p:'l',
   s:'o', d:'e', f:'u', g:'i', h:'d', j:'h', k:'t', l:'n',
-  z:';', x:'q', c:'j', v:'k', b:'x', n:'b',
+  z:';', x:'q', c:'j', v:'k', b:'x', n:'b', m:'w',
 };
 
 function applyKeymap(label: string, keymap: string): string {
   if (label.length !== 1 || !/[a-z]/.test(label)) return label;
   if (keymap === 'colemak' || keymap === 'programmer-colemak') return COLEMAK[label] ?? label;
+  if (keymap === 'colemak-dh') return COLEMAK_DH[label] ?? label;
   if (keymap === 'dvorak' || keymap === 'programmer-dvorak') return DVORAK[label] ?? label;
   return label;
 }

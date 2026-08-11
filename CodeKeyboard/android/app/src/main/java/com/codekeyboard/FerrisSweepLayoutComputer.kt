@@ -18,7 +18,8 @@ class FerrisSweepLayoutComputer(
     private  val keyMap:   KeyMap = QwertyKeyMap,
 ) : KeyboardLayoutComputer {
 
-    override val name   = "Ferris Sweep"
+    override val name            = "Ferris Sweep"
+    override val extraBottomPadDp = 16
     override val layers get() = provider.supportedLayers
 
     private val layerData: Map<String, FerrisSweepLayerData> by lazy { provider.layers(keyMap) }
