@@ -19,6 +19,7 @@ class EmojiPanelView(
     context: Context,
     private val fixedHeightPx: Int = 0,
     private val navPaddingPx: Int = 0,
+    private val theme: KeyboardTheme = KeyboardThemes.load(),
 ) : LinearLayout(context) {
 
     var onEmojiSelected: ((String) -> Unit)? = null
@@ -45,11 +46,10 @@ class EmojiPanelView(
     private val FONT_SP = 26f
     private val TAB_FONT_SP = 22f
 
-    private val BG_DARK = Color.parseColor("#1a1a1a")
-    private val BG_BAR = Color.parseColor("#111111")
-    private val TEXT_GRAY = Color.parseColor("#888888")
-    private val ACCENT_GREEN = Color.parseColor("#4CAF50")
-    private val DIVIDER = Color.parseColor("#2a2a2a")
+    private val BG_DARK = theme.panelBg
+    private val BG_BAR = theme.panelBar
+    private val TEXT_GRAY = theme.panelTextMuted
+    private val DIVIDER = theme.divider
 
     private val scrollView: ScrollView
     private val tabButtons = mutableListOf<TextView>()
@@ -141,12 +141,12 @@ class EmojiPanelView(
     private fun setTabActive(idx: Int) {
         tabButtons.forEachIndexed { i, tv ->
             if (i == idx) {
-                tv.setBackgroundColor(Color.parseColor("#2a2a2a"))
+                tv.setBackgroundColor(theme.keyActive)
                 // underline via bottom border — use a view layered approach: just tint
-                tv.setTextColor(Color.WHITE)
+                tv.setTextColor(theme.label)
             } else {
                 tv.setBackgroundColor(Color.TRANSPARENT)
-                tv.setTextColor(Color.parseColor("#888888"))
+                tv.setTextColor(theme.panelTextMuted)
             }
         }
         activeTab = idx
@@ -247,7 +247,7 @@ class EmojiPanelView(
         val cellPx = (CELL_DP * dp).toInt()
         val row = LinearLayout(anchor.context).apply {
             orientation = HORIZONTAL
-            setBackgroundColor(Color.parseColor("#2a2a2a"))
+            setBackgroundColor(theme.keyMod)
             setPadding((4 * dp).toInt(), (4 * dp).toInt(), (4 * dp).toInt(), (4 * dp).toInt())
         }
         var popup: PopupWindow? = null
@@ -296,11 +296,11 @@ class EmojiPanelView(
             text = "ABC"
             textSize = 13f
             typeface = Typeface.DEFAULT_BOLD
-            setTextColor(Color.WHITE)
+            setTextColor(theme.label)
             gravity = Gravity.CENTER
             isClickable = true
             isFocusable = false
-            background = pillBackground(Color.parseColor("#333333"))
+            background = pillBackground(theme.keyMod)
             layoutParams = LayoutParams((72 * dp).toInt(), (36 * dp).toInt())
             setOnClickListener { onBackToKeyboard?.invoke() }
         }

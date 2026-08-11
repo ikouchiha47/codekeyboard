@@ -11,7 +11,7 @@ import {
   NativeModules,
 } from 'react-native';
 import {SafeAreaProvider, SafeAreaView} from 'react-native-safe-area-context';
-type Tab = 'settings' | 'themes' | 'languages';
+type Tab = 'settings' | 'themes' | 'layouts' | 'languages';
 
 function SnippetsEditor() {
   const [snippets, setSnippets] = useState<Record<string, string>>({});
@@ -134,7 +134,238 @@ function SnippetsEditor() {
   );
 }
 
-function LayoutPicker() {
+// ── Layout preview renderer ───────────────────────────────────────────────────
+
+const COLEMAK: Record<string, string> = {
+  e:'f', r:'p', t:'g', y:'j', u:'l', i:'u', o:'y', p:';',
+  s:'r', d:'s', f:'t', g:'d', j:'n', k:'e', l:'i', n:'k',
+};
+const DVORAK: Record<string, string> = {
+  q:"'", w:',', e:'.', r:'p', t:'y', y:'f', u:'g', i:'c', o:'r', p:'l',
+  s:'o', d:'e', f:'u', g:'i', h:'d', j:'h', k:'t', l:'n',
+  z:';', x:'q', c:'j', v:'k', b:'x', n:'b',
+};
+
+function applyKeymap(label: string, keymap: string): string {
+  if (label.length !== 1 || !/[a-z]/.test(label)) return label;
+  if (keymap === 'colemak' || keymap === 'programmer-colemak') return COLEMAK[label] ?? label;
+  if (keymap === 'dvorak' || keymap === 'programmer-dvorak') return DVORAK[label] ?? label;
+  return label;
+}
+
+// Column-major key data: each entry is one column top-to-bottom
+// [colIndex]: array of key labels from row 0 downward
+const SOFLE_COLS_L = [
+  ['q','a','z','Sft'],
+  ['w','s','x','Spc'],
+  ['e','d','c','LWR'],
+  ['r','f','v','Ctl'],
+  ['t','g','b','Alt'],
+];
+const SOFLE_COLS_R = [
+  ['y','h','n','RSE'],
+  ['u','j','m','Ent'],
+  ['i','k',',','Spc'],
+  ['o','l','.','FN'],
+  ['p',';','>>','ADJ'],
+];
+const FERRIS_COLS_L = [
+  ['q','a','z'],
+  ['w','s','x'],
+  ['e','d','c'],
+  ['r','f','v'],
+  ['t','g','b'],
+];
+const FERRIS_COLS_R = [
+  ['y','h','n'],
+  ['u','j','m'],
+  ['i','k',','],
+  ['o','l','.'],
+  ['p',';','>>'],
+];
+
+const SOFLE_STAG_L  = [0,    0.25, 0.50, 0.75, 1.00];
+const SOFLE_STAG_R  = [1.00, 0.75, 0.50, 0.25, 0];
+const FERRIS_STAG_L = [0,    0.25, 0.50, 0.50, 0.75];
+const FERRIS_STAG_R = [0.75, 0.50, 0.50, 0.25, 0];
+
+const THUMB_ROWS = ['Sft','Spc','LWR','Ctl','Alt'];
+const MOD_LABELS = new Set(['Sft','Spc','LWR','RSE','Ctl','Alt','FN','ADJ','Ent','Tab','Esc','>>']);
+
+function PreviewHalf({
+  cols, stag, thumbKeys, KH, KG,
+}: {
+  cols: string[][];
+  stag: number[];
+  thumbKeys?: string[];
+  KH: number;
+  KG: number;
+}) {
+  return (
+    <View style={{flex: 1}}>
+      {/* Column-staggered main keys */}
+      <View style={{flexDirection: 'row', gap: KG}}>
+        {cols.map((col, ci) => (
+          <View key={ci} style={{flex: 1, paddingTop: stag[ci] * KH}}>
+            {col.map((label, ri) => {
+              const isMod = MOD_LABELS.has(label);
+              return (
+                <View
+                  key={ri}
+                  style={[
+                    pvStyles.key,
+                    {height: KH, marginTop: ri === 0 ? 0 : KG},
+                    isMod && pvStyles.keyMod,
+                  ]}>
+                  <Text style={pvStyles.label} numberOfLines={1}>{label}</Text>
+                </View>
+              );
+            })}
+          </View>
+        ))}
+      </View>
+      {/* Thumb cluster — separate row, 2 wide centered keys */}
+      {thumbKeys && (
+        <View style={{flexDirection: 'row', gap: KG, marginTop: KG + 6, paddingHorizontal: '10%'}}>
+          {thumbKeys.map((k, i) => (
+            <View key={i} style={[pvStyles.key, pvStyles.keyThumb, {flex: 1, height: KH + 6}]}>
+              <Text style={pvStyles.label} numberOfLines={1}>{k}</Text>
+            </View>
+          ))}
+        </View>
+      )}
+    </View>
+  );
+}
+
+function KeyboardPreview({layoutId, keymap}: {layoutId: string; keymap: string}) {
+  const isFerris = layoutId === 'ferris';
+  const KH = 30;
+  const KG = 3;
+
+  const colsL  = isFerris ? FERRIS_COLS_L : SOFLE_COLS_L;
+  const colsR  = isFerris ? FERRIS_COLS_R : SOFLE_COLS_R;
+  const stagL  = isFerris ? FERRIS_STAG_L : SOFLE_STAG_L;
+  const stagR  = isFerris ? FERRIS_STAG_R : SOFLE_STAG_R;
+
+  const mapCols = (cols: string[][]) =>
+    cols.map(col => col.map(k => applyKeymap(k, keymap)));
+
+  const mappedL = mapCols(colsL);
+  const mappedR = mapCols(colsR);
+
+  const thumbL = isFerris ? ['LWR','Spc'] : undefined;
+  const thumbR = isFerris ? ['Spc','RSE'] : undefined;
+
+  const topKeys = ['Tab','Esc','`','^','Ctl','Alt',':)','Bksp'];
+
+  return (
+    <View style={pvStyles.wrap}>
+      {/* Top row — 8 equal keys, no stagger */}
+      <View style={{flexDirection: 'row', gap: KG, marginBottom: KG}}>
+        {topKeys.map((k, i) => (
+          <View key={i} style={[pvStyles.key, pvStyles.keyMod, {flex: 1, height: KH}]}>
+            <Text style={pvStyles.label} numberOfLines={1}>{k}</Text>
+          </View>
+        ))}
+      </View>
+
+      {/* Split halves */}
+      <View style={{flexDirection: 'row', gap: 14}}>
+        <PreviewHalf
+          cols={mappedL}
+          stag={stagL}
+          thumbKeys={thumbL}
+          KH={KH}
+          KG={KG}
+        />
+        <PreviewHalf
+          cols={mappedR}
+          stag={stagR}
+          thumbKeys={thumbR}
+          KH={KH}
+          KG={KG}
+        />
+      </View>
+    </View>
+  );
+}
+
+const pvStyles = StyleSheet.create({
+  wrap: {
+    backgroundColor: '#0e0e0e',
+    borderRadius: 10,
+    padding: 10,
+    width: '100%',
+    borderWidth: 1,
+    borderColor: '#2a2a2a',
+  },
+  key: {
+    flex: 1,
+    backgroundColor: '#2c2c2c',
+    borderRadius: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: {width: 0, height: 1},
+    shadowOpacity: 0.4,
+    shadowRadius: 1,
+    elevation: 2,
+  },
+  keyMod: {
+    backgroundColor: '#222',
+  },
+  keyThumb: {
+    backgroundColor: '#1a2a3a',
+  },
+  label: {
+    color: '#bbb',
+    fontSize: 8,
+    fontWeight: '500',
+  },
+});
+
+// ── Keymap dropdown ───────────────────────────────────────────────────────────
+
+function KeymapDropdown({active, onSelect}: {active: string; onSelect: (id: string) => void}) {
+  const [open, setOpen] = useState(false);
+  const current = KEYMAPS.find(k => k.id === active) ?? KEYMAPS[0];
+
+  return (
+    <View style={styles.dropdownWrap}>
+      <TouchableOpacity
+        style={styles.dropdownTrigger}
+        onPress={() => setOpen(o => !o)}
+        activeOpacity={0.8}>
+        <View style={{flex: 1}}>
+          <Text style={styles.dropdownValue}>{current.name}</Text>
+          <Text style={styles.dropdownDesc}>{current.desc}</Text>
+        </View>
+        <Text style={styles.dropdownArrow}>{open ? '▲' : '▼'}</Text>
+      </TouchableOpacity>
+      {open && (
+        <View style={styles.dropdownList}>
+          {KEYMAPS.map(k => (
+            <TouchableOpacity
+              key={k.id}
+              style={[styles.dropdownItem, k.id === active && styles.dropdownItemActive]}
+              onPress={() => { onSelect(k.id); setOpen(false); }}
+              activeOpacity={0.8}>
+              <Text style={[styles.dropdownItemName, k.id === active && styles.dropdownItemNameActive]}>
+                {k.name}
+              </Text>
+              <Text style={styles.dropdownItemDesc}>{k.desc}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
+    </View>
+  );
+}
+
+// ── Layouts screen ────────────────────────────────────────────────────────────
+
+function LayoutsScreen() {
   const [activeLayout, setActiveLayout] = useState('sofle');
   const [activeKeymap, setActiveKeymap] = useState('qwerty');
 
@@ -158,8 +389,25 @@ function LayoutPicker() {
   }, []);
 
   return (
-    <View style={styles.pickerSection}>
-      <Text style={styles.pickerLabel}>Layout</Text>
+    <ScrollView style={styles.settingsScroll} contentContainerStyle={styles.settingsContainer}>
+      <Text style={styles.settingsTitle}>Layout</Text>
+
+      {/* Live preview */}
+      <KeyboardPreview layoutId={activeLayout} keymap={activeKeymap} />
+
+      {/* Test input */}
+      <TextInput
+        style={styles.testInput}
+        placeholder="Tap here to open the keyboard and test"
+        placeholderTextColor="#444"
+        autoCorrect={false}
+        autoCapitalize="none"
+      />
+
+      <Text style={styles.snippetsHint}>Takes effect next time you open the keyboard.</Text>
+
+      {/* Layout picker */}
+      <Text style={[styles.pickerLabel, {marginTop: 20}]}>Physical Layout</Text>
       <View style={styles.layoutRow}>
         {LAYOUTS.map(l => (
           <TouchableOpacity
@@ -175,22 +423,10 @@ function LayoutPicker() {
         ))}
       </View>
 
-      <Text style={[styles.pickerLabel, {marginTop: 16}]}>Key Map</Text>
-      <View style={styles.keymapRow}>
-        {KEYMAPS.map(k => (
-          <TouchableOpacity
-            key={k.id}
-            style={[styles.keymapChip, activeKeymap === k.id && styles.keymapChipActive]}
-            onPress={() => selectKeymap(k.id)}
-            activeOpacity={0.8}>
-            <Text style={[styles.keymapChipText, activeKeymap === k.id && styles.keymapChipTextActive]}>
-              {k.name}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-      <Text style={styles.snippetsHint}>Takes effect next time you open the keyboard.</Text>
-    </View>
+      {/* Keymap dropdown */}
+      <Text style={[styles.pickerLabel, {marginTop: 20}]}>Key Map</Text>
+      <KeymapDropdown active={activeKeymap} onSelect={selectKeymap} />
+    </ScrollView>
   );
 }
 
@@ -221,8 +457,6 @@ function SettingsScreen() {
         Opens IME picker to switch active keyboard.
       </Text>
       <View style={styles.divider} />
-      <LayoutPicker />
-      <View style={styles.divider} />
       <SnippetsEditor />
     </ScrollView>
   );
@@ -233,23 +467,25 @@ const LAYOUTS: {id: string; name: string; desc: string}[] = [
   {id: 'ferris', name: 'Ferris Sweep',  desc: '5×3 cols + 2 thumb keys'},
 ];
 
-const KEYMAPS: {id: string; name: string}[] = [
-  {id: 'qwerty',            name: 'QWERTY'},
-  {id: 'colemak',           name: 'Colemak'},
-  {id: 'dvorak',            name: 'Dvorak'},
-  {id: 'programmer-dvorak', name: 'Prog. Dvorak'},
-  {id: 'programmer-colemak',name: 'Prog. Colemak'},
+const KEYMAPS: {id: string; name: string; desc: string}[] = [
+  {id: 'qwerty',             name: 'QWERTY',          desc: 'Standard layout'},
+  {id: 'colemak',            name: 'Colemak',          desc: 'Optimised for English, 17 keys change'},
+  {id: 'colemak-dh',         name: 'Colemak-DH',       desc: 'Colemak with D and H on bottom row'},
+  {id: 'dvorak',             name: 'Dvorak',            desc: 'Vowels left, consonants right'},
+  {id: 'programmer-dvorak',  name: 'Prog. Dvorak',      desc: 'Dvorak with symbols unshifted'},
+  {id: 'programmer-colemak', name: 'Prog. Colemak',     desc: 'Colemak with programmer symbol row'},
 ];
 
-const THEMES: {id: string; name: string; desc: string; bg: string; key: string; accent: string}[] = [
-  {id: 'carbon',   name: 'Carbon',   desc: 'Neutral dark grey',        bg: '#111111', key: '#2c2c2c', accent: '#4a9eff'},
-  {id: 'midnight', name: 'Midnight', desc: 'Deep navy blue',           bg: '#080d14', key: '#0f1c2e', accent: '#3b82f6'},
-  {id: 'obsidian', name: 'Obsidian', desc: 'Near-black with violet',   bg: '#0c0c10', key: '#1a1a24', accent: '#8b5cf6'},
-  {id: 'ash',      name: 'Ash',      desc: 'Warm grey, amber accent',  bg: '#141210', key: '#272320', accent: '#f59e0b'},
-  {id: 'moss',     name: 'Moss',     desc: 'Dark green-grey, teal',    bg: '#0d1210', key: '#1a2420', accent: '#2dd4bf'},
-  {id: 'dusk',     name: 'Dusk',     desc: 'Slate purple, rose',       bg: '#10101a', key: '#1e1e2e', accent: '#f43f5e'},
-  {id: 'iron',     name: 'Iron',     desc: 'Cool steel, cyan',         bg: '#0e1014', key: '#1c2028', accent: '#06b6d4'},
-  {id: 'ember',    name: 'Ember',    desc: 'Warm brown, orange',       bg: '#100c08', key: '#241c14', accent: '#ea580c'},
+const THEMES: {id: string; name: string; desc: string; bg: string; key: string; accent: string; text: string; textMuted: string}[] = [
+  {id: 'carbon',   name: 'Carbon',   desc: 'Neutral dark grey',        bg: '#111111', key: '#2c2c2c', accent: '#4a9eff', text: '#e0e0e0', textMuted: '#888888'},
+  {id: 'midnight', name: 'Midnight', desc: 'Deep navy blue',           bg: '#080d14', key: '#0f1c2e', accent: '#3b82f6', text: '#e0e0e0', textMuted: '#888888'},
+  {id: 'obsidian', name: 'Obsidian', desc: 'Near-black with violet',   bg: '#0c0c10', key: '#1a1a24', accent: '#8b5cf6', text: '#e0e0e0', textMuted: '#888888'},
+  {id: 'ash',      name: 'Ash',      desc: 'Warm grey, amber accent',  bg: '#141210', key: '#272320', accent: '#f59e0b', text: '#e0e0e0', textMuted: '#888888'},
+  {id: 'moss',     name: 'Moss',     desc: 'Dark green-grey, teal',    bg: '#0d1210', key: '#1a2420', accent: '#2dd4bf', text: '#e0e0e0', textMuted: '#888888'},
+  {id: 'dusk',     name: 'Dusk',     desc: 'Slate purple, rose',       bg: '#10101a', key: '#1e1e2e', accent: '#f43f5e', text: '#e0e0e0', textMuted: '#888888'},
+  {id: 'iron',     name: 'Iron',     desc: 'Cool steel, cyan',         bg: '#0e1014', key: '#1c2028', accent: '#06b6d4', text: '#e0e0e0', textMuted: '#888888'},
+  {id: 'ember',    name: 'Ember',    desc: 'Warm brown, orange',       bg: '#100c08', key: '#241c14', accent: '#ea580c', text: '#e0e0e0', textMuted: '#888888'},
+  {id: 'frost',    name: 'Frost',    desc: 'Bluish white, cool blue',  bg: '#eef3fa', key: '#dbe6f5', accent: '#2f6fed', text: '#16233d', textMuted: '#5b7096'},
 ];
 
 function ThemesScreen() {
@@ -284,8 +520,8 @@ function ThemesScreen() {
             </View>
             <View style={[styles.themeAccentBar, {backgroundColor: t.accent}]} />
             <View style={styles.themeInfo}>
-              <Text style={[styles.themeName, {color: '#e0e0e0'}]}>{t.name}</Text>
-              <Text style={[styles.themeDesc, {color: '#888'}]}>{t.desc}</Text>
+              <Text style={[styles.themeName, {color: t.text}]}>{t.name}</Text>
+              <Text style={[styles.themeDesc, {color: t.textMuted}]}>{t.desc}</Text>
             </View>
             {active === t.id && (
               <View style={[styles.themeCheck, {borderColor: t.accent}]}>
@@ -320,7 +556,7 @@ function App() {
           barStyle={isDarkMode ? 'light-content' : 'dark-content'}
         />
         <View style={styles.tabBar}>
-          {(['settings', 'themes', 'languages'] as Tab[]).map(
+          {(['settings', 'themes', 'layouts', 'languages'] as Tab[]).map(
             tab => (
               <TouchableOpacity
                 key={tab}
@@ -344,6 +580,8 @@ function App() {
           <SettingsScreen />
         ) : activeTab === 'themes' ? (
           <ThemesScreen />
+        ) : activeTab === 'layouts' ? (
+          <LayoutsScreen />
         ) : (
           <PlaceholderScreen tab={activeTab} />
         )}
@@ -517,6 +755,18 @@ const styles = StyleSheet.create({
     width: '100%',
     marginTop: 4,
   },
+  testInput: {
+    width: '100%',
+    backgroundColor: '#1a1a1a',
+    borderWidth: 1,
+    borderColor: '#333',
+    borderRadius: 8,
+    color: '#e0e0e0',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 14,
+    marginTop: 12,
+  },
   pickerSection: {
     width: '100%',
   },
@@ -579,6 +829,65 @@ const styles = StyleSheet.create({
   },
   keymapChipTextActive: {
     color: '#4a9eff',
+  },
+  dropdownWrap: {
+    width: '100%',
+  },
+  dropdownTrigger: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1e1e1e',
+    borderWidth: 1,
+    borderColor: '#333',
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  dropdownValue: {
+    color: '#e0e0e0',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  dropdownDesc: {
+    color: '#555',
+    fontSize: 11,
+    marginTop: 1,
+  },
+  dropdownArrow: {
+    color: '#555',
+    fontSize: 11,
+    marginLeft: 8,
+  },
+  dropdownList: {
+    backgroundColor: '#1a1a1a',
+    borderWidth: 1,
+    borderColor: '#333',
+    borderTopWidth: 0,
+    borderBottomLeftRadius: 8,
+    borderBottomRightRadius: 8,
+    overflow: 'hidden',
+  },
+  dropdownItem: {
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    borderTopWidth: 1,
+    borderTopColor: '#252525',
+  },
+  dropdownItemActive: {
+    backgroundColor: '#0d1f33',
+  },
+  dropdownItemName: {
+    color: '#888',
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  dropdownItemNameActive: {
+    color: '#4a9eff',
+  },
+  dropdownItemDesc: {
+    color: '#444',
+    fontSize: 11,
+    marginTop: 1,
   },
   themeGrid: {
     width: '100%',

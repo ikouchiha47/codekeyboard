@@ -1,7 +1,6 @@
 package com.codekeyboard
 
 import android.content.Context
-import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
 import android.view.View
@@ -18,11 +17,20 @@ class SuggestionBarView(context: Context) : HorizontalScrollView(context) {
     private val slots = mutableListOf<TextView>()
     var onSlotTapped: ((String) -> Unit)? = null
 
+    private var theme: KeyboardTheme = KeyboardThemes.load()
+    private var lastItems: List<String> = emptyList()
+
     init {
         isHorizontalScrollBarEnabled = false
         overScrollMode = OVER_SCROLL_NEVER
-        setBackgroundColor(Color.parseColor("#1e1e1e"))
+        setBackgroundColor(theme.bg)
         addView(row, LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.MATCH_PARENT))
+    }
+
+    fun reloadTheme() {
+        theme = KeyboardThemes.load()
+        setBackgroundColor(theme.bg)
+        if (lastItems.isNotEmpty()) rebuildSlots(lastItems, resources.displayMetrics.density)
     }
 
     // slot 0 = typed word (blue, committed as-is)
@@ -43,9 +51,11 @@ class SuggestionBarView(context: Context) : HorizontalScrollView(context) {
     fun clear() {
         row.removeAllViews()
         slots.clear()
+        lastItems = emptyList()
     }
 
     private fun rebuildSlots(items: List<String>, dp: Float) {
+        lastItems = items
         row.removeAllViews()
         slots.clear()
         items.forEachIndexed { i, text ->
@@ -56,10 +66,7 @@ class SuggestionBarView(context: Context) : HorizontalScrollView(context) {
                     LinearLayout.LayoutParams.MATCH_PARENT
                 )
                 gravity = Gravity.CENTER
-                setTextColor(
-                    if (i == 0) Color.parseColor("#4a9eff")
-                    else Color.parseColor("#999999")
-                )
+                setTextColor(if (i == 0) theme.accent else theme.panelTextMuted)
                 typeface = android.graphics.Typeface.MONOSPACE
                 textSize = 14f
                 isSingleLine = true
@@ -72,7 +79,7 @@ class SuggestionBarView(context: Context) : HorizontalScrollView(context) {
             }
             // slot 0 (typed word) gets subtle pill highlight
             if (i == 0 && items.size > 1) {
-                tv.background = makeRounded(4 * dp, Color.parseColor("#1a3a5c"))
+                tv.background = makeRounded(4 * dp, theme.keyActive)
             }
             row.addView(tv)
             slots.add(tv)
@@ -88,6 +95,6 @@ class SuggestionBarView(context: Context) : HorizontalScrollView(context) {
             (1 * dp).toInt().coerceAtLeast(1),
             (28 * dp).toInt()
         ).apply { gravity = Gravity.CENTER_VERTICAL }
-        setBackgroundColor(Color.parseColor("#333333"))
+        setBackgroundColor(theme.divider)
     }
 }

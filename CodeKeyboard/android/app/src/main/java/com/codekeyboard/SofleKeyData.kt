@@ -56,8 +56,13 @@ object SofleKeyData {
     // ── LOWER ─────────────────────────────────────────────────────────────────
     private val LOWER = SofleLayerData(
         topRow = listOf(
+            // ( ) [ ] removed — already one row down in the main grid, same
+            // duplication FerrisSweepBaseLayerProvider.kt had before its
+            // redesign. Lower already has a bare Shift on its own thumb row,
+            // so no need to add another one here. Bksp added since Lower's
+            // main grid only had Del before. 4th freed slot left open.
             ANCHOR_TAB, ANCHOR_ESC,
-            k("("), k(")"), k("["), k("]"), k("{"), k("}")
+            k("^"), k("?"), k("Bksp","backspace"), empty(), k("{"), k("}")
         ),
         left = listOf(
             listOf(k("1", shift="!"), k("2", shift="@"), k("3", shift="#"),

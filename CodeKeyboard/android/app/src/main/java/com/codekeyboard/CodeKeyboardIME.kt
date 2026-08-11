@@ -30,6 +30,8 @@ class CodeKeyboardIME : InputMethodService() {
     private lateinit var wordLearner: WordLearner
     private val kbState = KeyboardState()
     private val composing = ComposingBuffer()
+    private var activeLayoutId = LayoutRegistry.DEFAULT_LAYOUT
+    private var activeKeyMapId = KeyMapRegistry.DEFAULT.id
     private var expectSelectionUpdateBy = 0L  // if now < this, onUpdateSelection is IME-driven, not user
     private var keystrokesSinceCommit = 0
     private var supportsComposing = true
@@ -100,11 +102,22 @@ class CodeKeyboardIME : InputMethodService() {
         Metrics.client = LogMetrics
     }
 
+    override fun onStartInputView(info: android.view.inputmethod.EditorInfo, restarting: Boolean) {
+        super.onStartInputView(info, restarting)
+        val layoutId = KeyboardSettings.getString("layout", LayoutRegistry.DEFAULT_LAYOUT)
+        val keyMapId = KeyboardSettings.getString("keymap", KeyMapRegistry.DEFAULT.id)
+        if (layoutId != activeLayoutId || keyMapId != activeKeyMapId) {
+            setInputView(onCreateInputView())
+        }
+    }
+
     override fun onCreateInputView(): View {
         val density = resources.displayMetrics.density
 
         val layoutId = KeyboardSettings.getString("layout", LayoutRegistry.DEFAULT_LAYOUT)
         val keyMapId = KeyboardSettings.getString("keymap", KeyMapRegistry.DEFAULT.id)
+        activeLayoutId = layoutId
+        activeKeyMapId = keyMapId
 
         keyboardView = NativeKeyboardView(this)
         keyboardView.computer    = LayoutRegistry.build(layoutId, keyMapId, density)
@@ -139,9 +152,8 @@ class CodeKeyboardIME : InputMethodService() {
         // Read navigation bar height from system resource (always reliable
         // for IME windows — IMEs don't dispatch WindowInsets like regular apps).
         val navBarHeight = getNavBarHeight()
-        if (navBarHeight > 0) {
-            wrapper.setPadding(0, 0, 0, navBarHeight)
-        }
+        val extraPad = (keyboardView.computer!!.extraBottomPadDp * density).toInt()
+        wrapper.setPadding(0, 0, 0, navBarHeight + extraPad)
 
         // Initial key compute — will be corrected by onSizeChanged once the
         // view has real dimensions.
@@ -186,6 +198,16 @@ class CodeKeyboardIME : InputMethodService() {
 
     override fun onStartInput(editorInfo: EditorInfo?, restarting: Boolean) {
         super.onStartInput(editorInfo, restarting)
+        // onStartInput can fire before onCreateInputView on first invocation,
+        // when keyboardView (lateinit) isn't assigned yet — guard instead of
+        // skipping the reload outright, otherwise theme changes never reach
+        // an already-live view (Settings writes the pref, but nothing re-reads it).
+        if (::keyboardView.isInitialized) {
+            keyboardView.reloadTheme()
+        }
+        if (::suggestionBar.isInitialized) {
+            suggestionBar.reloadTheme()
+        }
         CodeKeyboardModuleHolder.module?.inputConnection = currentInputConnection
         supportsComposing = when {
             editorInfo == null -> false
@@ -393,9 +415,9 @@ class CodeKeyboardIME : InputMethodService() {
                         flushComposing(ic)
                         ic?.commitText(text, 1)
                     }
-                    android.util.Log.d("CKB_HOLD", "onCharCommitted: layerHeld=${kbState.layerHeld} effectiveLayer=${kbState.effectiveLayer}")
+                    android.util.Log.e("CKB_HOLD", "onCharCommitted: layerHeld=${kbState.layerHeld} effectiveLayer=${kbState.effectiveLayer}")
                     kbState.onCharCommitted()
-                    android.util.Log.d("CKB_HOLD", "after onCharCommitted: layerHeld=${kbState.layerHeld} effectiveLayer=${kbState.effectiveLayer}")
+                    android.util.Log.e("CKB_HOLD", "after onCharCommitted: layerHeld=${kbState.layerHeld} effectiveLayer=${kbState.effectiveLayer}")
                     keyboardView.notifyStateChanged(kbState)
                 }
             }
@@ -416,11 +438,11 @@ class CodeKeyboardIME : InputMethodService() {
 
     private fun handleHold(key: KeyDef) {
         val action = key.holdAction ?: return
-        android.util.Log.d("CKB_HOLD", "handleHold: action=$action layerHeld=${kbState.layerHeld} effectiveLayer=${kbState.effectiveLayer}")
+        android.util.Log.e("CKB_HOLD", "handleHold: action=$action layerHeld=${kbState.layerHeld} effectiveLayer=${kbState.effectiveLayer}")
         if (action in STATE_HOLD_ACTIONS) {
             kbState.applyHold(action)
             kbState.heldKeyLabel = key.label
-            android.util.Log.d("CKB_HOLD", "after applyHold: layerHeld=${kbState.layerHeld} effectiveLayer=${kbState.effectiveLayer}")
+            android.util.Log.e("CKB_HOLD", "after applyHold: layerHeld=${kbState.layerHeld} effectiveLayer=${kbState.effectiveLayer}")
             keyboardView.notifyStateChanged(kbState)
         } else if (action.isNotEmpty()) {
             handleKey(KeyDef("", action = action))
@@ -429,11 +451,11 @@ class CodeKeyboardIME : InputMethodService() {
 
     private fun handleRelease(key: KeyDef) {
         val action = key.holdAction ?: return
-        android.util.Log.d("CKB_HOLD", "handleRelease: action=$action layerHeld=${kbState.layerHeld} effectiveLayer=${kbState.effectiveLayer}")
+        android.util.Log.e("CKB_HOLD", "handleRelease: action=$action layerHeld=${kbState.layerHeld} effectiveLayer=${kbState.effectiveLayer}")
         if (action in STATE_HOLD_ACTIONS) {
             kbState.releaseHold(action)
             kbState.heldKeyLabel = null
-            android.util.Log.d("CKB_HOLD", "after releaseHold: layerHeld=${kbState.layerHeld} effectiveLayer=${kbState.effectiveLayer}")
+            android.util.Log.e("CKB_HOLD", "after releaseHold: layerHeld=${kbState.layerHeld} effectiveLayer=${kbState.effectiveLayer}")
             keyboardView.notifyStateChanged(kbState)
         }
     }

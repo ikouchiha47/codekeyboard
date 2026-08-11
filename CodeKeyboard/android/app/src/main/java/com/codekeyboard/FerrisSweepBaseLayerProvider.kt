@@ -26,13 +26,15 @@ class FerrisSweepBaseLayerProvider : BaseLayerProvider<FerrisSweepLayerData> {
 
     private fun empty() = KeyDef("")
 
-    // ── Shared top row (identical to Sofle) ───────────────────────────────────
+    // ── Shared top row ──────────────────────────────────────────────────────
 
+    // Top row is the modifier row: Tab/Esc/Ctrl/Alt/Shift grouped together.
+    // ? replaces the old duplicate Bksp (Bksp already lives at main-grid bottom-right).
     private val TOP_ROW = listOf(
         k("Tab","tab"), k("Esc","escape"),
-        k("`"), k("^"),
+        k("`"), k("Shift","shift", hold="shift"),
         k("Ctrl","ctrl", hold="ctrl"), k("Alt","alt", hold="alt"),
-        k("😊","emoji"), k("Bksp","backspace"),
+        k("😊","emoji"), k("?"),
     )
 
     // ── BASE (alpha remapped via KeyMap) ──────────────────────────────────────
@@ -53,8 +55,10 @@ class FerrisSweepBaseLayerProvider : BaseLayerProvider<FerrisSweepLayerData> {
                        k(a("k"), hold="meta"),  k(a("l"), hold="ctrl"), k(";", shift=":")),
                 listOf(k(a("n")), k(a("m")), k(",", shift="<"), k(".", shift=">"), k("Bksp","backspace")),
             ),
-            thumbL = listOf(k("LWR","lower", hold="lower"), k("Spc","space")),
-            thumbR = listOf(k("Spc","space"), k("RSE","raise", hold="raise")),
+            // Thumb cluster is fixed-function across every layer: LWR/RSE sit
+            // innermost (nearest the centre gap), Space/Enter sit outermost.
+            thumbL = listOf(k("Spc","space"), k("LWR","lower", hold="lower")),
+            thumbR = listOf(k("RSE","raise", hold="raise"), k("Enter","enter")),
         )
     }
 
@@ -62,25 +66,35 @@ class FerrisSweepBaseLayerProvider : BaseLayerProvider<FerrisSweepLayerData> {
 
     private val LOWER = FerrisSweepLayerData(
         topRow = listOf(
+            // ( ) [ ] removed — they're already one row down in the main grid.
+            // Lower's own row-1 isn't the alpha row, so the home-row hold-mods
+            // (Ctrl/Meta/Alt/Shift tied to a/s/d/f, h/j/k/l) are unreachable
+            // while Lower is held; these freed slots are the only place they can go.
             k("Tab","tab"), k("Esc","escape"),
-            k("("), k(")"), k("["), k("]"), k("{"), k("}"),
+            k("Shift","shift", hold="shift"), k("Ctrl","ctrl", hold="ctrl"),
+            k("Alt","alt", hold="alt"), k("Meta","meta", hold="meta"),
+            k("{"), k("}"),
         ),
         left = listOf(
             listOf(k("1", shift="!"), k("2", shift="@"), k("3", shift="#"),
                    k("4", shift="$"), k("5", shift="%")),
-            listOf(k("`"), k("-", shift="_"), k("=", shift="+"),
+            // ^ moved here (was a redundant bare ` — Base already has ` at
+            // zero cost, so this slot bought nothing until ^ took it).
+            listOf(k("^"), k("-", shift="_"), k("=", shift="+"),
                    k("[", shift="{"), k("]", shift="}")),
             listOf(k("~"), k("\\", shift="|"), k("("), k(")"), k("'", shift="\"")),
         ),
         right = listOf(
-            listOf(k("6", shift="^"), k("7", shift="&"), k("8", shift="*"),
+            listOf(k("6"), k("7", shift="&"), k("8", shift="*"),
                    k("9", shift="("), k("0", shift=")")),
-            listOf(k("/", shift="?"), k(":", shift=";"), k("'", shift="\""),
-                   k("<"), k(">")),
+            // ? bare here as a quick-access alternate to its existing shift-of-/
+            // route, same pattern as !@#$ getting bare-tap copies below.
+            // The duplicate ' that used to sit here (also at left row-2) is gone.
+            listOf(k("/", shift="?"), k(":", shift=";"), k("?"), k("<"), k(">")),
             listOf(k("!"), k("@"), k("#"), k("$"), k("Del","delete")),
         ),
-        thumbL = listOf(k("LWR","lower", hold="lower"), k("Esc","escape")),
-        thumbR = listOf(k("Enter","enter"), k("RSE","raise", hold="raise")),
+        thumbL = listOf(k("Spc","space"), k("LWR","lower", hold="lower")),
+        thumbR = listOf(k("RSE","raise", hold="raise"), k("Enter","enter")),
     )
 
     // ── RAISE ─────────────────────────────────────────────────────────────────
@@ -99,16 +113,21 @@ class FerrisSweepBaseLayerProvider : BaseLayerProvider<FerrisSweepLayerData> {
             listOf(k("End","end"), k("Cut","cut"), k("Copy","copy"),
                    k("Paste","paste"), k("Undo","undo")),
         ),
+        // Right half used to duplicate ~85% of the left half (inherited
+        // unchanged from SofleKeyData.kt, where a 4th row diluted it — Ferris
+        // has no 4th row, so it was pure waste here). Stripped to what's
+        // actually unique: arrows, Redo (a real gap — existed on Func, not
+        // here), and Bksp. This is a touchscreen, not a physical split board,
+        // so mirroring clipboard/paging actions for off-hand reach doesn't
+        // buy what it would on hardware.
         right = listOf(
             listOf(k("←","arrow-left"), k("↓","arrow-down"),
-                   k("↑","arrow-up"),   k("→","arrow-right"), k("PgDn","page-down")),
-            listOf(k("Home","home"), k("End","end"),
-                   k("PgUp","page-up"), k("PgDn","page-down"), empty()),
-            listOf(k("Cut","cut"), k("Copy","copy"), k("Paste","paste"),
-                   k("Undo","undo"), k("Bksp","backspace")),
+                   k("↑","arrow-up"),   k("→","arrow-right"), k("Redo","redo")),
+            listOf(empty(), empty(), empty(), empty(), empty()),
+            listOf(empty(), empty(), empty(), empty(), k("Bksp","backspace")),
         ),
-        thumbL = listOf(k("LWR","lower", hold="lower"), k("Spc","space")),
-        thumbR = listOf(k("Spc","space"), k("RSE","raise", hold="raise")),
+        thumbL = listOf(k("Spc","space"), k("LWR","lower", hold="lower")),
+        thumbR = listOf(k("RSE","raise", hold="raise"), k("Enter","enter")),
     )
 
     // ── ADJUST ────────────────────────────────────────────────────────────────
@@ -129,10 +148,10 @@ class FerrisSweepBaseLayerProvider : BaseLayerProvider<FerrisSweepLayerData> {
         right = listOf(
             listOf(empty(), empty(), empty(), empty(), empty()),
             listOf(k("BT"), k("WiFi"), empty(), empty(), empty()),
-            listOf(empty(), empty(), empty(), empty(), k("Bksp","backspace")),
+            listOf(empty(), empty(), empty(), k("Del","delete"), k("Bksp","backspace")),
         ),
-        thumbL = listOf(k("LWR","lower", hold="lower"), empty()),
-        thumbR = listOf(empty(), k("RSE","raise", hold="raise")),
+        thumbL = listOf(k("Spc","space"), k("LWR","lower", hold="lower")),
+        thumbR = listOf(k("RSE","raise", hold="raise"), k("Enter","enter")),
     )
 
     // ── FUNC ──────────────────────────────────────────────────────────────────
@@ -152,9 +171,9 @@ class FerrisSweepBaseLayerProvider : BaseLayerProvider<FerrisSweepLayerData> {
         right = listOf(
             listOf(empty(), empty(), empty(), empty(), empty()),
             listOf(empty(), empty(), empty(), empty(), empty()),
-            listOf(empty(), empty(), empty(), empty(), k("Bksp","backspace")),
+            listOf(empty(), empty(), empty(), k("Del","delete"), k("Bksp","backspace")),
         ),
-        thumbL = listOf(k("LWR","lower", hold="lower"), empty()),
-        thumbR = listOf(empty(), k("RSE","raise", hold="raise")),
+        thumbL = listOf(k("Spc","space"), k("LWR","lower", hold="lower")),
+        thumbR = listOf(k("RSE","raise", hold="raise"), k("Enter","enter")),
     )
 }

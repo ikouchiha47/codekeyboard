@@ -15,6 +15,15 @@ data class KeyboardTheme(
     val labelMod: Int,
     val labelLayer: Int,
     val labelSub: Int,
+    // Suggestion bar / emoji panel surfaces. Defaulted from the fields above
+    // so the 8 existing dark themes don't need updating individually — only
+    // a theme that wants a genuinely different panel treatment (e.g. a light
+    // theme where "bg" and "key" read closer together than on dark themes)
+    // needs to override these explicitly.
+    val panelBg: Int = key,
+    val panelBar: Int = bg,
+    val divider: Int = keyMod,
+    val panelTextMuted: Int = labelSub,
 )
 
 object KeyboardThemes {
@@ -84,6 +93,20 @@ object KeyboardThemes {
             accent = c("#ea580c"),
             label = c("#ecdcc8"), labelMod = c("#c09868"),
             labelLayer = c("#fb923c"), labelSub = c("#604838"),
+        ),
+        "frost" to KeyboardTheme(
+            bg = c("#eef3fa"), key = c("#dbe6f5"), keyMod = c("#c7d9f0"),
+            keyThumb = c("#d3e3f7"), keyLayer = c("#cfe0f3"),
+            keyActive = c("#a9c9f2"), keyLocked = c("#6f9cea"),
+            accent = c("#2f6fed"),
+            label = c("#16233d"), labelMod = c("#3c5a85"),
+            labelLayer = c("#2f6fed"), labelSub = c("#6b7f9e"),
+            // Light themes need the panel bar to read as a distinct, slightly
+            // deeper surface than the panel body — reusing bg (near-white)
+            // for both would erase the visual separation dark themes get for
+            // free (bg is already the deepest tone there).
+            panelBg = c("#f6f9fd"), panelBar = c("#dde8f7"),
+            divider = c("#c7d9f0"), panelTextMuted = c("#5b7096"),
         ),
     )
 
