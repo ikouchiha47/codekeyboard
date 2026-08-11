@@ -17,6 +17,9 @@ class CodeKeyboardIME : InputMethodService() {
     companion object {
         // Longest plausible English word is 45 chars; 50 gives a safe margin.
         private const val RECOMPOSE_SCAN_CHARS = 50
+        // Guard window: onUpdateSelection arrivals within this many ms of a
+        // recompose are treated as IME-driven, not user cursor moves.
+        private const val IME_SELECTION_GUARD_MS = 200L
     }
 
     private lateinit var keyboardView: NativeKeyboardView
@@ -458,7 +461,7 @@ class CodeKeyboardIME : InputMethodService() {
         if (fragment.isEmpty()) return
         val req = android.view.inputmethod.ExtractedTextRequest().apply { token = 0 }
         val absCursor = ic.getExtractedText(req, 0)?.selectionStart ?: return
-        expectSelectionUpdateBy = android.os.SystemClock.uptimeMillis() + 500L
+        expectSelectionUpdateBy = android.os.SystemClock.uptimeMillis() + IME_SELECTION_GUARD_MS
         ic.beginBatchEdit()
         ic.finishComposingText()
         android.util.Log.d("CKB_COMPOSE", "recomposeWordAtCursor: finishComposingText done, about to setComposingRegion cursor=$absCursor fragment.len=${fragment.length}")

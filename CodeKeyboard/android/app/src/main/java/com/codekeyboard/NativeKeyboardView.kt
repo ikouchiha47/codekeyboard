@@ -185,8 +185,16 @@ class NativeKeyboardView @JvmOverloads constructor(
                 else                      -> Color.parseColor("#4a9eff")
             }
             accentBarPaint.color = barColor
-            canvas.drawRect(drawRect.left, drawRect.bottom - 2f * density,
-                            drawRect.right, drawRect.bottom, accentBarPaint)
+            val barH = 2.5f * density
+            val barInset = drawRect.width() * 0.15f
+            canvas.drawRoundRect(
+                drawRect.left + barInset,
+                drawRect.bottom + 2f * density,
+                drawRect.right - barInset,
+                drawRect.bottom + 2f * density + barH,
+                barH / 2f, barH / 2f,
+                accentBarPaint
+            )
         }
 
         // ── Label ─────────────────────────────────────────────────────────────
