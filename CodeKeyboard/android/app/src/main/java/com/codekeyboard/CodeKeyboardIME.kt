@@ -183,7 +183,6 @@ class CodeKeyboardIME : InputMethodService() {
 
     override fun onStartInput(editorInfo: EditorInfo?, restarting: Boolean) {
         super.onStartInput(editorInfo, restarting)
-        keyboardView.reloadTheme()
         CodeKeyboardModuleHolder.module?.inputConnection = currentInputConnection
         supportsComposing = when {
             editorInfo == null -> false
