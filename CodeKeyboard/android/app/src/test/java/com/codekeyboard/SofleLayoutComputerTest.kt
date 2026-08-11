@@ -283,15 +283,20 @@ class SofleLayoutComputerTest {
         }
     }
 
-    @Test fun `maxSafeSnapPx matches the hardcoded 8dp constant at typical screen sizes`() {
-        // At typical phone widths the geometric safe bound exceeds 8dp,
-        // so the cap of 8dp is what actually applies. This confirms the
-        // constant in NativeKeyboardView is not arbitrary — it equals maxSafeSnapPx.
-        for ((w, d) in listOf(1080 to 3f, 1440 to 3.5f)) {
-            val c       = SofleLayoutComputer(d)
-            val snap    = c.maxSafeSnapPx(w)
-            val expected = 8f * d
-            assertEquals("maxSafeSnapPx should equal 8dp cap at w=$w d=$d", expected, snap, 0.5f)
+    @Test fun `maxSafeSnapPx equals the tighter of geometric bound and 8dp cap`() {
+        // At the current 2% gutter, halfGap(w)/2 - 1dp margin is smaller than
+        // the 8dp cap at realistic screen sizes, so the geometric bound is
+        // what actually applies here — not the cap itself. This test asserts
+        // against the formula directly (not a magic number) so it can't go
+        // stale the next time the gutter width is retuned; see `maxSafeSnapPx
+        // never exceeds 8dp` above for the safety-cap property that must
+        // hold regardless of gutter width.
+        for ((w, d) in listOf(720 to 2f, 1080 to 3f, 1440 to 3.5f, 2560 to 2f)) {
+            val c = SofleLayoutComputer(d)
+            val geometricMax = (c.halfGap(w) / 2f) - (1f * d)
+            val capPx = 8f * d
+            val expected = minOf(geometricMax, capPx)
+            assertEquals("maxSafeSnapPx should be min(geometric, cap) at w=$w d=$d", expected, c.maxSafeSnapPx(w), 0.01f)
         }
     }
 
