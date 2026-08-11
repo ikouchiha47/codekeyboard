@@ -11,9 +11,7 @@ import {
   NativeModules,
 } from 'react-native';
 import {SafeAreaProvider, SafeAreaView} from 'react-native-safe-area-context';
-import {Keyboard} from './src/keyboard/Keyboard';
-
-type Tab = 'keyboard' | 'settings' | 'themes' | 'languages';
+type Tab = 'settings' | 'themes' | 'languages';
 
 function SnippetsEditor() {
   const [snippets, setSnippets] = useState<Record<string, string>>({});
@@ -178,13 +176,9 @@ function PlaceholderScreen({tab}: {tab: Tab}) {
   );
 }
 
-function App({mode}: {mode?: string}) {
+function App() {
   const isDarkMode = useColorScheme() === 'dark';
-  const [activeTab, setActiveTab] = useState<Tab>('keyboard');
-
-  if (mode === 'ime') {
-    return <Keyboard mode="ime" />;
-  }
+  const [activeTab, setActiveTab] = useState<Tab>('settings');
 
   return (
     <SafeAreaProvider>
@@ -193,7 +187,7 @@ function App({mode}: {mode?: string}) {
           barStyle={isDarkMode ? 'light-content' : 'dark-content'}
         />
         <View style={styles.tabBar}>
-          {(['keyboard', 'settings', 'themes', 'languages'] as Tab[]).map(
+          {(['settings', 'themes', 'languages'] as Tab[]).map(
             tab => (
               <TouchableOpacity
                 key={tab}
@@ -213,9 +207,7 @@ function App({mode}: {mode?: string}) {
             ),
           )}
         </View>
-        {activeTab === 'keyboard' ? (
-          <Keyboard />
-        ) : activeTab === 'settings' ? (
+        {activeTab === 'settings' ? (
           <SettingsScreen />
         ) : (
           <PlaceholderScreen tab={activeTab} />
