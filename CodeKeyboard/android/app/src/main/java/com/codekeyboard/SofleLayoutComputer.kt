@@ -31,7 +31,7 @@ class SofleLayoutComputer(internal val density: Float) : KeyboardLayoutComputer 
     internal val topRowKeys = 8              // Tab + Esc + 6 layer slots
 
     /** Gap between the left and right halves as a fraction of screen width. */
-    internal fun halfGap(screenW: Int): Float = screenW * 0.05f
+    internal fun halfGap(screenW: Int): Float = screenW * 0.02f
 
     /**
      * Maximum snap radius in physical pixels that is guaranteed not to bridge
