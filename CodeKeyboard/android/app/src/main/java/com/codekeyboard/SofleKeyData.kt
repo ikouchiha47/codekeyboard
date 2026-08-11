@@ -40,7 +40,7 @@ object SofleKeyData {
             listOf(k("a", hold="ctrl"),  k("s", hold="meta"),
                    k("d", hold="alt"),   k("f", hold="shift"), k("g")),
             listOf(k("z"),     k("x"),     k("c"),     k("v"),     k("b")),
-            listOf(k("Shift","shift", hold="shift"), k("Spc","space", hold="lower"), k("LWR","lower", hold="lower"),
+            listOf(k("Shift","shift", hold="shift"), k("Spc","space"), k("LWR","lower", hold="lower"),
                    k("Ctrl","ctrl", hold="ctrl"),  k("Alt","alt", hold="alt"))
         ),
         right = listOf(
@@ -48,7 +48,7 @@ object SofleKeyData {
             listOf(k("h", hold="shift"),  k("j", hold="alt"),
                    k("k", hold="meta"),   k("l", hold="ctrl"), k(";", shift=":")),
             listOf(k("n"),     k("m"),     k(",", shift="<"), k(".", shift=">"), k("Bksp","backspace")),
-            listOf(k("RSE","raise", hold="raise"), k("Enter","enter"), k("Spc","space", hold="raise"),
+            listOf(k("RSE","raise", hold="raise"), k("Enter","enter"), k("Spc","space"),
                    k("FUNC","func", hold="func"),  k("ADJ","adj", hold="adj"))
         )
     )

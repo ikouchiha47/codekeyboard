@@ -2,18 +2,23 @@
 
 A split, column-staggered Android keyboard (IME) for coders, with a matching React Native in-app keyboard.
 
-## Layout
+## Layouts
 
-![CodeKeyboard layout](keyboard.png)
+Two physical layouts, selectable from the app:
 
-Column-staggered split layout (Sofle/Corne inspired) with ZMK-style layers, home row mods, and thumb layer-holds.
+| Sofle V5 (5×4 + 5 thumb keys) | Ferris Sweep (5×3 + 2 thumb keys) |
+|:---:|:---:|
+| ![Sofle V5](docs/screenshots/layout-sofle.png) | ![Ferris Sweep](docs/screenshots/layout-ferris.png) |
+
+Column-staggered split layout with ZMK-style layers, home row mods, and thumb layer-holds.
 
 ## Features
 
 - 5 layers: base, lower, raise, adjust, func
-- Hold-tap: home row mods (a/s/d/f/h/j/k/l) and thumb layer-holds (both Space keys)
+- Hold-tap: home row mods (a/s/d/f/h/j/k/l) and thumb layer-holds
+- Tri-layer: hold LWR+RSE simultaneously for ADJ/FUNC (Ferris Sweep)
 - Double-tap to LOCK modifiers and layers
-- Backspace auto-repeat (400ms initial, 50ms repeat)
+- Backspace and Space auto-repeat (400ms initial, 50ms repeat)
 - Native IME service with canvas rendering (no WebView)
 - React Native in-app keyboard fed layout through a native bridge
 

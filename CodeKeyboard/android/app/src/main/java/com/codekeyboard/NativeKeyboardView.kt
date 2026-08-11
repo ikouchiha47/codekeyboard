@@ -62,14 +62,17 @@ class NativeKeyboardView @JvmOverloads constructor(
         onKeyHeld?.invoke(key)
     }
 
-    // Dedicated-modifier hold — activate-on-down path.
-    // Modifier activates the moment the finger touches it. On release:
-    //   - another key was tapped while held → pure hold, just release
-    //   - no other key tapped → treat as tap, cycle latch state
-    private var modHoldKeyDef: KeyDef? = null
-    private var modHoldPointerId = -1
-    private var modHoldOtherKeyPressed = false
-    private var modHoldStartTime = 0L
+    // Dedicated-modifier hold — activate-on-down path, but with a MIN_TAP_MS delay
+    // to filter out phantom capacitive touches (<20ms) that the hardware generates
+    // on adjacent keys while a real key is held.
+    // heldFired=true once the MIN_TAP_MS runnable fires and onKeyHeld is invoked.
+    private data class ModHoldEntry(
+        val key: KeyDef,
+        var otherKeyPressed: Boolean,
+        val startTime: Long,
+        var heldFired: Boolean = false,
+    )
+    private val modHoldByPointer = HashMap<Int, ModHoldEntry>()
 
     var computer: KeyboardLayoutComputer? = null
     var kbState: KeyboardState = KeyboardState()
@@ -85,7 +88,7 @@ class NativeKeyboardView @JvmOverloads constructor(
 
     fun notifyStateChanged(newState: KeyboardState) {
         this.kbState = newState
-        android.util.Log.d("CKB_HOLD", "notifyStateChanged: effectiveLayer=${newState.effectiveLayer} layerHeld=${newState.layerHeld}")
+        android.util.Log.e("CKB_HOLD", "notifyStateChanged: effectiveLayer=${newState.effectiveLayer} layerHeld=${newState.layerHeld}")
         if (width > 0) recompute(width) else { state = newState; invalidate() }
     }
 
@@ -265,17 +268,22 @@ class NativeKeyboardView @JvmOverloads constructor(
                 val idx = event.actionIndex
                 val pid = event.getPointerId(idx)
                 hitTest(event.getX(idx), event.getY(idx))?.let { key ->
-                    performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
 
                     if (key.holdAction != null && key.action in DEDICATED_MOD_ACTIONS) {
-                        // Dedicated modifier: activate immediately on down.
-                        // Tap vs hold resolved on ACTION_UP.
-                        modHoldKeyDef = key
-                        modHoldPointerId = pid
-                        modHoldOtherKeyPressed = false
-                        modHoldStartTime = System.currentTimeMillis()
-                        onKeyHeld?.invoke(key)
+                        // Dedicated modifier: delay activation by MIN_TAP_MS to filter phantom
+                        // capacitive touches. Haptic fires only after the delay confirms real intent.
+                        val entry = ModHoldEntry(key, false, System.currentTimeMillis())
+                        modHoldByPointer[pid] = entry
+                        android.util.Log.e("CKB_HOLD", "DOWN dedicated pid=$pid action=${key.action} holdAction=${key.holdAction}")
+                        postDelayed({
+                            // Entry removed by UP or CANCEL before delay elapsed → phantom, ignore.
+                            if (modHoldByPointer[pid] !== entry) return@postDelayed
+                            entry.heldFired = true
+                            performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                            onKeyHeld?.invoke(key)
+                        }, MIN_TAP_MS)
                     } else if (key.holdAction != null) {
+                        performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
                         // Home-row mod / thumb space: timer path.
                         if (holdTapKeyDef != null) {
                             holdTapHandler.removeCallbacksAndMessages(null)
@@ -286,12 +294,13 @@ class NativeKeyboardView @JvmOverloads constructor(
                         holdTapPointerId = pid
                         holdTapFired = false
                         holdTapHandler.postDelayed(holdTapRunnable, TAPPING_TERM_MS)
-                        // Mark any active mod-hold as having seen another key
-                        if (modHoldKeyDef != null) modHoldOtherKeyPressed = true
+                        // Only mark confirmed holds as having seen another key press.
+                        modHoldByPointer.values.filter { it.heldFired }.forEach { it.otherKeyPressed = true }
                     } else {
+                        performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
                         // Regular key: fire immediately.
-                        // Mark any active mod-hold as having seen another key.
-                        if (modHoldKeyDef != null) modHoldOtherKeyPressed = true
+                        // Only mark confirmed holds as having seen another key press.
+                        modHoldByPointer.values.filter { it.heldFired }.forEach { it.otherKeyPressed = true }
                         onKeyTapped?.invoke(key)
                         if (key.action in REPEATABLE_ACTIONS) {
                             repeatKeyDef = key
@@ -305,17 +314,22 @@ class NativeKeyboardView @JvmOverloads constructor(
             MotionEvent.ACTION_POINTER_UP -> {
                 val pid = event.getPointerId(event.actionIndex)
 
-                if (pid == modHoldPointerId) {
-                    val key = modHoldKeyDef!!
-                    val otherPressed = modHoldOtherKeyPressed
-                    val wasQuickTap = !otherPressed &&
-                        (System.currentTimeMillis() - modHoldStartTime) < TAPPING_TERM_MS
-                    modHoldKeyDef = null
-                    modHoldPointerId = -1
-                    modHoldOtherKeyPressed = false
-                    modHoldStartTime = 0L
-                    onKeyReleased?.invoke(key)
-                    if (wasQuickTap) onKeyTapped?.invoke(key) // cycle latch state
+                modHoldByPointer.remove(pid)?.let { entry ->
+                    val elapsedMs = System.currentTimeMillis() - entry.startTime
+                    android.util.Log.e("CKB_HOLD", "UP dedicated pid=$pid action=${entry.key.action} elapsed=${elapsedMs}ms heldFired=${entry.heldFired} otherPressed=${entry.otherKeyPressed}")
+                    if (!entry.heldFired) {
+                        // Phantom touch — onKeyHeld never fired, delayed runnable will see
+                        // entry is gone and bail out. Nothing to release in state machine.
+                        return@let
+                    }
+                    // Layer hold keys (lower/raise/adj/func): purely hold-and-release.
+                    // Never cycle the latch on quick release — that causes every short hold
+                    // to toggle the layer latch, creating a rapid-cycle loop.
+                    // Modifier hold keys (shift/ctrl/alt): may cycle latch on quick tap.
+                    val isLayerHold = entry.key.action in KeyboardState.LAYER_HOLDS
+                    val wasQuickTap = !isLayerHold && !entry.otherKeyPressed && elapsedMs < TAPPING_TERM_MS
+                    onKeyReleased?.invoke(entry.key)
+                    if (wasQuickTap) onKeyTapped?.invoke(entry.key)
                 }
 
                 if (pid == holdTapPointerId) {
@@ -378,8 +392,8 @@ class NativeKeyboardView @JvmOverloads constructor(
             }
             MotionEvent.ACTION_CANCEL -> {
                 cancelRepeat()
-                modHoldKeyDef?.let { onKeyReleased?.invoke(it) }
-                modHoldKeyDef = null; modHoldPointerId = -1; modHoldOtherKeyPressed = false
+                modHoldByPointer.values.filter { it.heldFired }.forEach { onKeyReleased?.invoke(it.key) }
+                modHoldByPointer.clear()
                 if (holdTapKeyDef != null) {
                     val key = holdTapKeyDef!!
                     holdTapHandler.removeCallbacksAndMessages(null)
@@ -400,8 +414,8 @@ class NativeKeyboardView @JvmOverloads constructor(
     override fun onDetachedFromWindow() {
         super.onDetachedFromWindow()
         cancelRepeat()
-        modHoldKeyDef?.let { onKeyReleased?.invoke(it) }
-        modHoldKeyDef = null; modHoldPointerId = -1; modHoldOtherKeyPressed = false
+        modHoldByPointer.values.filter { it.heldFired }.forEach { onKeyReleased?.invoke(it.key) }
+        modHoldByPointer.clear()
         holdTapHandler.removeCallbacksAndMessages(null)
         holdTapKeyDef = null; holdTapPointerId = -1; holdTapFired = false
     }
@@ -434,10 +448,11 @@ class NativeKeyboardView @JvmOverloads constructor(
         private val MOD_ACTIONS   = setOf("shift", "caps", "ctrl", "alt", "enter",
                                           "backspace", "delete", "tab", "escape",
                                           "arrow-left", "arrow-right", "arrow-up", "arrow-down")
-        private val REPEATABLE_ACTIONS = setOf("backspace", "delete")
+        private val REPEATABLE_ACTIONS = setOf("backspace", "delete", "space")
         private const val REPEAT_INITIAL_DELAY_MS = 400L
         private const val REPEAT_INTERVAL_MS = 50L
         private const val TAPPING_TERM_MS = 150L
+        private const val MIN_TAP_MS     = 40L   // phantom touches are <20ms; human taps are >60ms
         // Snap radius is now computed dynamically via SofleLayoutComputer.maxSafeSnapPx
         private const val HIT_EXPAND_DP = 2.5f
     }

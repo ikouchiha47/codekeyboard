@@ -14,13 +14,21 @@ separate from their tap action.
 | RSE | toggle Raise layer | momentary Raise (held only) |
 | FUNC | toggle Func layer | momentary Func (held only) |
 | ADJ | toggle Adjust layer | momentary Adjust (held only) |
-| Space (left thumb) | Space | momentary Lower |
-| Space (right thumb) | Space | momentary Raise |
 
-Momentary means the layer is active only while the key is held. Toggle (tap) latches the
-layer until you tap the key again.
+Momentary means the layer is active only while the key is held. Tap latches the layer
+until you tap the key again.
 
-LWR + RSE held together = Adjust layer.
+### Tri-layer (Ferris Sweep)
+
+The Ferris Sweep has only LWR and RSE as thumb keys — no dedicated FUNC or ADJ key.
+Hold both thumbs to reach the overlay layers:
+
+| Sequence | Layer |
+|---|---|
+| Hold LWR, then hold RSE | ADJ (adjust / media) |
+| Hold RSE, then hold LWR | FUNC (editor actions) |
+
+Release either thumb to exit the tri-layer.
 
 ---
 

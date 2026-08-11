@@ -53,8 +53,8 @@ class FerrisSweepBaseLayerProvider : BaseLayerProvider<FerrisSweepLayerData> {
                        k(a("k"), hold="meta"),  k(a("l"), hold="ctrl"), k(";", shift=":")),
                 listOf(k(a("n")), k(a("m")), k(",", shift="<"), k(".", shift=">"), k("Bksp","backspace")),
             ),
-            thumbL = listOf(k("LWR","lower", hold="lower"), k("Spc","space", hold="lower")),
-            thumbR = listOf(k("Spc","space", hold="raise"), k("RSE","raise", hold="raise")),
+            thumbL = listOf(k("LWR","lower", hold="lower"), k("Spc","space")),
+            thumbR = listOf(k("Spc","space"), k("RSE","raise", hold="raise")),
         )
     }
 

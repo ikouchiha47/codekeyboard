@@ -139,14 +139,35 @@ class KeyboardState {
     fun applyHold(action: String) {
         when {
             action in HOLD_STATE_MODIFIERS -> _hold.add(action)
-            action in LAYER_HOLDS          -> layerHeld = action
+            action in LAYER_HOLDS -> {
+                if (layerHeld == null) {
+                    layerHeld = action
+                } else {
+                    // Tri-layer: order of thumb presses determines which overlay layer.
+                    // Hold LWR first then RSE → ADJ (adjust/media).
+                    // Hold RSE first then LWR → FUNC (editor actions).
+                    val tri = when {
+                        layerHeld == "lower" && action == "raise" -> "adj"
+                        layerHeld == "raise" && action == "lower" -> "func"
+                        else -> null
+                    }
+                    if (tri != null) layerHeld = tri
+                }
+            }
         }
     }
 
     fun releaseHold(action: String) {
         when {
             action in HOLD_STATE_MODIFIERS -> _hold.remove(action)
-            action in LAYER_HOLDS          -> { if (layerHeld == action) layerHeld = null }
+            action in LAYER_HOLDS -> {
+                if (layerHeld == action) {
+                    layerHeld = null
+                } else if (layerHeld in setOf("adj", "func") && action in setOf("lower", "raise")) {
+                    // Releasing either constituent key exits the tri-layer.
+                    layerHeld = null
+                }
+            }
         }
     }
 
