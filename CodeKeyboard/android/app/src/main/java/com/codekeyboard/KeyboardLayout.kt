@@ -13,7 +13,11 @@ data class KeyDef(
     val action: String? = null,
     val shift: String? = null,
     val width: Float = 1f,
-    val holdAction: String? = null
+    val holdAction: String? = null,
+    // When true, no Shift state (latched, locked, or held) selects this key's
+    // shift value — it always renders/types its primary label.
+    // Letters are unaffected; this only matters for keys with a shift value.
+    val ignoreLockedShift: Boolean = false
 )
 
 /**

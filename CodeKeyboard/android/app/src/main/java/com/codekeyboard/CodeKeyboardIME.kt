@@ -20,6 +20,9 @@ class CodeKeyboardIME : InputMethodService() {
         // Guard window: onUpdateSelection arrivals within this many ms of a
         // recompose are treated as IME-driven, not user cursor moves.
         private const val IME_SELECTION_GUARD_MS = 200L
+        // How far back to look for a sentence-ending "." "!" "?" when a field
+        // gains focus, to decide whether Sentence Case should start armed.
+        private const val SENTENCE_CASE_SCAN_CHARS = 8
     }
 
     private lateinit var keyboardView: NativeKeyboardView
@@ -30,6 +33,12 @@ class CodeKeyboardIME : InputMethodService() {
     private lateinit var wordLearner: WordLearner
     private val kbState = KeyboardState()
     private val composing = ComposingBuffer()
+    // Captured from kbState.shift the moment the CURRENT composing word's
+    // first letter was typed. Shift's latch clears off kbState per-letter (so
+    // display case is right as you type), so by the time a suggestion chip is
+    // tapped the live state has already been consumed — this remembers what
+    // it was when the word started, for handleSuggestionTap to apply.
+    private var composingStartedShift = LatchState.NONE
     private var activeLayoutId = LayoutRegistry.DEFAULT_LAYOUT
     private var activeKeyMapId = KeyMapRegistry.DEFAULT.id
     private var expectSelectionUpdateBy = 0L  // if now < this, onUpdateSelection is IME-driven, not user
@@ -84,7 +93,6 @@ class CodeKeyboardIME : InputMethodService() {
         "meta" to KeyEvent.META_META_ON,
     )
 
-    private val CYCLE_AND_TOGGLE = KeyboardState.CYCLE_MODIFIERS + KeyboardState.TOGGLE_MODIFIERS
     private val STATE_HOLD_ACTIONS = KeyboardState.HOLD_STATE_MODIFIERS + KeyboardState.LAYER_HOLDS
 
     // ── Lifecycle ─────────────────────────────────────────────────────────────
@@ -220,6 +228,17 @@ class CodeKeyboardIME : InputMethodService() {
         prevCommittedWord = ""
         currentInputConnection?.finishComposingText()
         if (::suggestionBar.isInitialized) suggestionBar.clear()
+
+        kbState.sentenceCaseEnabled = KeyboardSettings.getBoolean("sentenceCase", true)
+        if (kbState.sentenceCaseEnabled && supportsComposing) {
+            val before = currentInputConnection?.getTextBeforeCursor(SENTENCE_CASE_SCAN_CHARS, 0)?.toString()
+            val atSentenceStart = when {
+                before == null -> true // no field content available — treat as start
+                before.isEmpty() -> true
+                else -> before.trimEnd().lastOrNull()?.let { it == '.' || it == '!' || it == '?' } ?: false
+            }
+            if (atSentenceStart) kbState.armSentenceCaseShift()
+        }
     }
 
     override fun onFinishInput() {
@@ -265,7 +284,7 @@ class CodeKeyboardIME : InputMethodService() {
             }
 
             // ── Modifier state keys ──────────────────────────────────────────
-            in CYCLE_AND_TOGGLE -> {
+            in KeyboardState.CYCLE_MODIFIERS -> {
                 kbState.cycleModifier(action)
                 keyboardView.notifyStateChanged(kbState)
             }
@@ -403,6 +422,9 @@ class CodeKeyboardIME : InputMethodService() {
                         suggestionBar.update(word, suggestions)
                     } else if (supportsComposing && text.length == 1 && !isPunctuation(text[0])) {
                         keystrokesSinceCommit++
+                        if (composing.isEmpty) {
+                            composingStartedShift = kbState.shift
+                        }
                         val word = composing.append(text)
                         ic?.setComposingText(word, 1)
                         val suggestions = if (word.startsWith(";")) {
@@ -416,7 +438,7 @@ class CodeKeyboardIME : InputMethodService() {
                         ic?.commitText(text, 1)
                     }
                     android.util.Log.e("CKB_HOLD", "onCharCommitted: layerHeld=${kbState.layerHeld} effectiveLayer=${kbState.effectiveLayer}")
-                    kbState.onCharCommitted()
+                    kbState.onCharCommitted(text)
                     android.util.Log.e("CKB_HOLD", "after onCharCommitted: layerHeld=${kbState.layerHeld} effectiveLayer=${kbState.effectiveLayer}")
                     keyboardView.notifyStateChanged(kbState)
                 }
@@ -503,7 +525,7 @@ class CodeKeyboardIME : InputMethodService() {
         if (word.isNotEmpty()) {
             ic?.commitText(word, 1)
             wordLearner.learnFromFlush(word)
-            kbState.onCharCommitted()
+            kbState.onCharCommitted(word)
             keyboardView.notifyStateChanged(kbState)
             Metrics.histogram("keyboard.word.keystrokes", keystrokesSinceCommit.toDouble(),
                 "method" to "typed")
@@ -515,12 +537,30 @@ class CodeKeyboardIME : InputMethodService() {
         suggestionBar.clear()
     }
 
-    private fun handleSuggestionTap(word: String) {
+    private fun handleSuggestionTap(rawWord: String) {
         val ic = currentInputConnection ?: return
+        // Suggestions are committed directly, bypassing resolveLabel — apply
+        // Shift here too, scaled to a whole word: LOCKED (double-tap Shift,
+        // i.e. caps-lock) uppercases every letter, LATCHED (single tap, or
+        // Sentence Case arming it) uppercases only the first.
+        //
+        // Shift's latch clears off kbState the moment the first letter of a
+        // word is typed (so the displayed case is right as you type), so if
+        // the user already typed part of the word before tapping a
+        // suggestion, the live state has already been consumed — use what
+        // was captured when this word started instead. If nothing was typed
+        // yet (a bigram/next-word suggestion tapped with an empty composing
+        // buffer), the live state is still accurate since nothing cleared it.
+        val shiftState = if (composing.isEmpty) kbState.shift else composingStartedShift
+        val word = when (shiftState) {
+            LatchState.LOCKED  -> rawWord.uppercase()
+            LatchState.LATCHED -> rawWord.replaceFirstChar { it.uppercase() }
+            LatchState.NONE    -> rawWord
+        }
         ic.commitText("$word ", 1)
         composing.clear()
         wordLearner.learnFromTap(word)
-        kbState.onCharCommitted()
+        kbState.onCharCommitted(word)
         keyboardView.notifyStateChanged(kbState)
         Metrics.histogram("keyboard.word.keystrokes", keystrokesSinceCommit.toDouble(),
             "method" to "suggestion")

@@ -18,8 +18,8 @@ package com.codekeyboard
  */
 object SofleKeyData {
 
-    private fun k(label: String, action: String? = null, shift: String? = null, hold: String? = null) =
-        KeyDef(label, action, shift, holdAction = hold)
+    private fun k(label: String, action: String? = null, shift: String? = null, hold: String? = null, ignoreLockedShift: Boolean = false) =
+        KeyDef(label, action, shift, holdAction = hold, ignoreLockedShift = ignoreLockedShift)
 
     private fun empty() = KeyDef("")
 
@@ -47,7 +47,7 @@ object SofleKeyData {
             listOf(k("y"),     k("u"),     k("i"),     k("o"),     k("p")),
             listOf(k("h", hold="shift"),  k("j", hold="alt"),
                    k("k", hold="meta"),   k("l", hold="ctrl"), k(";", shift=":")),
-            listOf(k("n"),     k("m"),     k(",", shift="<"), k(".", shift=">"), k("Bksp","backspace")),
+            listOf(k("n"),     k("m"),     k(",", shift="<", ignoreLockedShift=true), k(".", shift=">", ignoreLockedShift=true), k("Bksp","backspace")),
             listOf(k("RSE","raise", hold="raise"), k("Enter","enter"), k("Spc","space"),
                    k("FUNC","func", hold="func"),  k("ADJ","adj", hold="adj"))
         )
@@ -77,7 +77,7 @@ object SofleKeyData {
             listOf(k("6", shift="^"), k("7", shift="&"), k("8", shift="*"),
                    k("9", shift="("), k("0", shift=")")),
             listOf(k("/", shift="?"), k(":", shift=";"), k("'", shift="\""),
-                   k("<"), k(">")),
+                   k("<", shift=","), k(">", shift=".")),
             listOf(k("!"), k("@"), k("#"), k("$"), k("Del","delete")),
             listOf(k("RSE","raise", hold="raise"), k("Enter","enter"), k("Spc","space"),
                    k("FUNC","func", hold="func"),  k("ADJ","adj", hold="adj"))

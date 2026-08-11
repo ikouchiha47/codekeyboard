@@ -6,7 +6,6 @@ class KeyboardState {
 
     companion object {
         val CYCLE_MODIFIERS      = setOf("shift", "ctrl", "alt")
-        val TOGGLE_MODIFIERS     = setOf("caps")
         val HOLD_STATE_MODIFIERS = setOf("ctrl", "shift", "alt", "meta")
         val LAYER_HOLDS          = setOf("lower", "raise", "adj", "func")
     }
@@ -22,12 +21,21 @@ class KeyboardState {
     // Label of the key currently being held (for visual feedback)
     var heldKeyLabel: String? = null
 
+    // ── Sentence Case ────────────────────────────────────────────────────
+    // Settings-mirrored toggle — set by the IME layer from KeyboardSettings so
+    // this class stays free of Android/SharedPreferences dependencies.
+    //
+    // Implemented as a real Shift latch (not a bespoke flag) so it gets
+    // everything Shift already has for free: the key lights up, every
+    // existing isShiftActive check respects it, and tapping Shift cancels it
+    // exactly like cancelling a manually-latched Shift.
+    var sentenceCaseEnabled: Boolean = true
+
     // ── Generic modifier storage ──────────────────────────────────────────
     private val _latch = mutableMapOf(
         "shift" to LatchState.NONE,
         "ctrl"  to LatchState.NONE,
         "alt"   to LatchState.NONE,
-        "caps"  to LatchState.NONE,
     )
     private val _hold = mutableSetOf<String>()
     private val _tap  = mapOf(
@@ -40,7 +48,6 @@ class KeyboardState {
     val shift: LatchState get() = _latch["shift"] ?: LatchState.NONE
     val ctrl:  LatchState get() = _latch["ctrl"]  ?: LatchState.NONE
     val alt:   LatchState get() = _latch["alt"]   ?: LatchState.NONE
-    val caps:  LatchState get() = _latch["caps"]  ?: LatchState.NONE
 
     val shiftHeld: Boolean get() = "shift" in _hold
     val ctrlHeld:  Boolean get() = "ctrl"  in _hold
@@ -52,7 +59,6 @@ class KeyboardState {
         (_latch[name] ?: LatchState.NONE) != LatchState.NONE || name in _hold
 
     val isShiftActive: Boolean get() = isModifierActive("shift")
-    val isCapsActive:  Boolean get() = caps != LatchState.NONE
     val isCtrlActive:  Boolean get() = isModifierActive("ctrl")
     val isAltActive:   Boolean get() = isModifierActive("alt")
     val isMetaActive:  Boolean get() = "meta" in _hold
@@ -82,10 +88,6 @@ class KeyboardState {
 
     // ── Generic modifier cycling ─────────────────────────────────────────
     fun cycleModifier(name: String) {
-        if (name == "caps") {
-            _latch["caps"] = if (_latch["caps"] == LatchState.NONE) LatchState.LOCKED else LatchState.NONE
-            return
-        }
         val tap = _tap[name] ?: return
         val now = System.currentTimeMillis()
         val isDouble = tap.check(name, now)
@@ -172,8 +174,28 @@ class KeyboardState {
     }
 
     // ── Char-committed / label resolution ─────────────────────────────────
-    fun onCharCommitted() {
+    /**
+     * [committedText] is what was just sent to the input field (a single
+     * character, or a whole flushed word). Pass null for commits that aren't
+     * real typed text (e.g. a Ctrl+letter shortcut) — Shift's latch then
+     * clears unconditionally, matching the pre-Sentence-Case behavior.
+     *
+     * A latched Shift only clears here when the committed text was actually
+     * a letter — a digit or extra space right after a sentence-ending "."
+     * (which latches Shift, see below) shouldn't silently cancel it before
+     * the real next letter arrives. Same rule applies whether the latch came
+     * from a manual Shift tap or from Sentence Case; they're the same state.
+     */
+    fun onCharCommitted(committedText: String? = null) {
+        val committedChar = committedText?.lastOrNull()
+        val isLetter = committedChar?.isLetter() == true
+        val clearShift = committedText == null || isLetter
+
+        if (clearShift && _latch["shift"] == LatchState.LATCHED) {
+            _latch["shift"] = LatchState.NONE
+        }
         for (name in CYCLE_MODIFIERS) {
+            if (name == "shift") continue
             if (_latch[name] == LatchState.LATCHED) _latch[name] = LatchState.NONE
         }
         if (layerState == LatchState.LATCHED) {
@@ -182,14 +204,31 @@ class KeyboardState {
         }
         _tap.values.forEach { it.reset() }
         layerTap.reset()
+
+        if (sentenceCaseEnabled && committedChar != null &&
+            (committedChar == '.' || committedChar == '!' || committedChar == '?') &&
+            _latch["shift"] == LatchState.NONE) {
+            _latch["shift"] = LatchState.LATCHED
+        }
+    }
+
+    /**
+     * Arms Sentence Case's Shift latch for the very next letter, without
+     * clobbering an existing manual Shift state (latched or locked). Called by the IME layer
+     * when a field gains focus and appears to be at a sentence start (empty,
+     * or already ending in ". "/"! "/"? ").
+     */
+    fun armSentenceCaseShift() {
+        if (sentenceCaseEnabled && _latch["shift"] == LatchState.NONE) {
+            _latch["shift"] = LatchState.LATCHED
+        }
     }
 
     fun resolveLabel(key: KeyDef): String? {
-        val useShift = isShiftActive || isCapsActive
-        val raw = if (useShift && key.shift != null) key.shift else key.label
+        val useShiftValue = isShiftActive && !key.ignoreLockedShift
+        val raw = if (useShiftValue && key.shift != null) key.shift else key.label
         return if (raw.length == 1 && raw[0].isLetter()) {
-            val upper = (isShiftActive && !isCapsActive) || (!isShiftActive && isCapsActive)
-            if (upper) raw.uppercase() else raw.lowercase()
+            if (isShiftActive) raw.uppercase() else raw.lowercase()
         } else {
             raw
         }
