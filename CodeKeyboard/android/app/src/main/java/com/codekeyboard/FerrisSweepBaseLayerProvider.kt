@@ -21,8 +21,8 @@ class FerrisSweepBaseLayerProvider : BaseLayerProvider<FerrisSweepLayerData> {
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
-    private fun k(label: String, action: String? = null, shift: String? = null, hold: String? = null) =
-        KeyDef(label, action, shift, holdAction = hold)
+    private fun k(label: String, action: String? = null, shift: String? = null, hold: String? = null, ignoreLockedShift: Boolean = false) =
+        KeyDef(label, action, shift, holdAction = hold, ignoreLockedShift = ignoreLockedShift)
 
     private fun empty() = KeyDef("")
 
@@ -53,7 +53,7 @@ class FerrisSweepBaseLayerProvider : BaseLayerProvider<FerrisSweepLayerData> {
                 listOf(k(a("y")), k(a("u")), k(a("i")), k(a("o")), k(a("p"))),
                 listOf(k(a("h"), hold="shift"), k(a("j"), hold="alt"),
                        k(a("k"), hold="meta"),  k(a("l"), hold="ctrl"), k(";", shift=":")),
-                listOf(k(a("n")), k(a("m")), k(",", shift="<"), k(".", shift=">"), k("Bksp","backspace")),
+                listOf(k(a("n")), k(a("m")), k(",", shift="<", ignoreLockedShift=true), k(".", shift=">", ignoreLockedShift=true), k("Bksp","backspace")),
             ),
             // Thumb cluster is fixed-function across every layer: LWR/RSE sit
             // innermost (nearest the centre gap), Space/Enter sit outermost.
@@ -90,7 +90,7 @@ class FerrisSweepBaseLayerProvider : BaseLayerProvider<FerrisSweepLayerData> {
             // ? bare here as a quick-access alternate to its existing shift-of-/
             // route, same pattern as !@#$ getting bare-tap copies below.
             // The duplicate ' that used to sit here (also at left row-2) is gone.
-            listOf(k("/", shift="?"), k(":", shift=";"), k("?"), k("<"), k(">")),
+            listOf(k("/", shift="?"), k(":", shift=";"), k("?"), k("<", shift=","), k(">", shift=".")),
             listOf(k("!"), k("@"), k("#"), k("$"), k("Del","delete")),
         ),
         thumbL = listOf(k("Spc","space"), k("LWR","lower", hold="lower")),

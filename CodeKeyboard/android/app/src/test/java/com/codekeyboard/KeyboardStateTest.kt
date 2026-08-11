@@ -18,7 +18,6 @@ class KeyboardStateTest {
 
     @Test fun `initial modifiers are all inactive`() {
         assertFalse(state.isShiftActive)
-        assertFalse(state.isCapsActive)
         assertFalse(state.isCtrlActive)
         assertFalse(state.isAltActive)
         assertFalse(state.isMetaActive)
@@ -107,11 +106,6 @@ class KeyboardStateTest {
         state.cycleModifier("shift"); assertEquals(LatchState.NONE,    state.shift)
     }
 
-    @Test fun `caps toggles NONE ↔ LOCKED (no LATCHED state)`() {
-        state.cycleModifier("caps"); assertEquals(LatchState.LOCKED, state.caps)
-        state.cycleModifier("caps"); assertEquals(LatchState.NONE,   state.caps)
-    }
-
     @Test fun `latched shift clears after char committed`() {
         state.cycleModifier("shift")   // LATCHED
         state.onCharCommitted()
@@ -155,15 +149,11 @@ class KeyboardStateTest {
         assertEquals("A", state.resolveLabel(KeyDef("a")))
     }
 
-    @Test fun `caps produces uppercase alpha`() {
-        state.cycleModifier("caps")
+    @Test fun `locked shift (double-tap, the caps-lock behavior) produces uppercase alpha`() {
+        state.cycleModifier("shift") // LATCHED
+        state.cycleModifier("shift") // double-tap within window -> LOCKED
+        assertEquals(LatchState.LOCKED, state.shift)
         assertEquals("A", state.resolveLabel(KeyDef("a")))
-    }
-
-    @Test fun `shift + caps cancels out (lowercase)`() {
-        state.cycleModifier("shift")
-        state.cycleModifier("caps")
-        assertEquals("a", state.resolveLabel(KeyDef("a")))
     }
 
     @Test fun `shift selects shift label for non-alpha`() {
@@ -172,16 +162,29 @@ class KeyboardStateTest {
         assertEquals("!", state.resolveLabel(key))
     }
 
+    @Test fun `ignoreLockedShift key keeps its primary label under locked shift`() {
+        state.cycleModifier("shift") // LATCHED
+        state.cycleModifier("shift") // double-tap -> LOCKED
+        val comma = KeyDef(",", shift = "<", ignoreLockedShift = true)
+        assertEquals(",", state.resolveLabel(comma))
+    }
+
+    @Test fun `ignoreLockedShift key keeps its primary label under a temporary (latched) shift too`() {
+        state.cycleModifier("shift") // LATCHED, not LOCKED
+        val comma = KeyDef(",", shift = "<", ignoreLockedShift = true)
+        assertEquals(",", state.resolveLabel(comma))
+    }
+
+    @Test fun `ignoreLockedShift has no effect on a key without it set`() {
+        state.cycleModifier("shift")
+        state.cycleModifier("shift") // LOCKED
+        val semicolon = KeyDef(";", shift = ":")
+        assertEquals(":", state.resolveLabel(semicolon))
+    }
+
     @Test fun `no shift uses primary label for non-alpha`() {
         val key = KeyDef("1", shift = "!")
         assertEquals("1", state.resolveLabel(key))
-    }
-
-    @Test fun `caps does not affect non-alpha shift label`() {
-        state.cycleModifier("caps")
-        val key = KeyDef("1", shift = "!")
-        // caps applies shift label for non-alpha too (matches isShiftActive || isCapsActive check)
-        assertEquals("!", state.resolveLabel(key))
     }
 
     // ── Reset ─────────────────────────────────────────────────────────────────
@@ -192,6 +195,102 @@ class KeyboardStateTest {
         assertEquals("base", state.layer)
         assertFalse(state.isShiftActive)
         assertFalse(state.isCtrlActive)
+    }
+
+    // ── Sentence Case (implemented as a real Shift latch) ──────────────────────
+
+    @Test fun `armSentenceCaseShift latches shift`() {
+        state.armSentenceCaseShift()
+        assertTrue(state.isShiftActive)
+        assertEquals("A", state.resolveLabel(KeyDef("a")))
+    }
+
+    @Test fun `armSentenceCaseShift does nothing when disabled`() {
+        state.sentenceCaseEnabled = false
+        state.armSentenceCaseShift()
+        assertFalse(state.isShiftActive)
+    }
+
+    @Test fun `armSentenceCaseShift does not downgrade an already-locked shift`() {
+        state.cycleModifier("shift") // -> LATCHED
+        state.cycleModifier("shift") // double-tap within the window -> LOCKED
+        state.armSentenceCaseShift()
+        assertEquals(LatchState.LOCKED, state.shift)
+    }
+
+    @Test fun `armSentenceCaseShift does not override an already-latched shift`() {
+        state.cycleModifier("shift") // LATCHED
+        state.armSentenceCaseShift()
+        assertEquals(LatchState.LATCHED, state.shift) // unchanged, not double-latched or locked
+    }
+
+    @Test fun `committing a letter clears the sentence-case shift latch`() {
+        state.armSentenceCaseShift()
+        state.onCharCommitted("a")
+        assertFalse(state.isShiftActive)
+    }
+
+    @Test fun `committing a period latches shift for the next letter`() {
+        state.onCharCommitted(".")
+        assertTrue(state.isShiftActive)
+    }
+
+    @Test fun `committing exclamation or question mark latches shift`() {
+        state.onCharCommitted("!")
+        assertTrue(state.isShiftActive)
+        state.onCharCommitted("a") // consume it
+        assertFalse(state.isShiftActive)
+        state.onCharCommitted("?")
+        assertTrue(state.isShiftActive)
+    }
+
+    @Test fun `committing space leaves the shift latch untouched`() {
+        state.onCharCommitted(".")
+        assertTrue(state.isShiftActive)
+        state.onCharCommitted(" ")
+        assertTrue(state.isShiftActive)
+    }
+
+    @Test fun `committing a digit leaves the shift latch untouched`() {
+        state.onCharCommitted(".")
+        assertTrue(state.isShiftActive)
+        state.onCharCommitted("5")
+        assertTrue(state.isShiftActive)
+    }
+
+    @Test fun `committing a digit still clears a manually-latched shift's tap machine but not the latch itself`() {
+        // Same rule applies to a plain manual Shift tap, not just Sentence Case —
+        // typing a digit right after tapping Shift shouldn't silently cancel it.
+        state.cycleModifier("shift")
+        assertEquals(LatchState.LATCHED, state.shift)
+        state.onCharCommitted("5")
+        assertEquals(LatchState.LATCHED, state.shift)
+    }
+
+    @Test fun `disabled does not latch shift on sentence-ending punctuation`() {
+        state.sentenceCaseEnabled = false
+        state.onCharCommitted(".")
+        assertFalse(state.isShiftActive)
+    }
+
+    @Test fun `null committed text clears shift unconditionally (ctrl+letter shortcut path)`() {
+        state.armSentenceCaseShift()
+        state.onCharCommitted(null)
+        assertFalse(state.isShiftActive)
+    }
+
+    @Test fun `full sentence flow — arm, type, disarm, arm again`() {
+        // "Hi. there" — after committing "." + " ", the "t" should be forced
+        // uppercase; after that letter, the latch clears until the next ".".
+        assertFalse(state.isShiftActive)
+        state.onCharCommitted(".")
+        assertTrue(state.isShiftActive)
+        state.onCharCommitted(" ")
+        assertTrue(state.isShiftActive)
+        assertEquals("T", state.resolveLabel(KeyDef("t")))
+        state.onCharCommitted("T")
+        assertFalse(state.isShiftActive)
+        assertEquals("h", state.resolveLabel(KeyDef("h")))
     }
 
     // ── computeMetaState (the fold that decides commitText vs sendKeyEvent) ──
@@ -239,9 +338,8 @@ class KeyboardStateTest {
         assertEquals(0x4, state.computeMetaState(testFlags))
     }
 
-    @Test fun `metaState ignores caps and shift (handled via resolveLabel, not key events)`() {
+    @Test fun `metaState ignores shift (handled via resolveLabel, not key events)`() {
         state.cycleModifier("shift")
-        state.cycleModifier("caps")
         assertEquals(0, state.computeMetaState(testFlags))
     }
 

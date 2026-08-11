@@ -179,7 +179,6 @@ class NativeKeyboardView @JvmOverloads constructor(
         val bg = when {
             action == "shift" && state.isShiftActive ->
                 if (state.shift == LatchState.LOCKED) lockedPaint else activePaint
-            action == "caps"  && state.isCapsActive  -> lockedPaint
             action == "ctrl"  && state.isCtrlActive  ->
                 if (state.ctrl  == LatchState.LOCKED) lockedPaint else activePaint
             action == "alt"   && state.isAltActive   ->
@@ -197,7 +196,6 @@ class NativeKeyboardView @JvmOverloads constructor(
         // ── Bottom accent bar (only when key is active) ───────────────────────
         val isActive = when {
             action == "shift" && state.isShiftActive -> true
-            action == "caps"  && state.isCapsActive  -> true
             action == "ctrl"  && state.isCtrlActive  -> true
             action == "alt"   && state.isAltActive   -> true
             action in LAYER_ACTIONS && state.layer == action -> true
@@ -247,7 +245,7 @@ class NativeKeyboardView @JvmOverloads constructor(
         canvas.drawText(label, kr.centerX, kr.centerY + textPaint.textSize * 0.35f, textPaint)
 
         // ── Shift sub-label ───────────────────────────────────────────────────
-        if (key.shift != null && !state.isShiftActive && !state.isCapsActive) {
+        if (key.shift != null && !state.isShiftActive) {
             subPaint.textSize = (kr.height * 0.18f).coerceIn(density * 6f, density * 9f)
             canvas.drawText(key.shift, kr.right - density * 3f, kr.top + subPaint.textSize + density, subPaint)
         }
@@ -445,7 +443,7 @@ class NativeKeyboardView @JvmOverloads constructor(
         // Keys where hold activates immediately (no timer) — dedicated modifier keys only.
         private val DEDICATED_MOD_ACTIONS = setOf("shift", "ctrl", "alt", "lower", "raise", "func", "adj")
         private val THUMB_ACTIONS = setOf("space", "meta")
-        private val MOD_ACTIONS   = setOf("shift", "caps", "ctrl", "alt", "enter",
+        private val MOD_ACTIONS   = setOf("shift", "ctrl", "alt", "enter",
                                           "backspace", "delete", "tab", "escape",
                                           "arrow-left", "arrow-right", "arrow-up", "arrow-down")
         private val REPEATABLE_ACTIONS = setOf("backspace", "delete", "space")
@@ -453,7 +451,7 @@ class NativeKeyboardView @JvmOverloads constructor(
         private const val REPEAT_INTERVAL_MS = 50L
         private const val TAPPING_TERM_MS = 150L
         private const val MIN_TAP_MS     = 40L   // phantom touches are <20ms; confirmed real above this
-        private const val LAYER_TAP_MS   = 80L   // layer keys: tap < 80ms latches, hold ≥ 80ms is momentary
+        private const val LAYER_TAP_MS   = 150L  // layer keys: tap < 150ms latches, hold ≥ 150ms is momentary
         // Snap radius is now computed dynamically via SofleLayoutComputer.maxSafeSnapPx
         private const val HIT_EXPAND_DP = 2.5f
     }
