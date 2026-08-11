@@ -134,6 +134,66 @@ function SnippetsEditor() {
   );
 }
 
+function LayoutPicker() {
+  const [activeLayout, setActiveLayout] = useState('sofle');
+  const [activeKeymap, setActiveKeymap] = useState('qwerty');
+
+  useEffect(() => {
+    NativeModules.SettingsModule?.getString('layout', (val: string) => {
+      if (val) setActiveLayout(val);
+    });
+    NativeModules.SettingsModule?.getString('keymap', (val: string) => {
+      if (val) setActiveKeymap(val);
+    });
+  }, []);
+
+  const selectLayout = useCallback((id: string) => {
+    setActiveLayout(id);
+    NativeModules.SettingsModule?.setString('layout', id);
+  }, []);
+
+  const selectKeymap = useCallback((id: string) => {
+    setActiveKeymap(id);
+    NativeModules.SettingsModule?.setString('keymap', id);
+  }, []);
+
+  return (
+    <View style={styles.pickerSection}>
+      <Text style={styles.pickerLabel}>Layout</Text>
+      <View style={styles.layoutRow}>
+        {LAYOUTS.map(l => (
+          <TouchableOpacity
+            key={l.id}
+            style={[styles.layoutCard, activeLayout === l.id && styles.layoutCardActive]}
+            onPress={() => selectLayout(l.id)}
+            activeOpacity={0.8}>
+            <Text style={[styles.layoutCardName, activeLayout === l.id && styles.layoutCardNameActive]}>
+              {l.name}
+            </Text>
+            <Text style={styles.layoutCardDesc}>{l.desc}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      <Text style={[styles.pickerLabel, {marginTop: 16}]}>Key Map</Text>
+      <View style={styles.keymapRow}>
+        {KEYMAPS.map(k => (
+          <TouchableOpacity
+            key={k.id}
+            style={[styles.keymapChip, activeKeymap === k.id && styles.keymapChipActive]}
+            onPress={() => selectKeymap(k.id)}
+            activeOpacity={0.8}>
+            <Text style={[styles.keymapChipText, activeKeymap === k.id && styles.keymapChipTextActive]}>
+              {k.name}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+      <Text style={styles.snippetsHint}>Takes effect next time you open the keyboard.</Text>
+    </View>
+  );
+}
+
 function SettingsScreen() {
   const handleEnable = useCallback(() => {
     NativeModules.IMEHelper?.openSettings();
@@ -161,10 +221,25 @@ function SettingsScreen() {
         Opens IME picker to switch active keyboard.
       </Text>
       <View style={styles.divider} />
+      <LayoutPicker />
+      <View style={styles.divider} />
       <SnippetsEditor />
     </ScrollView>
   );
 }
+
+const LAYOUTS: {id: string; name: string; desc: string}[] = [
+  {id: 'sofle',  name: 'Sofle V5',      desc: '5×4 cols + 5 thumb keys'},
+  {id: 'ferris', name: 'Ferris Sweep',  desc: '5×3 cols + 2 thumb keys'},
+];
+
+const KEYMAPS: {id: string; name: string}[] = [
+  {id: 'qwerty',            name: 'QWERTY'},
+  {id: 'colemak',           name: 'Colemak'},
+  {id: 'dvorak',            name: 'Dvorak'},
+  {id: 'programmer-dvorak', name: 'Prog. Dvorak'},
+  {id: 'programmer-colemak',name: 'Prog. Colemak'},
+];
 
 const THEMES: {id: string; name: string; desc: string; bg: string; key: string; accent: string}[] = [
   {id: 'carbon',   name: 'Carbon',   desc: 'Neutral dark grey',        bg: '#111111', key: '#2c2c2c', accent: '#4a9eff'},
@@ -441,6 +516,69 @@ const styles = StyleSheet.create({
     fontSize: 12,
     width: '100%',
     marginTop: 4,
+  },
+  pickerSection: {
+    width: '100%',
+  },
+  pickerLabel: {
+    color: '#e0e0e0',
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 10,
+  },
+  layoutRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  layoutCard: {
+    flex: 1,
+    backgroundColor: '#1e1e1e',
+    borderRadius: 8,
+    padding: 12,
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  layoutCardActive: {
+    borderColor: '#4a9eff',
+    backgroundColor: '#0d1f33',
+  },
+  layoutCardName: {
+    color: '#888',
+    fontSize: 13,
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  layoutCardNameActive: {
+    color: '#4a9eff',
+  },
+  layoutCardDesc: {
+    color: '#555',
+    fontSize: 11,
+  },
+  keymapRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  keymapChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 20,
+    backgroundColor: '#1e1e1e',
+    borderWidth: 1.5,
+    borderColor: '#333',
+  },
+  keymapChipActive: {
+    borderColor: '#4a9eff',
+    backgroundColor: '#0d1f33',
+  },
+  keymapChipText: {
+    color: '#777',
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  keymapChipTextActive: {
+    color: '#4a9eff',
   },
   themeGrid: {
     width: '100%',

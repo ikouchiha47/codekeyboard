@@ -103,8 +103,11 @@ class CodeKeyboardIME : InputMethodService() {
     override fun onCreateInputView(): View {
         val density = resources.displayMetrics.density
 
+        val layoutId = KeyboardSettings.getString("layout", LayoutRegistry.DEFAULT_LAYOUT)
+        val keyMapId = KeyboardSettings.getString("keymap", KeyMapRegistry.DEFAULT.id)
+
         keyboardView = NativeKeyboardView(this)
-        keyboardView.computer    = SofleLayoutComputer(density)
+        keyboardView.computer    = LayoutRegistry.build(layoutId, keyMapId, density)
         keyboardView.kbState     = kbState
         keyboardView.onKeyTapped = { key -> handleKey(key) }
         keyboardView.onKeyHeld   = { key -> handleHold(key) }

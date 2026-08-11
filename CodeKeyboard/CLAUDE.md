@@ -57,3 +57,54 @@ The IME does NOT read from Layout.ts at runtime — they are completely independ
 - React Native 0.86, Kotlin 2.1.20, Android SDK 36, NDK 27.1
 - Hermes engine, New Architecture (Fabric) enabled
 - IME service uses ReactSurface API (not startReactApplication)
+
+# ADR Process
+
+ADRs live in `docs/architecture/decisions/`. Filename: `ADR-NNN-slug.md`.
+
+## Required sections (in order)
+
+1. **Context** — why this decision exists, what is broken or missing
+2. **Goals** — measurable properties the solution must have (e.g. "adding X = N file changes")
+3. **Architecture** — layered design: interfaces first, implementations second, wiring last
+4. **Files** — table of every file touched: New / Modify / No change, one-line role
+5. **Consequences** — what becomes easier, what is deferred, what trade-offs remain
+6. **Workflow** — DAG of implementation tasks (see below)
+
+## Workflow DAG rules
+
+Every ADR must end with a `## Workflow` section containing:
+
+**Task list** — enumerate every atomic implementation unit (A, B, C, …). Each task is one of:
+- a new file
+- a targeted change to an existing file (state which lines/methods)
+- a pure deletion
+
+**Dependency edges** — for each task, list which earlier tasks it requires.
+A task with no dependencies is a Wave 0 root.
+
+**Wave table** — group tasks by wave (all dependencies satisfied by earlier waves):
+
+| Wave | Tasks | Can parallelise? |
+|---|---|---|
+| 0 | A, B | yes |
+| 1 | C (needs A), D (needs B), E (no deps) | yes |
+| … | … | … |
+
+**Critical path** — the longest chain from root to leaf. Label it explicitly.
+
+**Blocking notes** — call out any task that is riskier than it looks (touches working code,
+requires a two-pass edit, or blocks end-to-end testing).
+
+Once the Workflow section exists, implementation begins wave by wave.
+Complete all tasks in a wave (or as many as possible in parallel) before starting the next.
+Mark each task done in the ADR as it is finished.
+
+## Immutability rule
+
+When an ADR introduces new abstractions alongside existing working code, the existing files
+are **never modified** unless the ADR explicitly marks them `Modify` with a specific,
+minimal change (e.g. "add 3 lines to onCreateInputView"). Any refactor that would touch
+working logic must instead be expressed as a new parallel implementation that reads the
+old code as a read-only source. This keeps the old behaviour reachable for diffing and
+rollback without a git revert.
