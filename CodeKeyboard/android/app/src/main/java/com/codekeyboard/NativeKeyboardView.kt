@@ -123,18 +123,42 @@ class NativeKeyboardView @JvmOverloads constructor(
         isAntiAlias = true
     }
 
-    private val bgPaint     = Paint().apply { color = Color.parseColor("#111111"); style = Paint.Style.FILL }
-    private val keyPaint    = Paint().apply { color = Color.parseColor("#2c2c2c"); style = Paint.Style.FILL; isAntiAlias = true }
-    private val modPaint    = Paint().apply { color = Color.parseColor("#252525"); style = Paint.Style.FILL; isAntiAlias = true }
-    private val activePaint = Paint().apply { color = Color.parseColor("#1a3a5c"); style = Paint.Style.FILL; isAntiAlias = true }
-    private val lockedPaint = Paint().apply { color = Color.parseColor("#264f78"); style = Paint.Style.FILL; isAntiAlias = true }
-    private val thumbPaint  = Paint().apply { color = Color.parseColor("#1a2a3a"); style = Paint.Style.FILL; isAntiAlias = true }
-    private val layerPaint  = Paint().apply { color = Color.parseColor("#162616"); style = Paint.Style.FILL; isAntiAlias = true }
-    private val funcPaint   = Paint().apply { color = Color.parseColor("#2a1a1a"); style = Paint.Style.FILL; isAntiAlias = true }
-    private val labelPaint  = Paint().apply { color = Color.parseColor("#e0e0e0"); textAlign = Paint.Align.CENTER; isAntiAlias = true }
-    private val subPaint    = Paint().apply { color = Color.parseColor("#777777"); textAlign = Paint.Align.RIGHT;  isAntiAlias = true }
-    private val accentPaint    = Paint().apply { color = Color.parseColor("#4a9eff"); textAlign = Paint.Align.CENTER; isAntiAlias = true }
+    private var theme = KeyboardThemes.load()
+
+    private val bgPaint        = Paint().apply { style = Paint.Style.FILL }
+    private val keyPaint       = Paint().apply { style = Paint.Style.FILL; isAntiAlias = true }
+    private val modPaint       = Paint().apply { style = Paint.Style.FILL; isAntiAlias = true }
+    private val activePaint    = Paint().apply { style = Paint.Style.FILL; isAntiAlias = true }
+    private val lockedPaint    = Paint().apply { style = Paint.Style.FILL; isAntiAlias = true }
+    private val thumbPaint     = Paint().apply { style = Paint.Style.FILL; isAntiAlias = true }
+    private val layerPaint     = Paint().apply { style = Paint.Style.FILL; isAntiAlias = true }
+    private val funcPaint      = Paint().apply { style = Paint.Style.FILL; isAntiAlias = true }
+    private val labelPaint     = Paint().apply { textAlign = Paint.Align.CENTER; isAntiAlias = true }
+    private val subPaint       = Paint().apply { textAlign = Paint.Align.RIGHT;  isAntiAlias = true }
+    private val accentPaint    = Paint().apply { textAlign = Paint.Align.CENTER; isAntiAlias = true }
     private val accentBarPaint = Paint().apply { style = Paint.Style.FILL }
+
+    init { applyTheme() }
+
+    fun reloadTheme() {
+        theme = KeyboardThemes.load()
+        applyTheme()
+        invalidate()
+    }
+
+    private fun applyTheme() {
+        bgPaint.color     = theme.bg
+        keyPaint.color    = theme.key
+        modPaint.color    = theme.keyMod
+        activePaint.color = theme.keyActive
+        lockedPaint.color = theme.keyLocked
+        thumbPaint.color  = theme.keyThumb
+        layerPaint.color  = theme.keyLayer
+        funcPaint.color   = theme.keyLayer
+        labelPaint.color  = theme.label
+        subPaint.color    = theme.labelSub
+        accentPaint.color = theme.accent
+    }
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
@@ -178,12 +202,7 @@ class NativeKeyboardView @JvmOverloads constructor(
             else -> false
         }
         if (isActive) {
-            val barColor = when {
-                key.holdAction != null && state.heldKeyLabel == key.label -> Color.parseColor("#4a9eff")
-                action == "func"          -> Color.parseColor("#ff9800")
-                action in LAYER_ACTIONS   -> Color.parseColor("#4caf50")
-                else                      -> Color.parseColor("#4a9eff")
-            }
+            val barColor = theme.accent
             accentBarPaint.color = barColor
             val barH = 2.5f * density
             val barInset = drawRect.width() * 0.15f
@@ -209,15 +228,15 @@ class NativeKeyboardView @JvmOverloads constructor(
         val textPaint: Paint = when {
             action in LAYER_ACTIONS -> accentPaint.also {
                 it.textSize = labelPaint.textSize
-                it.color    = Color.parseColor("#4a9eff")
+                it.color    = theme.labelLayer
             }
             action == "func" -> accentPaint.also {
                 it.textSize = labelPaint.textSize
-                it.color    = Color.parseColor("#FFB74D")
+                it.color    = theme.labelLayer
             }
             action in THUMB_ACTIONS -> accentPaint.also {
                 it.textSize = labelPaint.textSize
-                it.color    = Color.parseColor("#7ab8ff")
+                it.color    = theme.labelMod
             }
             else -> labelPaint
         }

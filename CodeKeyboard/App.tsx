@@ -166,6 +166,64 @@ function SettingsScreen() {
   );
 }
 
+const THEMES: {id: string; name: string; desc: string; bg: string; key: string; accent: string}[] = [
+  {id: 'carbon',   name: 'Carbon',   desc: 'Neutral dark grey',        bg: '#111111', key: '#2c2c2c', accent: '#4a9eff'},
+  {id: 'midnight', name: 'Midnight', desc: 'Deep navy blue',           bg: '#080d14', key: '#0f1c2e', accent: '#3b82f6'},
+  {id: 'obsidian', name: 'Obsidian', desc: 'Near-black with violet',   bg: '#0c0c10', key: '#1a1a24', accent: '#8b5cf6'},
+  {id: 'ash',      name: 'Ash',      desc: 'Warm grey, amber accent',  bg: '#141210', key: '#272320', accent: '#f59e0b'},
+  {id: 'moss',     name: 'Moss',     desc: 'Dark green-grey, teal',    bg: '#0d1210', key: '#1a2420', accent: '#2dd4bf'},
+  {id: 'dusk',     name: 'Dusk',     desc: 'Slate purple, rose',       bg: '#10101a', key: '#1e1e2e', accent: '#f43f5e'},
+  {id: 'iron',     name: 'Iron',     desc: 'Cool steel, cyan',         bg: '#0e1014', key: '#1c2028', accent: '#06b6d4'},
+  {id: 'ember',    name: 'Ember',    desc: 'Warm brown, orange',       bg: '#100c08', key: '#241c14', accent: '#ea580c'},
+];
+
+function ThemesScreen() {
+  const [active, setActive] = useState('carbon');
+
+  useEffect(() => {
+    NativeModules.SettingsModule?.getString('theme', (val: string) => {
+      if (val) setActive(val);
+    });
+  }, []);
+
+  const select = useCallback((id: string) => {
+    setActive(id);
+    NativeModules.SettingsModule?.setString('theme', id);
+  }, []);
+
+  return (
+    <ScrollView style={styles.settingsScroll} contentContainerStyle={styles.settingsContainer}>
+      <Text style={styles.settingsTitle}>Theme</Text>
+      <Text style={styles.snippetsHint}>Takes effect next time you open the keyboard.</Text>
+      <View style={styles.themeGrid}>
+        {THEMES.map(t => (
+          <TouchableOpacity
+            key={t.id}
+            style={[styles.themeCard, {backgroundColor: t.bg}, active === t.id && styles.themeCardActive]}
+            onPress={() => select(t.id)}
+            activeOpacity={0.8}>
+            <View style={styles.themePreview}>
+              {[0,1,2,3,4].map(i => (
+                <View key={i} style={[styles.themeKey, {backgroundColor: t.key}]} />
+              ))}
+            </View>
+            <View style={[styles.themeAccentBar, {backgroundColor: t.accent}]} />
+            <View style={styles.themeInfo}>
+              <Text style={[styles.themeName, {color: '#e0e0e0'}]}>{t.name}</Text>
+              <Text style={[styles.themeDesc, {color: '#888'}]}>{t.desc}</Text>
+            </View>
+            {active === t.id && (
+              <View style={[styles.themeCheck, {borderColor: t.accent}]}>
+                <Text style={[styles.themeCheckText, {color: t.accent}]}>✓</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+        ))}
+      </View>
+    </ScrollView>
+  );
+}
+
 function PlaceholderScreen({tab}: {tab: Tab}) {
   return (
     <View style={styles.placeholder}>
@@ -209,6 +267,8 @@ function App() {
         </View>
         {activeTab === 'settings' ? (
           <SettingsScreen />
+        ) : activeTab === 'themes' ? (
+          <ThemesScreen />
         ) : (
           <PlaceholderScreen tab={activeTab} />
         )}
@@ -381,6 +441,67 @@ const styles = StyleSheet.create({
     fontSize: 12,
     width: '100%',
     marginTop: 4,
+  },
+  themeGrid: {
+    width: '100%',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    justifyContent: 'space-between',
+  },
+  themeCard: {
+    width: '47%',
+    borderRadius: 10,
+    overflow: 'hidden',
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  themeCardActive: {
+    borderColor: '#4a9eff',
+  },
+  themePreview: {
+    flexDirection: 'row',
+    gap: 4,
+    padding: 10,
+    paddingBottom: 6,
+  },
+  themeKey: {
+    flex: 1,
+    height: 22,
+    borderRadius: 4,
+  },
+  themeAccentBar: {
+    height: 2,
+    marginHorizontal: 10,
+    borderRadius: 1,
+    marginBottom: 8,
+  },
+  themeInfo: {
+    paddingHorizontal: 10,
+    paddingBottom: 10,
+  },
+  themeName: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  themeDesc: {
+    fontSize: 11,
+    marginTop: 1,
+  },
+  themeCheck: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  themeCheckText: {
+    fontSize: 10,
+    fontWeight: '700',
   },
 });
 
