@@ -322,12 +322,12 @@ class NativeKeyboardView @JvmOverloads constructor(
                         // entry is gone and bail out. Nothing to release in state machine.
                         return@let
                     }
-                    // Layer hold keys (lower/raise/adj/func): purely hold-and-release.
-                    // Never cycle the latch on quick release — that causes every short hold
-                    // to toggle the layer latch, creating a rapid-cycle loop.
-                    // Modifier hold keys (shift/ctrl/alt): may cycle latch on quick tap.
+                    // Layer hold keys use a tighter tap window (LAYER_TAP_MS) so that an
+                    // intentional hold (≥80ms, layer was shown) doesn't also cycle the latch.
+                    // Modifier hold keys use the full TAPPING_TERM_MS window.
                     val isLayerHold = entry.key.action in KeyboardState.LAYER_HOLDS
-                    val wasQuickTap = !isLayerHold && !entry.otherKeyPressed && elapsedMs < TAPPING_TERM_MS
+                    val tapMaxMs = if (isLayerHold) LAYER_TAP_MS else TAPPING_TERM_MS
+                    val wasQuickTap = !entry.otherKeyPressed && elapsedMs < tapMaxMs
                     onKeyReleased?.invoke(entry.key)
                     if (wasQuickTap) onKeyTapped?.invoke(entry.key)
                 }
@@ -452,7 +452,8 @@ class NativeKeyboardView @JvmOverloads constructor(
         private const val REPEAT_INITIAL_DELAY_MS = 400L
         private const val REPEAT_INTERVAL_MS = 50L
         private const val TAPPING_TERM_MS = 150L
-        private const val MIN_TAP_MS     = 40L   // phantom touches are <20ms; human taps are >60ms
+        private const val MIN_TAP_MS     = 40L   // phantom touches are <20ms; confirmed real above this
+        private const val LAYER_TAP_MS   = 80L   // layer keys: tap < 80ms latches, hold ≥ 80ms is momentary
         // Snap radius is now computed dynamically via SofleLayoutComputer.maxSafeSnapPx
         private const val HIT_EXPAND_DP = 2.5f
     }
