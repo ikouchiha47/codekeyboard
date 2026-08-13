@@ -340,7 +340,7 @@ class CodeKeyboardIME : InputMethodService() {
             "tab"         -> { flushComposing(ic); sendDownUp(ic, KeyEvent.KEYCODE_TAB) }
             "space"       -> {
                 flushComposing(ic)
-                ic?.commitText(" ", 1)
+                commitCharAndNotify(ic, " ")
                 val next = bigramModel.nextWords(prevCommittedWord, n = 5)
                 if (next.isNotEmpty()) suggestionBar.update("", next)
             }
@@ -437,13 +437,29 @@ class CodeKeyboardIME : InputMethodService() {
                         flushComposing(ic)
                         ic?.commitText(text, 1)
                     }
-                    android.util.Log.e("CKB_HOLD", "onCharCommitted: layerHeld=${kbState.layerHeld} effectiveLayer=${kbState.effectiveLayer}")
+                    // Fires for EVERY character key, including ones that only
+                    // went into the composing buffer (";" and letters) — this
+                    // is what clears a one-shot Shift latch after exactly one
+                    // letter, independent of whether that letter was actually
+                    // committed to the input field yet.
                     kbState.onCharCommitted(text)
-                    android.util.Log.e("CKB_HOLD", "after onCharCommitted: layerHeld=${kbState.layerHeld} effectiveLayer=${kbState.effectiveLayer}")
                     keyboardView.notifyStateChanged(kbState)
                 }
             }
         }
+    }
+
+    // The single chokepoint for committing a real, standalone character to
+    // the input field from an action-key branch (space, and anything future)
+    // that sits OUTSIDE the character-key `else ->` above and so doesn't get
+    // its unconditional kbState.onCharCommitted call for free. "space" used
+    // to commit directly via ic.commitText and skip this entirely, which
+    // silently broke Sentence Case's arm-on-space logic since kbState never
+    // even saw the space.
+    private fun commitCharAndNotify(ic: InputConnection?, text: String) {
+        ic?.commitText(text, 1)
+        kbState.onCharCommitted(text)
+        keyboardView.notifyStateChanged(kbState)
     }
 
     // ── Navigation bar height ─────────────────────────────────────────────────
@@ -521,8 +537,16 @@ class CodeKeyboardIME : InputMethodService() {
     }
 
     private fun flushComposing(ic: InputConnection?) {
-        val word = composing.flush()
-        if (word.isNotEmpty()) {
+        val typed = composing.flush()
+        if (typed.isNotEmpty()) {
+            // A ";shortcode" that exactly matches a saved snippet expands here
+            // too, not just via tapping the suggestion bar — otherwise Enter/
+            // Space/punctuation right after typing it just commits the literal
+            // ";shortcode" text instead of the expansion.
+            val shortcode = if (typed.startsWith(";")) typed.drop(1) else null
+            val expansion = shortcode?.let { SnippetStore.get(it) }
+            val word = if (!expansion.isNullOrEmpty()) expansion else typed
+
             ic?.commitText(word, 1)
             wordLearner.learnFromFlush(word)
             kbState.onCharCommitted(word)

@@ -53,7 +53,24 @@ import kotlin.math.pow
  * The user layer dominates (0.6 weight) once it has observed the pair at
  * least a few times. The seed layer (0.4 weight) fills the cold-start gap.
  */
-class BigramModel(private val context: Context) {
+class BigramModel private constructor(
+    private val seedJsonReader: () -> String,
+    private val userFile: File,
+) {
+
+    // Production loader — reads bigrams.json from Android assets and persists
+    // learned bigrams under the app's files dir.
+    constructor(context: Context) : this(
+        { context.assets.open("bigrams.json").bufferedReader().readText() },
+        File(context.filesDir, "user_bigrams.json"),
+    )
+
+    // Android-free loader for JVM unit tests — reads the same seed asset
+    // straight off disk instead of through an Android Context.
+    constructor(seedJsonFile: File, userFile: File) : this(
+        { seedJsonFile.readText() },
+        userFile,
+    )
 
     // seed[prevWord] = list of (nextWord, score) sorted by score desc
     private val seed = mutableMapOf<String, List<Pair<String, Float>>>()
@@ -66,7 +83,6 @@ class BigramModel(private val context: Context) {
     private var globalTick: Int = 0
 
     private val executor = Executors.newSingleThreadExecutor()
-    private val userFile get() = File(context.filesDir, "user_bigrams.json")
 
     companion object {
         private const val MAX_USER_FOLLOWERS = 20
@@ -95,7 +111,7 @@ class BigramModel(private val context: Context) {
 
     private fun loadSeed() {
         try {
-            val json = context.assets.open("bigrams.json").bufferedReader().readText()
+            val json = seedJsonReader()
             val obj = JSONObject(json)
             val keys = obj.keys()
             while (keys.hasNext()) {

@@ -82,8 +82,8 @@ android {
         applicationId "com.codekeyboard"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 15
-        versionName "1.12.0"
+        versionCode 16
+        versionName "1.12.1"
     }
     signingConfigs {
         debug {
@@ -125,6 +125,10 @@ dependencies {
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit:1.9.0")
+    // Real org.json implementation for JVM unit tests — the android.jar stub
+    // used by unit tests throws "not mocked" for org.json/android.util.Log
+    // calls; this lets BigramModel's real JSON-parsing code run as-is.
+    testImplementation("org.json:json:20231013")
 }
 
 // Integration tests: load real assets (en.trie) and run correctness + perf checks.

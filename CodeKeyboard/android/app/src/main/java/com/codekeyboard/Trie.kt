@@ -1,6 +1,7 @@
 package com.codekeyboard
 
 import android.content.Context
+import java.io.File
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
@@ -17,6 +18,10 @@ class Trie private constructor(private val buf: ByteBuffer) {
             val bytes = context.assets.open("en.trie").use { it.readBytes() }
             return fromBytes(bytes)
         }
+
+        // Android-free loader for JVM unit tests — reads the same asset file
+        // straight off disk instead of through an Android Context.
+        fun load(file: File): Trie = fromBytes(file.readBytes())
 
         fun fromBytes(bytes: ByteArray): Trie {
             val buf = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
