@@ -105,6 +105,18 @@ class AutocompleteEvalTest {
             println("  [$category] $passed/${group.size} (${"%.1f".format(rate * 100)}%)")
         }
 
+        // Diagnostic split: "next-word" cases (nothing typed, pure context
+        // prediction — the bigram model) vs "prefix" cases (partial word
+        // typed, mostly a trie prefix search problem). These stress
+        // different parts of the pipeline, so a low overall rate can hide
+        // one being fine and the other being the real bottleneck.
+        results.groupBy { if (splitSentence(it.case.sentence).second.isEmpty()) "next-word" else "prefix" }
+            .forEach { (type, group) ->
+                val passed = group.count { it.passed }
+                val rate = passed.toDouble() / group.size
+                println("  (by-type) [$type] $passed/${group.size} (${"%.1f".format(rate * 100)}%)")
+            }
+
         println("--- Failures ---")
         results.filterNot { it.passed }.forEach { r ->
             println("  \"${r.case.sentence}\" -> expected any of ${r.case.expected}, " +

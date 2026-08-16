@@ -259,6 +259,57 @@ surface — not a bug, a structural ceiling of a 1-word Markov model.
    `AutocompleteEvalTest.kt` — the baseline should only ever move up, and
    only alongside an entry in this log explaining why.
 
+### Checkpoint #2 — spaCy + trie-rank target filtering, bigram seed rescoring (2026-08-16)
+
+Two independent changes, both driven by findings from checkpoint #1's fixture quality:
+
+**1. Eval target selection rebuilt as a filter-strategy pipeline.** The generated
+fixture's hardcoded `STOPWORDS` list let through ultra-common-but-not-technically-a-
+stopword words (`know`, `get`, `go`, `well`, `said`, `make`, ...) as eval targets —
+grammatically content words, but so predictable they told us nothing. Replaced with
+a composable `TargetFilter` chain in `gen_autocomplete_corpus.py` (strategy pattern,
+per user request): min-length, spaCy content-POS (NOUN/PROPN/VERB/ADJ, no ADV),
+spaCy `is_stop`, and a new `TrieRankFilter` that rejects words ranked in the top ~200
+most frequent words in `en.trie` itself — the production dictionary, not a generic
+English frequency source. Also fixed a real bug: Cornell movie-dialogue turns weren't
+being re-split on sentence boundaries, producing garbled multi-sentence contexts.
+Considered (and rejected) using `wordfreq` as a second frequency source alongside
+`en.trie` — redundant, since requiring the word exist in `en.trie` already resolves
+the OOV case that a second source would otherwise be needed for.
+
+This made the "honest" pass rate on the generated fixture drop from ~50% to ~26% —
+expected and correct: the old number was inflated by trivial targets, not evidence of
+better suggestions.
+
+**2. Bigram seed rescoring** — see the new "Seed Rescoring: Absolute Discounting +
+Unigram Backoff" section in `docs/adr-001-bigram-prediction.md` for the full
+investigation (AOSP dictionary A/B test, naive per-word rebuild regression, and the
+smoothing fix that improved both curated and generated next-word accuracy without
+trading one off against the other). Summary of the by-type breakdown this surfaced —
+a diagnostic split added permanently to `AutocompleteEvalTest`'s report, since "next
+word" (context prediction) and "prefix" (trie completion) stress completely different
+parts of the pipeline and a blended overall number hides which one is actually broken:
+
+| | generated next-word | generated prefix | curated next-word | curated prefix |
+|---|---|---|---|---|
+| before rescoring | 1.0% | 53.0% | 71.8% | 100% |
+| after discount+backoff+rescore | 2.1% | 53.7% | 74.4% | 100% |
+
+**Finding:** prefix completion (trie-based) was never the bottleneck — it's been
+~53-100% throughout. Next-word context prediction is the actual weak point, and even
+after this fix it's still low on real, diverse text (2.1%). This is not a scoring bug
+at this point — it's the structural ceiling of a 1-word-of-context (bigram/Markov-1)
+model discussed in checkpoint #1's tuning candidate #1 (trigram/2-word context
+extension). Confirmed via direct A/B: swapping the entire seed corpus (Norvig ->
+AOSP/HeliBoard `en_US.combined`, real bigram data, 17x more word coverage) made
+next-word accuracy *worse* (1.0%), not better — proving the bottleneck is context
+length, not corpus choice or corpus quality.
+
+**Curated baseline bumped:** `CURATED_BASELINE_PASS_RATE` in `AutocompleteEvalTest.kt`
+left at 0.75 for now despite measuring 81.5% overall — the checkpoint discipline in
+tuning candidate #4 above says move it deliberately with margin, not chase the exact
+number; revisit once the next real change (trigram context, most likely) lands.
+
 ## Consequences
 
 - Adding more test cases is a one-line TSV edit, not a Kotlin change —
