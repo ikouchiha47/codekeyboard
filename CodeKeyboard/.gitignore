@@ -79,3 +79,7 @@ android/scripts/__pycache__/
 !.yarn/releases
 !.yarn/sdks
 !.yarn/versions
+
+# Python
+__pycache__/
+*.pyc

@@ -27,6 +27,19 @@ aws s3 cp out/build.log "s3://${BUCKET}/output/swiftkey_build.log" --region "$RE
 aws s3 cp out/swiftkey_trigrams.json "s3://${BUCKET}/output/swiftkey_trigrams.json" --region "$REGION"
 aws s3 cp out/swiftkey_bigrams.json "s3://${BUCKET}/output/swiftkey_bigrams.json" --region "$REGION"
 aws s3 cp out/swiftkey_bigrams_support.json "s3://${BUCKET}/output/swiftkey_bigrams_support.json" --region "$REGION"
+# Save intermediate databases + unigrams (variant-prefixed so parallel builds
+# never overwrite each other on S3)
+/usr/bin/python3 - <<'PYEOF'
+import sqlite3
+conn = sqlite3.connect("work/counts.sqlite")
+with open("out/swiftkey_unigrams.tsv", "w", encoding="utf-8") as f:
+    for w, c in conn.execute("SELECT w, count FROM unigrams ORDER BY count DESC"):
+        f.write(f"{w}\t{c}\n")
+conn.close()
+PYEOF
+aws s3 cp work/counts.sqlite "s3://${BUCKET}/output/swiftkey_counts.sqlite" --region "$REGION"
+aws s3 cp work/normalized.sqlite "s3://${BUCKET}/output/swiftkey_normalized.sqlite" --region "$REGION"
+aws s3 cp out/swiftkey_unigrams.tsv "s3://${BUCKET}/output/swiftkey_unigrams.tsv" --region "$REGION"
 echo "finished $(date -Is) swiftkey" | aws s3 cp - "s3://${BUCKET}/status/finished.txt" --region "$REGION"
 INSTANCE_ID=$(TOKEN=$(curl -sX PUT http://169.254.169.254/latest/api/token -H "X-aws-ec2-metadata-token-ttl-seconds: 21600") && curl -sH "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/instance-id)
 aws ec2 terminate-instances --instance-ids "$INSTANCE_ID" --region "$REGION" || shutdown -h now
