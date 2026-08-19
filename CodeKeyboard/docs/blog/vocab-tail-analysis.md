@@ -284,6 +284,47 @@ words — under that ceiling without any explicit cap. A 5-gram on Google-
 scale data would have more n-gram states referencing the tail, but the
 *vocabulary size* is a separate design knob.
 
+### Two caps, not one
+
+A reader might reasonably ask: "Google caps at 64K, you tested 16K — what's
+the difference?" The answer is that these are two different caps doing two
+different jobs:
+
+- **Follower cap** — how many candidate next-words a single context may
+  list. We ship `--max-followers 10`. This bounds the *suggestion list*
+  per context.
+- **Vocabulary cap** — how many distinct words the model may predict at
+  all. Google's 64K is this kind: a deliberate ceiling on the *prediction
+  lexicon*, sitting on top of a ~170K full unigram lexicon.
+
+Our production model has **no vocabulary cap**. The delta/WDP pruner
+already removes the noise tail, leaving a natural 28–60K distinct words —
+under Google's 64K ceiling without any explicit cap. Our 16K test was a
+hypothetical tighter ceiling, and it barely moved the needle (99.2%+ top-1
+agreement) because the tail words are near-zero-frequency: the model has
+essentially no signal about them anyway.
+
+### Why Google's Katz needs a cap and our WDP doesn't
+
+There's a second, subtler reason Google needs an explicit ceiling and we
+don't. WDP (weighted difference pruning) is a pruning layer *on top of*
+Katz smoothing: it drops a follower when its trigram-conditioned
+probability is ≈ its bigram backoff — i.e. when the context adds no
+information about that word. That removes the tail *inside the model*, so
+the vocabulary self-limits. Google's Katz keeps every word it has ever
+seen, so they need the explicit 64K ceiling to hold the model to its
+5–10 MB budget.
+
+Two caveats keep this honest:
+
+- **Data scale is the dominant reason for the gap.** Google trains on
+  billions of tokens; we trained on 85M. A 5-gram on Google-scale data has
+  far more n-gram states referencing the tail.
+- **The measured distinct-word counts are actually close**: Katz 56,500 vs
+  WDP 60,443. WDP's win is in *entries* (231 MB vs 341 MB), not
+  distinct-word count. The tail is a *storage* problem, not a *vocabulary*
+  problem.
+
 ---
 
 ## The code, walked through
