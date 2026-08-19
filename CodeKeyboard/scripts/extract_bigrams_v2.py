@@ -60,15 +60,25 @@ independently. rescore_bigrams.py is left untouched and still works
 standalone on any already-built bigrams.json.
 
 Usage:
+    # Norvig-style pre-counted pairs (original path):
     python3 scripts/extract_bigrams_v2.py \
         --input /path/to/count_2w.txt \
+        --input-format norvig \
         --output android/app/src/main/assets/bigrams.json \
         --trie android/app/src/main/assets/en.trie
+
+    # Plain-text corpus (one sentence/line) — OpenSubtitles path for register
+    # alignment with trigrams.json / en.trie (ADR-008 corpus-register note):
+    python3 scripts/extract_bigrams_v2.py \
+        --input android/scripts/corpus_raw/opensubtitles/en_sample_big_cleaned.txt \
+        --input-format text \
+        --output android/app/src/main/assets/bigrams.json \
+        --trie android/app/src/main/assets/en.trie \
+        --min-bigram-count 5
 """
 
 import argparse
 import json
-import math
 import re
 import struct
 import sys
@@ -78,12 +88,18 @@ from pathlib import Path
 DISCOUNT = 0.75  # standard absolute-discounting constant (Chen & Goodman)
 MAX_FOLLOWERS = 10
 STOPWORD_PENALTY = 0.5  # same constant as rescore_bigrams.py
+MIN_BIGRAM_COUNT = 1
 
 WORD_RE = re.compile(r"^[a-z']+$")
 
 
 def is_clean(w: str) -> bool:
     return bool(WORD_RE.match(w)) and 1 <= len(w) <= 30
+
+
+def tokenize_line(line: str) -> list[str]:
+    """Same token filter as extract_trigrams.py — keep bigram/trigram builds aligned."""
+    return [w for w in (t.lower() for t in line.split()) if is_clean(w)]
 
 
 class TrieReader:
@@ -131,12 +147,37 @@ class TrieReader:
 
 
 def parse_args():
-    p = argparse.ArgumentParser()
+    p = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     p.add_argument("--input", default="/tmp/count_2w.txt")
+    p.add_argument(
+        "--input-format",
+        choices=("norvig", "text"),
+        default="norvig",
+        help="norvig = 'w1 w2\\tcount' lines (count_2w.txt). "
+             "text = plain sentences/lines (OpenSubtitles cleaned corpus).",
+    )
     p.add_argument("--output", default="android/app/src/main/assets/bigrams.json")
+    p.add_argument(
+        "--support-output",
+        default="android/app/src/main/assets/bigrams_support.json",
+        help="Separate companion file ({\"word\": totalObservedCount, ...}) — kept "
+             "separate from --output rather than changing bigrams.json's own shape, "
+             "since BigramModel.loadSeed() parses that file and must not change "
+             "(ADR-008 task L). Read by a new, purely additive BigramModel method.",
+    )
     p.add_argument("--trie", default="android/app/src/main/assets/en.trie")
     p.add_argument("--discount", type=float, default=DISCOUNT)
     p.add_argument("--max-followers", type=int, default=MAX_FOLLOWERS)
+    p.add_argument(
+        "--min-bigram-count",
+        type=int,
+        default=MIN_BIGRAM_COUNT,
+        help="Drop predecessor words whose total follower count is below this "
+             "floor before scoring (text corpora are noisier than Norvig aggregates). "
+             "Default 1 (keep every observed predecessor).",
+    )
     p.add_argument("--no-stopword-penalty", action="store_true",
                     help="Skip the content-word-preference layer, smoothing only.")
     return p.parse_args()
@@ -163,12 +204,9 @@ def get_is_stop_fn():
     return is_stop
 
 
-def main():
-    args = parse_args()
-
-    print(f"Reading {args.input}...", file=sys.stderr)
+def load_buckets_norvig(path: Path) -> dict[str, dict[str, int]]:
     buckets: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
-    with open(args.input, encoding="utf-8") as f:
+    with path.open(encoding="utf-8") as f:
         for line in f:
             line = line.strip()
             if not line:
@@ -188,7 +226,51 @@ def main():
             if not is_clean(w1) or not is_clean(w2):
                 continue
             buckets[w1][w2] += count
+    return buckets
+
+
+def load_buckets_text(path: Path) -> dict[str, dict[str, int]]:
+    """Count adjacent word pairs from a plain-text corpus (one utterance/line)."""
+    buckets: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
+    n_lines = 0
+    n_pairs = 0
+    with path.open(encoding="utf-8", errors="ignore") as f:
+        for line in f:
+            words = tokenize_line(line)
+            n_lines += 1
+            for i in range(len(words) - 1):
+                buckets[words[i]][words[i + 1]] += 1
+                n_pairs += 1
+            if n_lines % 2_000_000 == 0:
+                print(f"  ... {n_lines:,} lines, {len(buckets):,} predecessors",
+                      file=sys.stderr)
+    print(f"Lines read: {n_lines:,}; raw bigram tokens: {n_pairs:,}", file=sys.stderr)
+    return buckets
+
+
+def main():
+    args = parse_args()
+    input_path = Path(args.input)
+
+    print(f"Reading {input_path} (format={args.input_format})...", file=sys.stderr)
+    if args.input_format == "norvig":
+        buckets = load_buckets_norvig(input_path)
+    else:
+        buckets = load_buckets_text(input_path)
     print(f"Unique predecessor words (no global cut): {len(buckets)}", file=sys.stderr)
+
+    if args.min_bigram_count > 1:
+        before = len(buckets)
+        buckets = {
+            w1: followers
+            for w1, followers in buckets.items()
+            if sum(followers.values()) >= args.min_bigram_count
+        }
+        print(
+            f"After --min-bigram-count>={args.min_bigram_count}: "
+            f"{len(buckets)} predecessors (dropped {before - len(buckets)})",
+            file=sys.stderr,
+        )
 
     print(f"Loading unigram backoff from {args.trie}...", file=sys.stderr)
     unigram_p = load_unigram_backoff(Path(args.trie))
@@ -196,8 +278,10 @@ def main():
     is_stop = None if args.no_stopword_penalty else get_is_stop_fn()
 
     result = {}
+    support = {}
     for w1, followers in buckets.items():
         total = sum(followers.values())
+        support[w1] = total
         distinct = len(followers)
         # Probability mass freed by discounting every observed count by
         # `discount`, redistributed via the unigram backoff below.
@@ -225,9 +309,14 @@ def main():
     with open(args.output, "w", encoding="utf-8") as f:
         json.dump(result, f, ensure_ascii=False, separators=(",", ":"))
 
+    with open(args.support_output, "w", encoding="utf-8") as f:
+        json.dump(support, f, ensure_ascii=False, separators=(",", ":"))
+
     import os
     size_kb = os.path.getsize(args.output) / 1024
+    support_kb = os.path.getsize(args.support_output) / 1024
     print(f"Written to {args.output} ({size_kb:.0f} KB)", file=sys.stderr)
+    print(f"Written support counts to {args.support_output} ({support_kb:.0f} KB)", file=sys.stderr)
 
 
 if __name__ == "__main__":
