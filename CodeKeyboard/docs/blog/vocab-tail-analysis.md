@@ -88,6 +88,87 @@ below), which:
 Run on AWS spot instances for all three smoothing variants (KN, Katz,
 SwiftKey-WDP) at caps 16K / 32K / 64K / 128K.
 
+---
+
+## The pipeline behind the numbers: two databases, one cap
+
+Before the tail test could mean anything, we had to be able to rebuild the
+model at any *follower* cap cheaply, on the same ground-truth counts. The
+build (`scripts/build_ngrams*.py`) runs in five stages, each reading only
+what the previous one wrote:
+
+| Stage | Input → Output | Contents |
+|---|---|---|
+| count | corpus byte-range slices → spilled TSV runs | raw unigram / bigram / trigram counts |
+| reconcile | runs → `counts.sqlite` | `unigrams(w, count)`, `bigrams(ctx, w, count)`, `trigrams(ctx, w, count)` |
+| normalize | `counts.sqlite` → `normalized.sqlite` | smoothing helper values (KN: `cont_p` + `bigram_ctx`) |
+| score | both DBs → `{variant}_tri_cap{N}.json` | interpolated, normalized scores, truncated to `--max-followers` |
+
+`counts.sqlite` is the **raw-count database** — 2.4 GB, byte-identical
+across all three variants (md5 `e1f86000a7efd07ae9b0a48fd61847dd`),
+because all three builds share the same counting code. `normalized.sqlite`
+is the **variant-specific smoothing database** (KN: continuation
+probabilities `cont_p(w, p)` plus per-bigram-context statistics
+`bigram_ctx(ctx, total, distinct_n)`; Katz/SwiftKey compute their own
+tables). Both are the expensive, reusable artifacts, so the user-data
+scripts upload them to S3 — **variant-prefixed** (`kn_`, `katz_`,
+`swiftkey_`) so parallel builds never overwrite each other — along with a
+frequency-ranked `unigrams.tsv` dumped straight from the counts table:
+
+```python
+# ng-userdata-*.sh, after the build completes
+conn = sqlite3.connect("work/counts.sqlite")
+with open("out/swiftkey_unigrams.tsv", "w", encoding="utf-8") as f:
+    for w, c in conn.execute("SELECT w, count FROM unigrams ORDER BY count DESC"):
+        f.write(f"{w}\t{c}\n")
+conn.close()
+```
+
+### The follower cap lives in the score stage
+
+The "cap" is `--max-followers N`. The score stage sorts each context's
+interpolated follower scores and keeps only the top N:
+
+```python
+def score_trigram(followers, backoff, cont_p, discount, max_f):
+    ...
+    scored.sort(key=lambda p: (-p[1], p[0]))
+    top = scored[:max_f]              # ← the cap
+    mx = top[0][1] or 1.0
+    return {"followers": [[w, round(s / mx, 4)] for w, s in top],
+            "support": total}          # ← raw count sum, from counts.sqlite
+```
+
+`score` is the *only* stage that reads the cap, and the build uses `.done`
+markers, so re-running `--stage score --max-followers N` reuses the cached
+`counts.sqlite` + `normalized.sqlite` and only re-emits the JSON. That is
+what made the whole cap sweep cheap: 4 caps × 3 variants, all scored
+against the same ground-truth counts.
+
+### Was the cap proper? Comparing against the original counts
+
+The cap question is: *does truncating every context to 10 followers change
+what the model would have predicted at 64?* We answered it two ways, both
+in `scripts/compare_ngrams.py` (a single streaming pass over 231–377 MB
+files, never loaded whole):
+
+1. **Three-way merge** (`three`): cap10 vs cap32 vs cap64 aligned by
+   context key at support threshold 25, measuring per-pair top-1
+   agreement, serialized size (exact builder serialization), and follower
+   statistics.
+2. **Pair compare** (`pair`): cap10 vs cap64 directly, measuring top-1
+   agreement and identical-follower-list rate across all ~1.9M shared
+   contexts.
+
+The support value in every entry is the *raw count sum* pulled from
+`counts.sqlite` — so the "original counts" stay the ground truth for
+context retention throughout. The result: at thr=25, cap10's top-1 agrees
+with cap64's in 99.2–99.5% of contexts (SwiftKey 99.3%, KN 99.5%, Katz
+100.0%), and cap64 only grows the follower lists — the tail beyond 10
+almost never wins top-1. That's what justified the follower cap in the
+first place; the vocabulary test in this post then asked the *next*
+question about the tail.
+
 ## The numbers, per variant
 
 ### SwiftKey-WDP (the variant we ship) — 60,443 distinct words in model
