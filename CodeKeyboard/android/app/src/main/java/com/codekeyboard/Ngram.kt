@@ -43,53 +43,59 @@ interface NgramModel {
     fun support(vararg context: String): Int
 }
 
-/** One context's scored followers plus the total observed count backing
- *  them — the latter is what makes cross-context/cross-tier comparison
- *  possible (see [NgramModel.support]). */
-data class NgramEntry(val followers: List<Pair<String, Float>>, val support: Int)
-
-/**
- * Pluggable seed-data loader for [NgramModel] implementations — kept as an
- * interface (rather than each model reading JSON directly) so the storage
- * format can move to something else later (e.g. a packed binary trie, like
- * [Trie]'s TRIF format) without touching model/scoring code.
- */
-interface NgramDataSource {
-    /** contextKey (space-joined, lowercase, (order-1) words) -> entry. */
-    fun load(): Map<String, NgramEntry>
-}
-
-/** [NgramDataSource] backed by the `{"context": {"followers": [["word", score],
- *  ...], "support": N}}` JSON shape trigrams.json uses (ADR-008 task L). Only
- *  Trigram/AbstractNgram read this — unlike bigrams.json, there's no
- *  pre-existing parser to stay compatible with, so this shape was free to
- *  add "support" to directly rather than needing a companion file. */
-class JsonNgramDataSource private constructor(private val reader: () -> String) : NgramDataSource {
-
-    constructor(context: Context, assetName: String) : this(
-        { context.assets.open(assetName).bufferedReader().readText() }
-    )
-
-    // Android-free loader for JVM unit tests, mirrors Trie.load(File)/BigramModel's File constructor.
-    constructor(file: File) : this({ file.readText() })
-
-    override fun load(): Map<String, NgramEntry> {
-        val obj = JSONObject(reader())
-        val result = mutableMapOf<String, NgramEntry>()
-        val keys = obj.keys()
-        while (keys.hasNext()) {
-            val key = keys.next()
-            val entryObj = obj.getJSONObject(key)
-            val arr = entryObj.getJSONArray("followers")
-            val followers = (0 until arr.length()).map { i ->
-                val pair = arr.getJSONArray(i)
-                pair.getString(0) to pair.getDouble(1).toFloat()
-            }
-            result[key] = NgramEntry(followers, entryObj.getInt("support"))
-        }
-        return result
-    }
-}
+// ── DEAD CODE (ADR-010 tasks L/M) ────────────────────────────────────────────
+// NgramEntry / NgramDataSource / JsonNgramDataSource were the JSON-backed
+// seed-data plumbing for the removed Trigram/AbstractNgram. The pack path
+// (PackNgramModel) reads directly from LanguagePack, so these have no
+// consumers. Kept commented for reference; delete once confirmed unused.
+//
+// /** One context's scored followers plus the total observed count backing
+//  *  them — the latter is what makes cross-context/cross-tier comparison
+//  *  possible (see [NgramModel.support]). */
+// data class NgramEntry(val followers: List<Pair<String, Float>>, val support: Int)
+//
+// /**
+//  * Pluggable seed-data loader for [NgramModel] implementations — kept as an
+//  * interface (rather than each model reading JSON directly) so the storage
+//  * format can move to something else later (e.g. a packed binary trie, like
+//  * [Trie]'s TRIF format) without touching model/scoring code.
+//  */
+// interface NgramDataSource {
+//     /** contextKey (space-joined, lowercase, (order-1) words) -> entry. */
+//     fun load(): Map<String, NgramEntry>
+// }
+//
+// /** [NgramDataSource] backed by the `{"context": {"followers": [["word", score],
+//  *  ...], "support": N}}` JSON shape trigrams.json uses (ADR-008 task L). Only
+//  *  Trigram/AbstractNgram read this — unlike bigrams.json, there's no
+//  *  pre-existing parser to stay compatible with, so this shape was free to
+//  *  add "support" to directly rather than needing a companion file. */
+// class JsonNgramDataSource private constructor(private val reader: () -> String) : NgramDataSource {
+//
+//     constructor(context: Context, assetName: String) : this(
+//         { context.assets.open(assetName).bufferedReader().readText() }
+//     )
+//
+//     // Android-free loader for JVM unit tests, mirrors Trie.load(File)/BigramModel's File constructor.
+//     constructor(file: File) : this({ file.readText() })
+//
+//     override fun load(): Map<String, NgramEntry> {
+//         val obj = JSONObject(reader())
+//         val result = mutableMapOf<String, NgramEntry>()
+//         val keys = obj.keys()
+//         while (keys.hasNext()) {
+//             val key = keys.next()
+//             val entryObj = obj.getJSONObject(key)
+//             val arr = entryObj.getJSONArray("followers")
+//             val followers = (0 until arr.length()).map { i ->
+//                 val pair = arr.getJSONArray(i)
+//                 pair.getString(0) to pair.getDouble(1).toFloat()
+//             }
+//             result[key] = NgramEntry(followers, entryObj.getInt("support"))
+//         }
+//         return result
+//     }
+// }
 
 /**
  * Orchestrates a priority-ordered cascade of [NgramModel]s — e.g.

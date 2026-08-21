@@ -14,22 +14,15 @@ class WordDictionaryTest {
     companion object {
         private lateinit var pack: LanguagePack
         private lateinit var wordDict: WordDictionary
-        private lateinit var legacyTrie: Trie
         private val PACK_FILE = File("/tmp/en.cklm")
-        private val TRIE_FILE = File("src/main/assets/en.trie")
 
         @BeforeClass
         @JvmStatic
         fun loadResources() {
             assumeTrue("Test file /tmp/en.cklm not found", PACK_FILE.exists())
-            println("TRIE_FILE absolute path: ${TRIE_FILE.absolutePath}")
-            println("TRIE_FILE exists: ${TRIE_FILE.exists()}")
-            assumeTrue("Legacy trie asset not found at ${TRIE_FILE.absolutePath}", TRIE_FILE.exists())
             pack = LanguagePack.open(PACK_FILE)
             wordDict = WordDictionary(pack)
-            legacyTrie = Trie.load(TRIE_FILE)
             println("Loaded WordDictionary (pack: ${pack.vocabSize} words, ${pack.charTrieNodeCount} char-trie nodes)")
-            println("Loaded legacy Trie")
         }
     }
 
@@ -163,63 +156,6 @@ class WordDictionaryTest {
         assertEquals("first result edit distance should be 1", 1, results[0].editDistance)
         // All results should have edit distance <= 1
         assertTrue("all results edit distance <= 1", results.all { it.editDistance <= 1 })
-    }
-
-    // ── Parity vs legacy Trie ────────────────────────────────────────────────
-
-    @Test fun `parity suggest returns valid completions for common prefixes`() {
-        val testPrefixes = listOf("a", "an", "and", "the", "th", "hel", "wor", "key", "pro", "com")
-
-        for (prefix in testPrefixes) {
-            val dictResults = wordDict.suggest(prefix, 5)
-            val trieResults = legacyTrie.suggest(prefix, 5)
-
-            // Both should return words starting with the prefix
-            assertTrue("WordDictionary results start with '$prefix'", dictResults.all { it.startsWith(prefix) })
-            assertTrue("Trie results start with '$prefix'", trieResults.all { it.startsWith(prefix) })
-
-            // Both should return non-empty results for common prefixes
-            assertTrue("WordDictionary suggest('$prefix') not empty", dictResults.isNotEmpty())
-            assertTrue("Trie suggest('$prefix') not empty", trieResults.isNotEmpty())
-
-            println("Prefix '$prefix': WordDict=${dictResults.take(3)}, Trie=${trieResults.take(3)}")
-        }
-    }
-
-    @Test fun `parity has matches legacy Trie for known words`() {
-        val testWords = listOf("hello", "world", "the", "and", "keyboard", "android", "test", "word", "qz", "xqzjw")
-        var matches = 0
-
-        for (word in testWords) {
-            val dictHas = wordDict.has(word)
-            val trieHas = legacyTrie.has(word)
-            if (dictHas == trieHas) matches++
-            println("has('$word'): WordDict=$dictHas, Trie=$trieHas")
-        }
-
-        println("Parity has: $matches/${testWords.size} match")
-        assertTrue("has() should match legacy Trie for all test words", matches == testWords.size)
-    }
-
-    @Test fun `fuzzy search returns valid corrections (parity with legacy Trie)`() {
-        // Compare BevaTrieSearch results using WordDictionary adapter vs legacy BaseTrieAdapter
-        val legacyAdapter = BaseTrieAdapter(legacyTrie)
-        val testQueries = listOf("helo", "wold", "keybord", "teh")
-
-        for (query in testQueries) {
-            val dictResults = BevaTrieSearch.search(wordDict.adapter, query, 1, 5)
-            val trieResults = BevaTrieSearch.search(legacyAdapter, query, 1, 5)
-
-            println("Fuzzy '$query': WordDict=${dictResults.map { "${it.word}(${it.editDistance})" }}, Trie=${trieResults.map { "${it.word}(${it.editDistance})" }}")
-
-            // Both should return results
-            assertTrue("WordDict fuzzy '$query' not empty", dictResults.isNotEmpty())
-            assertTrue("Trie fuzzy '$query' not empty", trieResults.isNotEmpty())
-
-            // Both should have edit distance <= 1
-            assertTrue("WordDict all edit distance <= 1", dictResults.all { it.editDistance <= 1 })
-            assertTrue("Trie all edit distance <= 1", trieResults.all { it.editDistance <= 1 })
-        }
     }
 
     @Test fun `adapter root is 0`() {

@@ -89,10 +89,10 @@ class AutocompleteEvalTest {
         val userTrie = UserTrie() // fresh install — no learned words
         val userAdapter = UserTrieAdapter(userTrie)
         val baseAdapter = wordDict.adapter
-        // Empty user layer — fresh install. Seed file is unused by the pack path.
+        // Empty user layer — fresh install. Seed comes from the pack (BigramModel's
+        // seed path was removed, ADR-010 tasks L/M).
         val userBigram = BigramModel(
-            seedJsonFile = File.createTempFile("eval_user_bigrams", ".json").apply { delete() },
-            userFile = File.createTempFile("eval_user_bigrams", ".json").apply { delete() },
+            File.createTempFile("eval_user_bigrams", ".json").apply { delete() },
         )
         userBigram.loadUserLayer()
         val packBigram = PackBackedBigramModel(PackNgramModel(pack, order = 2), userBigram)

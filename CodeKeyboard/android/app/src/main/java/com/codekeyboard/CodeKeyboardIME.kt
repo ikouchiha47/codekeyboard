@@ -132,9 +132,9 @@ class CodeKeyboardIME : InputMethodService() {
 
         // Pack-backed bigram with user-learned decay layer for personalization.
         // The user layer file is configurable; the static seed comes from the pack
-        // (PackBackedBigramModel ignores BigramModel's seed, so we pass the user file
-        // as both args — loadSeed() reads it but the pack path doesn't use it).
-        val userBigram = BigramModel(File(filesDir, "user_bigrams.json"), File(filesDir, "user_bigrams.json"))
+        // (PackBackedBigramModel sources it from PackNgramModel — BigramModel's
+        // seed path was removed, ADR-010 tasks L/M).
+        val userBigram = BigramModel(File(filesDir, "user_bigrams.json"))
         userBigram.loadUserLayer()
         packBigram = PackBackedBigramModel(PackNgramModel(pack, order = 2), userBigram)
 

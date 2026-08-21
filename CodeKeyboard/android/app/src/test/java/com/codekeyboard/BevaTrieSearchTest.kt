@@ -125,40 +125,6 @@ class BevaTrieSearchTest {
         assertTrue(results.none { it.word == "hello" })
     }
 
-    // ── Property: BEVA == Hanov (same results for same trie and queries) ───────
-
-    @Test fun `BEVA matches Hanov results — simple words`() {
-        val words = listOf("help" to 4, "helm" to 2, "hero" to 5, "here" to 1,
-                           "herd" to 3, "her" to 7, "he" to 1)
-        words.forEach { (w, n) -> repeat(n) { trie.insert(w) } }
-
-        val queries = listOf("hel", "her", "heroe", "hlep")
-        for (q in queries) {
-            val threshold = FuzzyThreshold.forLength(q.length)
-            if (threshold == 0) continue
-            val beva  = BevaTrieSearch.search(adapter, q, threshold, 20).map { it.word }.toSet()
-            val hanov = FuzzyTrieSearch.search(adapter, q, threshold, 20).map { it.word }.toSet()
-            assertEquals("BEVA != Hanov for '$q'", hanov, beva)
-        }
-    }
-
-    @Test fun `BEVA matches Hanov results — random trie`() {
-        val words = listOf(
-            "apple" to 4, "apply" to 8, "apt" to 3, "ape" to 6,
-            "apex" to 5, "april" to 7, "app" to 2, "application" to 1,
-        )
-        words.forEach { (w, n) -> repeat(n) { trie.insert(w) } }
-
-        val queries = listOf("aple", "appl", "appt", "apre")
-        for (q in queries) {
-            val threshold = FuzzyThreshold.forLength(q.length)
-            if (threshold == 0) continue
-            val beva  = BevaTrieSearch.search(adapter, q, threshold, 20).map { it.word }.toSet()
-            val hanov = FuzzyTrieSearch.search(adapter, q, threshold, 20).map { it.word }.toSet()
-            assertEquals("BEVA != Hanov for '$q'", hanov, beva)
-        }
-    }
-
     // ── Property: BEVA == brute-force scan ────────────────────────────────────
 
     @Test fun `BEVA DFS matches brute-force scan — simple words`() {

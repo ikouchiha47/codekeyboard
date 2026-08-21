@@ -86,52 +86,6 @@ class BevaTrieSearchBenchmark {
         }
     }
 
-    // ── Side-by-side comparison: Hanov vs BEVA ───────────────────────────────
-
-    @Test fun `side-by-side — k=1 100 words`() {
-        val trie = buildTrie(100)
-        val adapter = UserTrieAdapter(trie)
-        measure("hanov k=1  [ 100 words] query='raiming' [compare]") {
-            FuzzyTrieSearch.search(adapter, "raiming", 1, 5)
-        }
-        measure("beva  k=1  [ 100 words] query='raiming' [compare]") {
-            BevaTrieSearch.search(adapter, "raiming", 1, 5)
-        }
-    }
-
-    @Test fun `side-by-side — k=2 1000 words`() {
-        val trie = buildTrie(1000)
-        val adapter = UserTrieAdapter(trie)
-        measure("hanov k=2  [  1k words] query='raiming' [compare]") {
-            FuzzyTrieSearch.search(adapter, "raiming", 2, 5)
-        }
-        measure("beva  k=2  [  1k words] query='raiming' [compare]") {
-            BevaTrieSearch.search(adapter, "raiming", 2, 5)
-        }
-    }
-
-    @Test fun `side-by-side — k=2 5000 words`() {
-        val trie = buildTrie(5000)
-        val adapter = UserTrieAdapter(trie)
-        measure("hanov k=2  [  5k words] query='raiming' [compare]") {
-            FuzzyTrieSearch.search(adapter, "raiming", 2, 5)
-        }
-        measure("beva  k=2  [  5k words] query='raiming' [compare]") {
-            BevaTrieSearch.search(adapter, "raiming", 2, 5)
-        }
-    }
-
-    @Test fun `side-by-side — k=1 helo 1000 words`() {
-        val trie = buildTrie(1000)
-        val adapter = UserTrieAdapter(trie)
-        measure("hanov k=1  [  1k words] query='helo'    [compare]") {
-            FuzzyTrieSearch.search(adapter, "helo", FuzzyThreshold.forLength(4), 5)
-        }
-        measure("beva  k=1  [  1k words] query='helo'    [compare]") {
-            BevaTrieSearch.search(adapter, "helo", FuzzyThreshold.forLength(4), 5)
-        }
-    }
-
     // ── Pruning correctness check ─────────────────────────────────────────────
 
     @Test fun `pruning correctness — beva vs brute`() {
@@ -141,11 +95,7 @@ class BevaTrieSearchBenchmark {
         val bevaWords = beva.map { it.word }.toSet()
         assertTrue("beva returned words beyond threshold",
             bevaWords.all { w -> levenshtein("raiming", w) <= 2 })
-        val hanov = FuzzyTrieSearch.search(adapter, "raiming", 2, 50)
-        val hanovWords = hanov.map { it.word }.toSet()
-        results.add("agreement check: beva=${bevaWords.size} hanov=${hanovWords.size} " +
-            "beva-only=${(bevaWords - hanovWords).take(3)} " +
-            "hanov-only=${(hanovWords - bevaWords).take(3)}")
+        results.add("pruning check: beva=${bevaWords.size} words within threshold")
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
