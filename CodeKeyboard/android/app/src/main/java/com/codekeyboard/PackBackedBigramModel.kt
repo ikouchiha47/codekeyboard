@@ -24,16 +24,19 @@ class PackBackedBigramModel(
 
         val scores = mutableMapOf<String, Float>()
 
-        // Static seed from pack (weight 0.4, same as BigramModel.SEED_WEIGHT)
-        // Uses the pack's REAL decoded follower scores, not position heuristics.
+        // Static seed from pack (weight 0.7). Uses the pack's REAL decoded
+        // follower scores. The static LM dominates so sensible suggestions
+        // (the/to/that) rank high; the user layer only boosts words the user
+        // has genuinely learned (see MIN_USER_DEE threshold in BigramModel).
         packNgram.nextWordsWithScores(prev, prefix = pfx, n = n * 2).forEach { (word, score) ->
-            scores[word] = (scores[word] ?: 0f) + 0.4f * score
+            scores[word] = (scores[word] ?: 0f) + 0.7f * score
         }
 
-        // User-learned layer from BigramModel (weight 0.6, same as BigramModel.USER_WEIGHT)
-        // Uses the REAL formula_p scores from the user layer.
+        // User-learned layer from BigramModel (weight 0.3, Gboard-style cache
+        // weight). Uses the REAL formula_p scores, gated by MIN_USER_DEE so a
+        // single observation doesn't outrank the static LM.
         userBigram.userLayerScores(prev, prefix = pfx, n = n * 2).forEach { (word, score) ->
-            scores[word] = (scores[word] ?: 0f) + 0.6f * score
+            scores[word] = (scores[word] ?: 0f) + 0.3f * score
         }
 
         return scores.entries

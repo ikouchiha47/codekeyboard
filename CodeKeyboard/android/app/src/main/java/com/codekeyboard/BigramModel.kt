@@ -95,6 +95,13 @@ class BigramModel(
         private const val SEED_WEIGHT = 0.4f
         private const val USER_WEIGHT = 0.6f
 
+        // Minimum dee before a user-learned word is allowed to influence
+        // suggestions. dee grows ~1 per observation (with recency decay), so
+        // this requires a word to be observed a few times before it can
+        // outrank the static pack's sensible suggestions. Prevents a single
+        // accidental "like task" from immediately beating "the"/"to".
+        private const val MIN_USER_DEE = 3.0
+
         // librime dynamics constants
         private const val HALF_LIFE = 200.0      // commits; gap of 200 halves the dee boost
         private const val DEE_AMPLITUDE = 1.0    // boost added per commit
@@ -236,12 +243,18 @@ class BigramModel(
      * pack-backed caller can blend them with the pack's static seed scores
      * using the same SEED_WEIGHT/USER_WEIGHT formula.
      *
+     * Only entries with dee >= [MIN_USER_DEE] are returned — a word must be
+     * observed enough times (dee grows ~1 per observation, with decay) before
+     * it is allowed to influence suggestions. This prevents a single accidental
+     * "like task" from immediately outranking sensible static words like "the".
+     *
      * @return list of (word, formulaP(dee)) in score-descending order
      */
     fun userLayerScores(prevWord: String, prefix: String = "", n: Int = 20): List<Pair<String, Float>> {
         val prev = prevWord.lowercase()
         val pfx = prefix.lowercase()
         return (user[prev] ?: emptyList())
+            .filter { it.dee >= MIN_USER_DEE }
             .map { entry -> entry.word to formulaP(entry.dee).toFloat() }
             .filter { pfx.isEmpty() || it.first.startsWith(pfx) }
             .sortedByDescending { it.second }

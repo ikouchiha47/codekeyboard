@@ -109,11 +109,14 @@ class CodeKeyboardIME : InputMethodService() {
         // Load CKLM language pack for the active locale (configurable via RN settings).
         // The locale is read from SharedPreferences ("language", default "en") — the
         // same bridge the RN settings screen uses for layout/keymap. Pack asset is
-        // copied from assets to filesDir on first run for mmap access.
+        // copied from assets to filesDir for mmap access. We refresh the copy when
+        // the asset changes (size differs) so a reinstall with a newer pack doesn't
+        // keep serving a stale filesDir copy.
         val locale = KeyboardSettings.getString("language", "en")
         val packAssetName = "$locale.cklm"
         val packFile = File(filesDir, packAssetName)
-        if (!packFile.exists()) {
+        val assetSize = assets.openFd(packAssetName).use { it.length }
+        if (!packFile.exists() || packFile.length() != assetSize) {
             assets.open(packAssetName).use { input ->
                 packFile.outputStream().use { output ->
                     input.copyTo(output)

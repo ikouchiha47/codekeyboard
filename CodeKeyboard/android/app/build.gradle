@@ -78,12 +78,29 @@ android {
     compileSdk rootProject.ext.compileSdkVersion
 
     namespace "com.codekeyboard"
+
+    // CKLM language packs are mmap'd via AssetManager.openFd(), which requires
+    // the asset to be stored uncompressed in the APK. Without this, openFd()
+    // throws "This file can not be opened as a file descriptor; it is probably
+    // compressed".
+    androidResources {
+        noCompress += "cklm"
+    }
+
     defaultConfig {
         applicationId "com.codekeyboard"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 16
         versionName "1.12.1"
+
+        // Ship only the arm64-v8a native libs. The x86/x86_64 ABIs are
+        // emulator-only and armeabi-v7a is for legacy 32-bit devices — none
+        // are needed for a release APK targeting modern phones. This cuts
+        // ~14 MB of libreactnative.so/hermesvm.so per excluded ABI.
+        ndk {
+            abiFilters "arm64-v8a"
+        }
     }
     signingConfigs {
         debug {

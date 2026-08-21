@@ -134,9 +134,15 @@ class Ngram(private val models: List<NgramModel>) {
             val weight = support.toDouble() / totalSupport
             results.mapIndexed { idx, word -> word to weight * (results.size - idx) }
         }
+        // Drop self-referential continuations: a suggested word that equals a
+        // context word (e.g. "i" after "i like") is a low-quality artifact of
+        // the raw n-gram data, not a useful suggestion.
+        val contextSet = context.map { it.lowercase() }.toSet()
         return weighted.groupBy({ it.first }, { it.second })
             .mapValues { it.value.sum() }
-            .entries.sortedByDescending { it.value }
+            .entries
+            .filterNot { it.key.lowercase() in contextSet }
+            .sortedByDescending { it.value }
             .take(n)
             .map { it.key }
     }
