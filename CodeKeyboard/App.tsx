@@ -1,4 +1,4 @@
-import React, {useState, useCallback, useEffect} from 'react';
+import React, {useState, useCallback, useEffect, useRef} from 'react';
 import {
   View,
   Text,
@@ -7,6 +7,8 @@ import {
   StyleSheet,
   StatusBar,
   ScrollView,
+  KeyboardAvoidingView,
+  Platform,
   useColorScheme,
   NativeModules,
 } from 'react-native';
@@ -19,6 +21,13 @@ function SnippetsEditor() {
   const [newVal, setNewVal] = useState('');
   const [addError, setAddError] = useState('');
   const [editErrors, setEditErrors] = useState<Record<string, string>>({});
+  const [savedFlash, setSavedFlash] = useState<Record<string, boolean>>({});
+  // Debounce timers + a flush-on-unmount ref so an edit typed right before
+  // switching tabs (which unmounts this whole component — onBlur is NOT
+  // guaranteed to fire before that) is never silently dropped.
+  const saveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const pendingValues = useRef<Record<string, string>>({});
+  const flashTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   const loadKeys = useCallback(() => {
     NativeModules.SettingsModule?.getSnippetKeys((keys: string[]) => {
@@ -51,7 +60,9 @@ function SnippetsEditor() {
     loadKeys();
   }, [newKey, newVal, snippets, loadKeys]);
 
-  const handleUpdate = useCallback((key: string, val: string) => {
+  // Actually persists — called from the debounce timer, an immediate flush
+  // (blur/submit/unmount), or a manual Save tap.
+  const persistUpdate = useCallback((key: string, val: string) => {
     if (!val.trim()) {
       setEditErrors(prev => ({...prev, [key]: 'Expansion cannot be empty'}));
       return;
@@ -62,10 +73,58 @@ function SnippetsEditor() {
       return next;
     });
     NativeModules.SettingsModule?.setString(`snippet_${key}`, val.trim());
-    setSnippets(prev => ({...prev, [key]: val.trim()}));
+    delete pendingValues.current[key];
+
+    setSavedFlash(prev => ({...prev, [key]: true}));
+    if (flashTimers.current[key]) clearTimeout(flashTimers.current[key]);
+    flashTimers.current[key] = setTimeout(() => {
+      setSavedFlash(prev => {
+        const next = {...prev};
+        delete next[key];
+        return next;
+      });
+    }, 1200);
+  }, []);
+
+  // True autosave: debounced persist on every keystroke, not just on blur —
+  // blur is not guaranteed to fire before this component unmounts (e.g. the
+  // user taps a different tab while a snippet input is still focused), which
+  // was silently dropping edits with zero indication anything went wrong.
+  const handleUpdate = useCallback((key: string, val: string) => {
+    setSnippets(prev => ({...prev, [key]: val}));
+    pendingValues.current[key] = val;
+    if (saveTimers.current[key]) clearTimeout(saveTimers.current[key]);
+    saveTimers.current[key] = setTimeout(() => {
+      persistUpdate(key, pendingValues.current[key] ?? val);
+    }, 500);
+  }, [persistUpdate]);
+
+  const flushPendingUpdate = useCallback((key: string) => {
+    if (saveTimers.current[key]) {
+      clearTimeout(saveTimers.current[key]);
+      delete saveTimers.current[key];
+    }
+    if (key in pendingValues.current) {
+      persistUpdate(key, pendingValues.current[key]);
+    }
+  }, [persistUpdate]);
+
+  // Flush any still-pending debounced edits on unmount (tab switch) so
+  // nothing typed in the last <500ms before navigating away is lost.
+  useEffect(() => {
+    return () => {
+      Object.keys(pendingValues.current).forEach(key => {
+        NativeModules.SettingsModule?.setString(`snippet_${key}`, pendingValues.current[key].trim());
+      });
+      Object.values(saveTimers.current).forEach(clearTimeout);
+      Object.values(flashTimers.current).forEach(clearTimeout);
+    };
   }, []);
 
   const handleDelete = useCallback((key: string) => {
+    if (saveTimers.current[key]) clearTimeout(saveTimers.current[key]);
+    delete saveTimers.current[key];
+    delete pendingValues.current[key];
     NativeModules.SettingsModule?.deleteSnippet(key);
     setSnippets(prev => {
       const next = {...prev};
@@ -91,10 +150,11 @@ function SnippetsEditor() {
             placeholderTextColor="#555"
             autoCapitalize="none"
             autoCorrect={false}
-            onChangeText={text => setSnippets(prev => ({...prev, [key]: text}))}
-            onBlur={() => handleUpdate(key, val)}
-            onSubmitEditing={() => handleUpdate(key, val)}
+            onChangeText={text => handleUpdate(key, text)}
+            onBlur={() => flushPendingUpdate(key)}
+            onSubmitEditing={() => flushPendingUpdate(key)}
           />
+          {savedFlash[key] ? <Text style={styles.savedIndicator}>Saved</Text> : null}
           <TouchableOpacity style={styles.deleteButton} onPress={() => handleDelete(key)}>
             <Text style={styles.deleteButtonText}>x</Text>
           </TouchableOpacity>
@@ -584,15 +644,23 @@ function App() {
             ),
           )}
         </View>
-        {activeTab === 'settings' ? (
-          <SettingsScreen />
-        ) : activeTab === 'themes' ? (
-          <ThemesScreen />
-        ) : activeTab === 'layouts' ? (
-          <LayoutsScreen />
-        ) : (
-          <PlaceholderScreen tab={activeTab} />
-        )}
+        <KeyboardAvoidingView
+          style={styles.keyboardAvoider}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          // Our own custom IME's rows sit below the standard keyboard height
+          // Android reports here — this pads a bit extra so the last input
+          // row isn't left flush against (or just under) the keyboard edge.
+          keyboardVerticalOffset={Platform.OS === 'android' ? 24 : 0}>
+          {activeTab === 'settings' ? (
+            <SettingsScreen />
+          ) : activeTab === 'themes' ? (
+            <ThemesScreen />
+          ) : activeTab === 'layouts' ? (
+            <LayoutsScreen />
+          ) : (
+            <PlaceholderScreen tab={activeTab} />
+          )}
+        </KeyboardAvoidingView>
       </SafeAreaView>
     </SafeAreaProvider>
   );
@@ -602,6 +670,9 @@ const styles = StyleSheet.create({
   safe: {
     flex: 1,
     backgroundColor: '#111',
+  },
+  keyboardAvoider: {
+    flex: 1,
   },
   tabBar: {
     flexDirection: 'row',
@@ -721,6 +792,12 @@ const styles = StyleSheet.create({
   },
   inputError: {
     borderColor: '#c0392b',
+  },
+  savedIndicator: {
+    color: '#4caf50',
+    fontSize: 11,
+    fontWeight: '600',
+    marginLeft: 8,
   },
   deleteButton: {
     marginLeft: 8,

@@ -3,27 +3,29 @@ package com.codekeyboard
 import org.junit.Assert.*
 import org.junit.Test
 import java.io.File
-import java.nio.ByteBuffer
-import java.nio.ByteOrder
 
-// Loads en.trie from assets/ on disk (no Android context needed in unit tests).
+// Loads the CKLM pack from assets/ on disk (no Android context needed in unit tests).
 // Run with: ./gradlew integrationTest
 @IntegrationTest
 class FuzzyIntegrationTest {
 
-    // Locate en.trie relative to the project root.
-    private val trieFile: File = run {
+    // Locate en.cklm relative to the project root.
+    private val packFile: File = run {
         val candidates = listOf(
-            File("src/main/assets/en.trie"),             // workingDir = app/ (default)
-            File("app/src/main/assets/en.trie"),         // workingDir = android/
-            File("android/app/src/main/assets/en.trie"), // workingDir = project root
+            File("src/main/assets/en.cklm"),             // workingDir = app/ (default)
+            File("app/src/main/assets/en.cklm"),         // workingDir = android/
+            File("android/app/src/main/assets/en.cklm"), // workingDir = project root
         )
         candidates.firstOrNull { it.exists() }
-            ?: error("en.trie not found. Tried: ${candidates.map { it.absolutePath }}")
+            ?: error("en.cklm not found. Tried: ${candidates.map { it.absolutePath }}")
     }
 
-    private val trie: BaseTrie by lazy { BaseTrie.fromBytes(trieFile.readBytes()) }
-    private val adapter: TrieAdapter<Int> by lazy { BaseTrie.adapter(trie) }
+    // The production dictionary is the pack's char-trie (WORD tier) — the legacy
+    // en.trie asset was removed (ADR-010 tasks L/M). WordDictionary exposes it as
+    // a TrieAdapter<Int> for BevaTrieSearch.
+    private val adapter: TrieAdapter<Int> by lazy {
+        WordDictionary(LanguagePack.open(packFile)).adapter
+    }
 
     // ── Correctness ────────────────────────────────────────────────────────────
 
@@ -121,52 +123,5 @@ class FuzzyIntegrationTest {
         val p99 = times[(runs * 0.99).toInt().coerceAtMost(runs - 1)] / 1_000
         println("%-40s  p50=%5dµs  p99=%5dµs".format(label, p50, p99))
         return last!!
-    }
-}
-
-// ── Minimal Trie reader (no Android context) ─────────────────────────────────
-
-class BaseTrie private constructor(private val buf: ByteBuffer, private val nodeSize: Int) {
-    private val nodeCount: Int = buf.getInt(8)
-    private val childrenBase: Int = 12 + nodeCount * nodeSize
-
-    private fun flags(idx: Int)    = buf.get(12 + idx * nodeSize + 1).toInt() and 0xFF
-    private fun blockOff(idx: Int) = buf.getInt(12 + idx * nodeSize + 2)
-    fun frequency(idx: Int)        = if (nodeSize == 12) buf.getInt(12 + idx * nodeSize + 6) else 0
-
-    fun isTerminal(idx: Int) = (flags(idx) and 1) != 0
-    fun iterChildren(idx: Int, block: (Char, Int) -> Unit) {
-        if (flags(idx) and 2 == 0) return
-        val off = childrenBase + blockOff(idx)
-        val cnt = buf.get(off).toInt() and 0xFF
-        for (i in 0 until cnt) {
-            val base = off + 1 + i * 4
-            val ch = (buf.get(base).toInt() and 0xFF).toChar()
-            val cidx = (buf.get(base+1).toInt() and 0xFF) or
-                       ((buf.get(base+2).toInt() and 0xFF) shl 8) or
-                       ((buf.get(base+3).toInt() and 0xFF) shl 16)
-            block(ch, cidx)
-        }
-    }
-
-    companion object {
-        fun fromBytes(bytes: ByteArray): BaseTrie {
-            val buf = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
-            val magic4 = buildString { repeat(4) { append((buf.get(it).toInt() and 0xFF).toChar()) } }
-            val nodeSize = if (magic4 == "TRIF") 12 else 8
-            if (magic4 != "TRIF") {
-                val magic5 = magic4 + (buf.get(4).toInt() and 0xFF).toChar()
-                require(magic5 == "TRIE2") { "bad magic: $magic5" }
-            }
-            return BaseTrie(buf, nodeSize)
-        }
-
-        fun adapter(trie: BaseTrie): TrieAdapter<Int> = object : TrieAdapter<Int> {
-            override val root: Int = 0
-            override fun isTerminal(node: Int) = trie.isTerminal(node)
-            override fun frequency(node: Int) = trie.frequency(node)
-            override fun iterateChildren(node: Int, block: (Char, Int) -> Unit) =
-                trie.iterChildren(node, block)
-        }
     }
 }

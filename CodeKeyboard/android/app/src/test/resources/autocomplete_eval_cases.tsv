@@ -1,0 +1,94 @@
+# Autocomplete eval fixture — see docs/architecture/decisions/ADR-007-autocomplete-eval.md
+#
+# Format: sentenceSoFar <TAB> expectedWord[|altWord2|altWord3...] <TAB> category
+#
+# sentenceSoFar ends mid-word (the partial word being typed) OR with a
+# trailing space (nothing typed yet — pure next-word prediction). The
+# runner splits it into (context = last *completed* word, prefix = partial
+# word) exactly like CodeKeyboardIME does at suggestion time.
+#
+# expected accepts multiple pipe-separated alternatives — real language
+# often has several reasonable next words ("I am looking " -> forward,
+# towards, at are all fine), so a case passes if ANY listed alternative
+# appears in the top-K suggestions.
+#
+# Trailing-space cases are the ones that actually exercise the bigram
+# model — typing the full previous word and asking "what comes next with
+# nothing typed" is the real value of autocomplete. A case where the
+# expected word is already fully spelled out except its last couple
+# letters (e.g. "please let me kno") tests almost nothing: the trie prefix
+# search alone narrows it to a handful of candidates regardless of context.
+#
+# category values:
+#   next-word          — trailing space, single-word context (what the
+#                        production bigram model actually uses today)
+#   next-word-phrase    — trailing space, but the *correct* answer really
+#                        depends on 2+ words of context. The model only
+#                        sees the last word, so these are expected to
+#                        expose a real coverage gap, not pass today.
+#   prefix              — partial word typed, trie-only, short/no useful
+#                        context dependency
+#   prefix+context      — partial word typed, where bigram context could
+#                        plausibly help disambiguate between candidates
+#
+# ── next-word: single-word context, verified against bigrams.json seed ──
+we 	have|are|can|will	next-word
+you 	can|are|have|will	next-word
+I 	have|am|was|can|think	next-word
+he 	was|is|said|had|has	next-word
+she 	was|is|had|has|said	next-word
+let 	me|us|the|you|them	next-word
+need 	to|for|a	next-word
+want 	to|it|a	next-word
+going 	to|on|through	next-word
+have 	been|a|to|the	next-word
+will 	be|not|have|also	next-word
+can 	be|not|also|you|help	next-word
+should 	be|not|have|also	next-word
+would 	be|like|have|not	next-word
+thank 	you|the|all	next-word
+that 	the|is|you|it|are	next-word
+of 	the|a|this|their	next-word
+in 	the|a|this|order	next-word
+to 	the|be|a|get|make	next-word
+for 	the|a|this|your|more	next-word
+# ── next-word-phrase: correct answer needs more than the last word ───────
+# these are expected to fail today — the model only sees "me"/"you"/"the",
+# not "let me"/"thank you"/"the same" — documenting exactly where a
+# 1-word bigram context runs out of signal.
+please let me 	know	next-word-phrase
+thank you very 	much	next-word-phrase
+it is the same 	as	next-word-phrase
+as soon as 	possible	next-word-phrase
+in order to 	get	next-word-phrase
+on the other 	hand	next-word-phrase
+I would like to 	ask	next-word-phrase
+this is a good 	idea	next-word-phrase
+let me know if 	you	next-word-phrase
+I look forward to 	hearing	next-word-phrase
+feel free to 	reach	next-word-phrase
+please do not 	hesitate	next-word-phrase
+it looks like 	you	next-word-phrase
+just wanted to 	let	next-word-phrase
+I am looking forward 	to|for	next-word-phrase
+I am looking 	forward|towards|at	next-word-phrase
+can you please 	let	next-word-phrase
+we look forward to 	hearing	next-word-phrase
+please make sure to 	check	next-word-phrase
+# ── prefix: partial word typed, trie-only, short/no useful context ───────
+th	the	prefix
+a	and	prefix
+I th	think	prefix
+we ar	are	prefix
+he sai	said	prefix
+you kno	know	prefix
+it wa	was	prefix
+they wer	were	prefix
+this i	is	prefix
+that ha	has	prefix
+# ── prefix+context: partial word typed, context could disambiguate ───────
+we shou	should	prefix+context
+he sto	stopped|stood|stole	prefix+context
+please c	contact|check|click	prefix+context
+I ca	can|call	prefix+context
+you wi	will	prefix+context

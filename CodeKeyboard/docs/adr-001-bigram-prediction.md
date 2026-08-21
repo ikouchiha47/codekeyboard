@@ -240,6 +240,128 @@ cover 200+ languages including Bengali, Hindi, Hinglish. These would replace the
 seed for English and add multilingual support. Requires parsing the AOSP binary format
 (JNI or a build-time conversion script using `dicttool_aosp.jar`).
 
+**Update (2026-08-16, see ADR-007 checkpoint log for the full investigation):** actually
+downloaded and evaluated the AOSP `en_US.combined` wordlist (openboard-team source,
+160,715 words with real bigram data) head-to-head against the Norvig seed on the
+real-text eval fixture. AOSP performed *worse* (1.0% vs 1.8% on generated next-word
+cases at the time), despite covering 17x more predecessor words (160k vs 9.3k) —
+because every single word in the AOSP format is capped at exactly 3 stored bigram
+followers, versus up to 10 in the Norvig-derived seed. Breadth-per-word beat
+word-coverage here. **This line item is now considered resolved/rejected on
+evidence, not just cost** — HeliBoard dict integration may still be worth it for
+multilingual support, but not as an English bigram quality upgrade.
+
+---
+
+## Seed Rescoring: Absolute Discounting + Unigram Backoff (2026-08-16)
+
+**Status:** Implemented, replaces the "Chosen" scoring in Alternative C above.
+
+The eval harness (ADR-007) exposed two real problems with the original seed build
+(`scripts/extract_bigrams.py`), found empirically rather than by inspection:
+
+1. **Global top-N cut before grouping.** The original script sorted ALL bigram pairs
+   in the corpus by raw count, kept the top 100k, and only then grouped by predecessor
+   word. Global raw-count ranking is dominated by function-word pairs ("of the", "in a")
+   in every context, so a less-common predecessor word (e.g. "mind") often had every one
+   of its pairs fall outside the global top-N — leaving it with a thin or all-function-word
+   follower list not because "mind" lacks good continuations, but because none of its
+   pairs won the *global* popularity contest.
+2. **Naive fix overcorrects.** Grouping the full corpus per-word first (no global cut)
+   fixed (1) but traded it for overfitting: words with only 1-2 observed bigram
+   occurrences got their thin, noisy counts trusted as if they were solid signal. A/B
+   tested directly: generated-fixture next-word accuracy improved (1.8% -> 3.1%) but
+   curated common-phrase accuracy collapsed (69.2% -> 33.3%).
+
+Fix: **absolute discounting with interpolated unigram backoff** (a member of the
+discount-and-backoff family surveyed in Chen & Goodman, "An Empirical Study of
+Smoothing Techniques for Language Modeling", cs/0108005). Gboard's production LM is
+documented as a **Katz-smoothed interpolated 5-gram** — related family, **not the same
+algorithm** as what shipped here. Flag the distinctions explicitly so "same technique
+family" is never read as "identical formula":
+
+| Method | Observed n-grams | When lower order is used | Lower-order distribution |
+|---|---|---|---|
+| **Katz smoothing** | Good-Turing discount (mass reserved from frequency-of-frequencies) | **Only when count = 0** (unseen); backoff weight scales the lower order | Typically lower-order MLE / recursive Katz |
+| **Absolute discounting + interpolation (shipped)** | Subtract fixed `d` from every observed count | **Always** blend higher- and lower-order scores via `λ` (not only on unseen) | Raw **unigram frequency** from `en.trie` |
+| **Kneser-Ney (not shipped)** | Discount observed counts | Backoff/interpolation when higher order is weak/unseen | **Continuation probability** (in how many distinct contexts a word appears) — fixes "Francisco"-class issues; needs extra corpus stats we did not build |
+
+```
+P(w2 | w1) = max(count(w1,w2) - d, 0) / total(w1)  +  lambda(w1) * P_unigram(w2)
+lambda(w1) = d * distinct_followers(w1) / total(w1)
+```
+
+**Implemented** (`scripts/extract_bigrams_v2.py`):
+
+- `d = 0.75` absolute discount on observed counts — thin, noisy evidence is pulled down
+  instead of trusted at face value.
+- Probability mass freed by discounting is redistributed via `P_unigram(w2)` from
+  `en.trie` frequencies (not a second external corpus) — rich bigram evidence stays
+  bigram-dominated; thin evidence leans on general word frequency.
+- Only rescores words already observed as followers of `w1` — does not invent new
+  candidates. Deliberately conservative scope.
+- Content-word preference (`is_stop` downweighting, `scripts/rescore_bigrams.py` — see
+  ADR-007) runs **after** this step: smoothing = trust the count; rescore = which trusted
+  candidate is useful to show.
+
+**Not implemented (simplifications / out of scope for this addendum):**
+
+- True **Katz** (Good-Turing + unseen-only backoff) — we always interpolate, and we do
+  not estimate Good-Turing discounts from frequency-of-frequencies.
+- True **Kneser-Ney** continuation backoff — cheaper build (no distinct-context pass);
+  plain unigram frequency is the simplification.
+- **Trigram / 5-gram context length** — Gboard’s reference shape is multi-order (up to
+  5-gram). This addendum only rescored the **bigram** seed; extending context is ADR-008
+  (cascade + `trigrams.json`), which is a separate runtime/data track from this seed math.
+- **Neural / federated on-device LMs** — different architecture; not in scope for this app’s
+  constraints.
+
+Runtime multi-order behavior (ADR-008) is again a different mechanism: today’s cascade is
+**hard first-non-empty higher tier**, not Katz unseen-only backoff. Do not describe the
+IME cascade as “Katz” either.
+
+Result (measured via `AutocompleteEvalTest`, `by-type [next-word]` breakdown):
+
+| | generated next-word | curated next-word |
+|---|---|---|
+| original (global top-N cut) | 1.8% | 69.2% |
+| per-word, no smoothing (rejected) | 3.1% | 33.3% |
+| **discount + backoff + rescore (shipped)** | **2.1%** | **74.4%** |
+
+Improves both metrics over the original — no regression traded away, unlike the naive
+per-word rebuild. `bigrams.json` grew from 618KB to ~1.3MB (18,218 predecessor words vs
+9,287) — acceptable for a bundled asset, noted here in case size becomes a concern later.
+
+New build entry point: `scripts/extract_bigrams_v2.py`. The original
+`scripts/extract_bigrams.py` is kept as-is (not deleted) for reference/rollback.
+
+### OpenSubtitles bigrams experiment (2026-08-16) — not shipped
+
+`extract_bigrams_v2.py` now also accepts a plain-text corpus via `--input-format text`
+(same token filter as `extract_trigrams.py`) so bigrams can be rebuilt from the
+OpenSubtitles sample used for `trigrams.json` / aligned with `en.trie`'s spoken
+register (ADR-008 option O2).
+
+Build (11.2M cleaned lines, `--min-bigram-count 5`, `--max-followers 10`):
+
+- Artifact: `android/scripts/corpus_raw/opensubtitles/bigrams_opensubs_mc5.json`
+  (~6.2MB, 58k predecessors) — **not** copied over production `bigrams.json`
+- Norvig backup: `.../bigrams_norvig_backup.json`
+
+Offline next-word (same fixtures as ADR-007/008):
+
+| | generated | curated |
+|---|---|---|
+| Norvig bigram (shipped) | 2.3% | **74.4%** |
+| OpenSubs bigram | 2.3% | 69.2% |
+
+OpenSubs ties the honest fixture and **loses** curated written idioms
+(`as soon as possible`, `on the other hand`, `let me know`, …) while gaining a few
+spoken phrases (`looks like you`, `can you please let`, …). Blind register swap is
+therefore rejected; production stays Norvig. See ADR-008 checkpoint “OpenSubs bigrams
+build” for flip lists and cascade interaction. Next quality lever is cascade
+arbitration / possible weighted merge — not replacing Norvig wholesale.
+
 ---
 
 ## Consequences
@@ -251,10 +373,22 @@ seed for English and add multilingual support. Requires parsing the AOSP binary 
 - Scoring weights tunable via metrics (keyboard.word.keystrokes histogram)
 
 **Bad:**
-- Norvig corpus is Google Books (formal text) — suggestions skew literary rather than
-  conversational ("great" → "deals, prices, for" rather than "job, work, stuff")
-- No decay — long-term usage patterns never fade
-- Cold start for non-English is still zero (user layer only)
+- Norvig corpus is Google Books / web-crawl derived formal text (`count_2w.txt`) —
+  suggestions skew literary rather than conversational ("great" → "deals, prices, for"
+  rather than "job, work, stuff"). `en.trie` is OpenSubtitles-derived (spoken), so
+  **unigram backoff register ≠ bigram seed register**. ADR-008’s trigrams are also
+  OpenSubtitles — multi-order stack is mixed-register until a deliberate corpus pass
+  (see ADR-008 next-step checkpoint, options O2–O6). Scoring/rescoring fixed ranking
+  math, not underlying corpus register.
+- Seed build is absolute-discount + unigram interpolation, **not** full Katz or
+  Kneser-Ney (see smoothing table above).
+- Cold start for non-English is still zero (user layer only) for the seed; user
+  `recordTransition` personalization is separate.
+- Even after the 2026-08-16 rescoring fix, real-text next-word accuracy is still low
+  (2.1% on the unbiased generated fixture) — a pure 1-word-of-context model has a hard
+  ceiling here regardless of scoring quality; next lever is multi-order context
+  (ADR-008), then cascade arbitration / register alignment — not another bigram-only
+  rescoring pass.
 
 ---
 
@@ -267,3 +401,6 @@ seed for English and add multilingual support. Requires parsing the AOSP binary 
 - HeliBoard NgramContext: https://github.com/Helium314/HeliBoard
 - HeliBoard dictionaries: https://codeberg.org/Helium314/aosp-dictionaries
 - AnySoftKeyboard NextWordDictionary: https://github.com/AnySoftKeyboard/AnySoftKeyboard
+- Chen & Goodman, smoothing survey: https://arxiv.org/pdf/cs/0108005
+- Kneser-Ney smoothing overview: https://en.wikipedia.org/wiki/Kneser%E2%80%93Ney_smoothing
+- Gboard production LM (Katz-smoothed 5-gram): https://www.researchgate.net/publication/328825912_Federated_Learning_for_Mobile_Keyboard_Prediction

@@ -1,16 +1,31 @@
 package com.codekeyboard
 
+/**
+ * Minimal interface for prefix-based word lookup.
+ * Implemented by both [Trie] (legacy) and [WordDictionary] (pack-backed).
+ */
+interface PrefixDictionary {
+    fun suggest(prefix: String, max: Int): List<String>
+    fun has(word: String): Boolean
+}
+
+/**
+ * Interface for bigram next-word prediction with context.
+ * Implemented by [BigramModel] (legacy) and [PackBackedBigramModel] (pack-backed).
+ */
+interface BigramProvider {
+    fun nextWords(prevWord: String, prefix: String, n: Int): List<String>
+}
+
 interface SuggestionStrategy {
     fun suggest(prefix: String, k: Int, context: String = ""): List<String>
 }
 
 class MergedSuggestionStrategy(
-    private val userTrie: UserTrie,
-    private val baseTrie: Trie,
+    private val userAdapter: UserTrieAdapter,
+    private val baseAdapter: TrieAdapter<Int>,
+    private val baseDict: PrefixDictionary,
 ) : SuggestionStrategy {
-
-    private val userAdapter = UserTrieAdapter(userTrie)
-    private val baseAdapter = BaseTrieAdapter(baseTrie)
 
     override fun suggest(prefix: String, k: Int, context: String): List<String> {
         val exact = exactSuggest(prefix, k)
@@ -25,10 +40,10 @@ class MergedSuggestionStrategy(
     }
 
     private fun exactSuggest(prefix: String, k: Int): List<String> {
-        val userResults = userTrie.suggest(prefix, k)
-        val baseResults = baseTrie.suggest(prefix, k)
-        val userWords = userResults.map { it.word }.toSet()
-        return (userResults.map { it.word } + baseResults.filter { it !in userWords }).take(k)
+        val userResults = userAdapter.suggest(prefix, k)
+        val baseResults = baseDict.suggest(prefix, k)
+        val userWords = userResults.toSet()
+        return (userResults + baseResults.filter { it !in userWords }).take(k)
     }
 
     private fun fuzzyFill(word: String, threshold: Int, limit: Int): List<String> {
@@ -57,21 +72,21 @@ class MergedSuggestionStrategy(
     }
 }
 
-class BaseSuggestionStrategy(private val baseTrie: Trie) : SuggestionStrategy {
+class BaseSuggestionStrategy(private val baseDict: PrefixDictionary) : SuggestionStrategy {
     override fun suggest(prefix: String, k: Int, context: String): List<String> =
-        baseTrie.suggest(prefix, k)
+        baseDict.suggest(prefix, k)
 }
 
 // Promotes bigram candidates to the top when context (previous word) is provided.
 class BigramAwareSuggestionStrategy(
     private val base: SuggestionStrategy,
-    private val bigram: BigramModel,
+    private val bigram: BigramProvider,
 ) : SuggestionStrategy {
 
     override fun suggest(prefix: String, k: Int, context: String): List<String> {
         val baseResults = base.suggest(prefix, k + 5)
         if (context.isEmpty()) return baseResults.take(k)
-        val bigramMatches = bigram.nextWords(context, prefix = prefix, n = k)
+        val bigramMatches = bigram.nextWords(context, prefix, k)
         val promoted = bigramMatches + baseResults.filter { it !in bigramMatches }
         return promoted.take(k)
     }

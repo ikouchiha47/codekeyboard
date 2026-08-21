@@ -53,10 +53,33 @@ import kotlin.math.pow
  * The user layer dominates (0.6 weight) once it has observed the pair at
  * least a few times. The seed layer (0.4 weight) fills the cold-start gap.
  */
-class BigramModel(private val context: Context) {
+class BigramModel(
+    // ── DEAD CODE (ADR-010 tasks L/M) ────────────────────────────────────────
+    // The static seed path (bigrams.json) is replaced by the pack's context-trie
+    // (PackBackedBigramModel sources the static seed from PackNgramModel). Only
+    // the user-learned decay layer below is live. seedJsonReader/seed/loadSeed
+    // are kept commented for reference; delete once confirmed unused.
+    //
+    // private val seedJsonReader: () -> String,
+    private val userFile: File,
+) : BigramProvider {
 
-    // seed[prevWord] = list of (nextWord, score) sorted by score desc
-    private val seed = mutableMapOf<String, List<Pair<String, Float>>>()
+    // ── DEAD CODE (ADR-010 tasks L/M) ────────────────────────────────────────
+    // Production loader — reads bigrams.json from Android assets and persists
+    // learned bigrams under the app's files dir.
+    // constructor(context: Context) : this(
+    //     { context.assets.open("bigrams.json").bufferedReader().readText() },
+    //     File(context.filesDir, "user_bigrams.json"),
+    // )
+
+    // ── DEAD CODE (ADR-010 tasks L/M) ────────────────────────────────────────
+    // The static seed path (bigrams.json) is replaced by the pack's context-trie
+    // (PackBackedBigramModel sources the static seed from PackNgramModel). Only
+    // the user-learned decay layer below is live. seedJsonReader/seed/loadSeed
+    // are kept commented for reference; delete once confirmed unused.
+    //
+    // // seed[prevWord] = list of (nextWord, score) sorted by score desc
+    // private val seed = mutableMapOf<String, List<Pair<String, Float>>>()
 
     // user[prevWord] = mutable list of UserEntry sorted by dee desc
     private val user = mutableMapOf<String, MutableList<UserEntry>>()
@@ -66,12 +89,18 @@ class BigramModel(private val context: Context) {
     private var globalTick: Int = 0
 
     private val executor = Executors.newSingleThreadExecutor()
-    private val userFile get() = File(context.filesDir, "user_bigrams.json")
 
     companion object {
         private const val MAX_USER_FOLLOWERS = 20
         private const val SEED_WEIGHT = 0.4f
         private const val USER_WEIGHT = 0.6f
+
+        // Minimum dee before a user-learned word is allowed to influence
+        // suggestions. dee grows ~1 per observation (with recency decay), so
+        // this requires a word to be observed a few times before it can
+        // outrank the static pack's sensible suggestions. Prevents a single
+        // accidental "like task" from immediately beating "the"/"to".
+        private const val MIN_USER_DEE = 3.0
 
         // librime dynamics constants
         private const val HALF_LIFE = 200.0      // commits; gap of 200 halves the dee boost
@@ -89,27 +118,40 @@ class BigramModel(private val context: Context) {
     )
 
     fun load() {
-        loadSeed()
+        // ── DEAD CODE (ADR-010 tasks L/M) ────────────────────────────────────
+        // loadSeed() read bigrams.json — replaced by the pack's context-trie.
+        // loadSeed()
         loadUserBigrams()
     }
 
-    private fun loadSeed() {
-        try {
-            val json = context.assets.open("bigrams.json").bufferedReader().readText()
-            val obj = JSONObject(json)
-            val keys = obj.keys()
-            while (keys.hasNext()) {
-                val prev = keys.next()
-                val arr = obj.getJSONArray(prev)
-                val followers = (0 until arr.length()).map { i ->
-                    val pair = arr.getJSONArray(i)
-                    pair.getString(0) to pair.getDouble(1).toFloat()
-                }
-                seed[prev] = followers
-            }
-        } catch (e: Exception) {
-            android.util.Log.e("BigramModel", "Failed to load seed: $e")
-        }
+    // ── DEAD CODE (ADR-010 tasks L/M) ────────────────────────────────────────
+    // private fun loadSeed() {
+    //     try {
+    //         val json = seedJsonReader()
+    //         val obj = JSONObject(json)
+    //         val keys = obj.keys()
+    //         while (keys.hasNext()) {
+    //             val prev = keys.next()
+    //             val arr = obj.getJSONArray(prev)
+    //             val followers = (0 until arr.length()).map { i ->
+    //                 val pair = arr.getJSONArray(i)
+    //                 pair.getString(0) to pair.getDouble(1).toFloat()
+    //             }
+    //             seed[prev] = followers
+    //         }
+    //     } catch (e: Exception) {
+    //         android.util.Log.e("BigramModel", "Failed to load seed: $e")
+    //     }
+    // }
+
+    /** Loads the user-learned bigrams from disk (public for PackBackedBigramModel). */
+    fun loadUserLayer() {
+        loadUserBigrams()
+    }
+
+    /** Persists the user-learned bigrams to disk (public for PackBackedBigramModel). */
+    fun persistUserLayer() {
+        persistAsync()
     }
 
     private fun loadUserBigrams() {
@@ -166,15 +208,20 @@ class BigramModel(private val context: Context) {
      * Returns top N next-word candidates given the previous committed word.
      * If prefix is non-empty, filters to candidates starting with prefix.
      */
-    fun nextWords(prevWord: String, prefix: String = "", n: Int = 5): List<String> {
+    override fun nextWords(prevWord: String, prefix: String, n: Int): List<String> {
         val prev = prevWord.lowercase()
         val pfx = prefix.lowercase()
 
         val scores = mutableMapOf<String, Float>()
 
-        seed[prev]?.forEach { (word, score) ->
-            scores[word] = (scores[word] ?: 0f) + SEED_WEIGHT * score
-        }
+        // ── DEAD CODE (ADR-010 tasks L/M) ────────────────────────────────────
+        // The static seed blend (bigrams.json) is replaced by the pack's
+        // context-trie — PackBackedBigramModel sources the static seed from
+        // PackNgramModel and calls userLayerScores() for the user layer.
+        //
+        // seed[prev]?.forEach { (word, score) ->
+        //     scores[word] = (scores[word] ?: 0f) + SEED_WEIGHT * score
+        // }
 
         user[prev]?.forEach { entry ->
             val userScore = formulaP(entry.dee).toFloat()
@@ -186,6 +233,32 @@ class BigramModel(private val context: Context) {
             .sortedByDescending { it.value }
             .take(n)
             .map { it.key }
+    }
+
+    /**
+     * Returns the user-learned layer's real scores for the given previous word.
+     *
+     * Unlike [nextWords] (which blends seed + user), this returns ONLY the
+     * user-learned candidates with their real formula_p scores, so a
+     * pack-backed caller can blend them with the pack's static seed scores
+     * using the same SEED_WEIGHT/USER_WEIGHT formula.
+     *
+     * Only entries with dee >= [MIN_USER_DEE] are returned — a word must be
+     * observed enough times (dee grows ~1 per observation, with decay) before
+     * it is allowed to influence suggestions. This prevents a single accidental
+     * "like task" from immediately outranking sensible static words like "the".
+     *
+     * @return list of (word, formulaP(dee)) in score-descending order
+     */
+    fun userLayerScores(prevWord: String, prefix: String = "", n: Int = 20): List<Pair<String, Float>> {
+        val prev = prevWord.lowercase()
+        val pfx = prefix.lowercase()
+        return (user[prev] ?: emptyList())
+            .filter { it.dee >= MIN_USER_DEE }
+            .map { entry -> entry.word to formulaP(entry.dee).toFloat() }
+            .filter { pfx.isEmpty() || it.first.startsWith(pfx) }
+            .sortedByDescending { it.second }
+            .take(n)
     }
 
     /**
@@ -244,4 +317,39 @@ class BigramModel(private val context: Context) {
             }
         }
     }
+
+    // ── DEAD CODE (ADR-010 tasks L/M) ──────────────────────────────────────
+    // The support/loadSupport path read bigrams_support.json — replaced by the
+    // pack's per-context support field (PackNgramModel.support()). Kept
+    // commented for reference; delete once confirmed unused.
+    //
+    // private val support = mutableMapOf<String, Int>()
+    //
+    // fun loadSupport(context: Context, assetName: String = "bigrams_support.json") {
+    //     loadSupport { context.assets.open(assetName).bufferedReader().readText() }
+    // }
+    //
+    // fun loadSupport(file: File) {
+    //     loadSupport { file.readText() }
+    // }
+    //
+    // private fun loadSupport(reader: () -> String) {
+    //     try {
+    //         val obj = JSONObject(reader())
+    //         val keys = obj.keys()
+    //         while (keys.hasNext()) {
+    //             val key = keys.next()
+    //             support[key] = obj.getInt(key)
+    //         }
+    //     } catch (e: Exception) {
+    //         android.util.Log.e("BigramModel", "Failed to load support: $e")
+    //     }
+    // }
+    //
+    // /** Total observed count backing prevWord's followers, or 0 if unknown
+    //  *  (e.g. loadSupport() was never called, or the word wasn't in the
+    //  *  training corpus) — the confidence signal Ngram's cascade compares
+    //  *  across tiers, since the followers' own scores are normalized
+    //  *  per-context and can't be compared across different contexts. */
+    // fun support(prevWord: String): Int = support[prevWord.lowercase()] ?: 0
 }

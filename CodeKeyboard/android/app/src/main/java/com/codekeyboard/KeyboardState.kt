@@ -174,6 +174,14 @@ class KeyboardState {
     }
 
     // ── Char-committed / label resolution ─────────────────────────────────
+    // Set when a sentence-ending punctuation mark was just committed, cleared
+    // on the next commit. Shift only arms once a space actually follows it
+    // (standard ". " convention) — arming immediately on the punctuation
+    // itself would capitalize text typed right after "." with no space
+    // (e.g. mid-word in "e.g.foo") and made the Shift key visibly light up
+    // before the sentence had actually ended.
+    private var pendingSentenceEnd = false
+
     /**
      * [committedText] is what was just sent to the input field (a single
      * character, or a whole flushed word). Pass null for commits that aren't
@@ -181,10 +189,10 @@ class KeyboardState {
      * clears unconditionally, matching the pre-Sentence-Case behavior.
      *
      * A latched Shift only clears here when the committed text was actually
-     * a letter — a digit or extra space right after a sentence-ending "."
-     * (which latches Shift, see below) shouldn't silently cancel it before
-     * the real next letter arrives. Same rule applies whether the latch came
-     * from a manual Shift tap or from Sentence Case; they're the same state.
+     * a letter — a digit or extra space right after Sentence Case arms Shift
+     * (see below) shouldn't silently cancel it before the real next letter
+     * arrives. Same rule applies whether the latch came from a manual Shift
+     * tap or from Sentence Case; they're the same state.
      */
     fun onCharCommitted(committedText: String? = null) {
         val committedChar = committedText?.lastOrNull()
@@ -205,11 +213,12 @@ class KeyboardState {
         _tap.values.forEach { it.reset() }
         layerTap.reset()
 
-        if (sentenceCaseEnabled && committedChar != null &&
-            (committedChar == '.' || committedChar == '!' || committedChar == '?') &&
+        if (sentenceCaseEnabled && pendingSentenceEnd && committedChar == ' ' &&
             _latch["shift"] == LatchState.NONE) {
             _latch["shift"] = LatchState.LATCHED
         }
+        pendingSentenceEnd = sentenceCaseEnabled && committedChar != null &&
+            (committedChar == '.' || committedChar == '!' || committedChar == '?')
     }
 
     /**
@@ -243,6 +252,7 @@ class KeyboardState {
         _hold.clear()
         _tap.values.forEach { it.reset() }
         layerTap.reset()
+        pendingSentenceEnd = false
     }
 
     // Layer tap machine (separate from modifier tap machines)

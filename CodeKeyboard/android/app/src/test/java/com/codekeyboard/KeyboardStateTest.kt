@@ -230,29 +230,44 @@ class KeyboardStateTest {
         assertFalse(state.isShiftActive)
     }
 
-    @Test fun `committing a period latches shift for the next letter`() {
+    @Test fun `committing a period alone does not latch shift yet`() {
+        // Arming happens on the SPACE that follows a sentence-ending mark, not
+        // on the mark itself — otherwise text typed with no space after "."
+        // (e.g. "e.g.foo") would get capitalized, and the Shift key would
+        // visibly light up mid-punctuation before the sentence actually ended.
         state.onCharCommitted(".")
-        assertTrue(state.isShiftActive)
-    }
-
-    @Test fun `committing exclamation or question mark latches shift`() {
-        state.onCharCommitted("!")
-        assertTrue(state.isShiftActive)
-        state.onCharCommitted("a") // consume it
         assertFalse(state.isShiftActive)
-        state.onCharCommitted("?")
-        assertTrue(state.isShiftActive)
     }
 
-    @Test fun `committing space leaves the shift latch untouched`() {
+    @Test fun `committing a period then a space latches shift for the next letter`() {
         state.onCharCommitted(".")
-        assertTrue(state.isShiftActive)
+        assertFalse(state.isShiftActive)
         state.onCharCommitted(" ")
         assertTrue(state.isShiftActive)
     }
 
-    @Test fun `committing a digit leaves the shift latch untouched`() {
+    @Test fun `committing exclamation or question mark then a space latches shift`() {
+        state.onCharCommitted("!")
+        state.onCharCommitted(" ")
+        assertTrue(state.isShiftActive)
+        state.onCharCommitted("a") // consume it
+        assertFalse(state.isShiftActive)
+        state.onCharCommitted("?")
+        state.onCharCommitted(" ")
+        assertTrue(state.isShiftActive)
+    }
+
+    @Test fun `a non-space character after sentence-ending punctuation cancels the pending arm`() {
+        // "e.g.foo" — the "." is immediately followed by another letter, not a
+        // space, so this was never a real sentence break and should not arm.
         state.onCharCommitted(".")
+        state.onCharCommitted("f")
+        assertFalse(state.isShiftActive)
+    }
+
+    @Test fun `committing a digit after the space-armed latch leaves it untouched`() {
+        state.onCharCommitted(".")
+        state.onCharCommitted(" ")
         assertTrue(state.isShiftActive)
         state.onCharCommitted("5")
         assertTrue(state.isShiftActive)
@@ -270,6 +285,7 @@ class KeyboardStateTest {
     @Test fun `disabled does not latch shift on sentence-ending punctuation`() {
         state.sentenceCaseEnabled = false
         state.onCharCommitted(".")
+        state.onCharCommitted(" ")
         assertFalse(state.isShiftActive)
     }
 
@@ -281,10 +297,10 @@ class KeyboardStateTest {
 
     @Test fun `full sentence flow — arm, type, disarm, arm again`() {
         // "Hi. there" — after committing "." + " ", the "t" should be forced
-        // uppercase; after that letter, the latch clears until the next ".".
+        // uppercase; after that letter, the latch clears until the next ". ".
         assertFalse(state.isShiftActive)
         state.onCharCommitted(".")
-        assertTrue(state.isShiftActive)
+        assertFalse(state.isShiftActive) // not yet — waiting on the space
         state.onCharCommitted(" ")
         assertTrue(state.isShiftActive)
         assertEquals("T", state.resolveLabel(KeyDef("t")))

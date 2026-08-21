@@ -66,6 +66,12 @@ yarn-error.log
 # testing
 /coverage
 
+# Raw source text fetched by scripts/gen_autocomplete_corpus.py — re-fetchable,
+# only the derived TSV fixture (app/src/test/resources/) is committed.
+android/scripts/corpus_raw/
+android/scripts/.venv/
+android/scripts/__pycache__/
+
 # Yarn
 .yarn/*
 !.yarn/patches
@@ -73,3 +79,7 @@ yarn-error.log
 !.yarn/releases
 !.yarn/sdks
 !.yarn/versions
+
+# Python
+__pycache__/
+*.pyc
