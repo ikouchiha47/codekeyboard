@@ -1,0 +1,1777 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Ferris Sweep — A+C Layout Lab</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #0d1117;
+  --surface: #161b22;
+  --surface2: #1c2330;
+  --border: #21262d;
+  --border2: #30363d;
+  --text: #e2e8f0;
+  --muted: #8b949e;
+  --dim: #6e7681;
+  --blue: #58a6ff;
+  --blue-dim: #0d2045;
+  --green: #3fb950;
+  --green-dim: #0f2818;
+  --orange: #d29922;
+  --orange-dim: #2a1a08;
+  --red: #f85149;
+  --red-dim: #2a1010;
+  --purple: #a371f7;
+  --purple-dim: #1a1030;
+  --teal: #39d2c0;
+  --teal-dim: #0c2420;
+  --pink: #f778ba;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, -apple-system, sans-serif;
+  min-height: 100vh;
+  padding: 24px 16px 64px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+h1 {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin-bottom: 4px;
+}
+.subtitle {
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 18px;
+  font-family: ui-monospace, 'SF Mono', monospace;
+  text-align: center;
+  max-width: 640px;
+  line-height: 1.5;
+}
+
+/* ── Philosophy strip ── */
+.philo {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  max-width: 640px;
+  width: 100%;
+  margin-bottom: 20px;
+}
+.philo-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+.philo-card strong {
+  display: block;
+  color: var(--text);
+  font-size: 12px;
+  margin-bottom: 4px;
+  font-family: ui-monospace, 'SF Mono', monospace;
+}
+.philo-card em { color: var(--orange); font-style: normal; font-weight: 600; }
+@media (max-width: 560px) {
+  .philo { grid-template-columns: 1fr; }
+}
+
+/* ── Tabs shared ── */
+.row-tabs {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-bottom: 10px;
+}
+.tab-btn {
+  padding: 8px 14px;
+  font-size: 12px;
+  font-weight: 700;
+  font-family: ui-monospace, 'SF Mono', monospace;
+  letter-spacing: 0.03em;
+  cursor: pointer;
+  border: 1.5px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--muted);
+  transition: all 0.12s;
+  text-align: left;
+}
+.tab-btn .t { display: block; }
+.tab-btn .s {
+  display: block;
+  font-size: 9px;
+  font-weight: 400;
+  opacity: 0.8;
+  margin-top: 2px;
+  letter-spacing: 0;
+}
+.tab-btn:hover { border-color: #3a4555; color: var(--text); }
+.tab-btn.active { background: var(--blue-dim); border-color: #2060c0; color: var(--blue); }
+.tab-btn.active .s { color: #7bb3f0; }
+
+.seg {
+  display: flex;
+  gap: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  margin-bottom: 12px;
+  background: var(--surface);
+}
+.seg button {
+  padding: 7px 14px;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: ui-monospace, 'SF Mono', monospace;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  border-right: 1px solid var(--border);
+  text-transform: uppercase;
+  transition: background 0.12s, color 0.12s;
+}
+.seg button:last-child { border-right: none; }
+.seg button:hover { background: var(--surface2); color: var(--text); }
+.seg button.active { background: var(--blue-dim); color: var(--blue); }
+
+.desc {
+  max-width: 640px;
+  font-size: 12px;
+  color: var(--muted);
+  text-align: center;
+  margin-bottom: 14px;
+  line-height: 1.65;
+  padding: 0 8px;
+}
+.desc code {
+  font-family: ui-monospace, 'SF Mono', monospace;
+  background: var(--surface2);
+  padding: 1px 5px;
+  border-radius: 3px;
+  color: var(--blue);
+  font-size: 11px;
+}
+.desc .hi { color: var(--orange); font-weight: 600; }
+.desc .ok { color: var(--green); font-weight: 600; }
+
+/* ── Main layout: canvas + side panels ── */
+.main {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  justify-content: center;
+  align-items: flex-start;
+  width: 100%;
+  max-width: 1100px;
+}
+
+.kb-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.kb-wrap {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px;
+  position: relative;
+}
+canvas { display: block; }
+
+.side {
+  width: 300px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+}
+.panel h3 {
+  font-size: 10px;
+  font-family: ui-monospace, 'SF Mono', monospace;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--dim);
+  margin-bottom: 8px;
+}
+.panel p, .panel li {
+  font-size: 11px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+.panel ul { padding-left: 14px; }
+.panel li { margin-bottom: 3px; }
+.panel .mono {
+  font-family: ui-monospace, 'SF Mono', monospace;
+  color: var(--text);
+}
+
+/* checklist */
+.check-item {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 11px;
+  font-family: ui-monospace, 'SF Mono', monospace;
+}
+.check-item:last-child { border-bottom: none; }
+.check-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  margin-top: 4px;
+  flex-shrink: 0;
+}
+.check-dot.yes { background: var(--green); }
+.check-dot.no { background: var(--red); }
+.check-dot.partial { background: var(--orange); }
+.check-label { color: var(--text); flex: 1; }
+.check-how { color: var(--dim); font-size: 10px; margin-top: 1px; }
+
+/* access legend rows */
+.cost-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  font-family: ui-monospace, 'SF Mono', monospace;
+  margin-bottom: 6px;
+  color: var(--muted);
+}
+.cost-swatch {
+  width: 14px; height: 14px;
+  border-radius: 3px;
+  border: 1.5px solid;
+  flex-shrink: 0;
+}
+
+/* chord tree */
+.chord {
+  font-family: ui-monospace, 'SF Mono', monospace;
+  font-size: 11px;
+  line-height: 1.7;
+  color: var(--muted);
+}
+.chord .node { color: var(--text); }
+.chord .layer { color: var(--blue); font-weight: 700; }
+.chord .tri { color: var(--purple); font-weight: 700; }
+
+/* issues strip under canvas */
+.issues {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  max-width: 520px;
+  justify-content: center;
+  min-height: 28px;
+  margin-top: 12px;
+}
+.issue {
+  font-size: 11px;
+  font-family: ui-monospace, 'SF Mono', monospace;
+  padding: 3px 9px;
+  border-radius: 4px;
+  border: 1px solid;
+}
+.issue.miss { background: var(--orange-dim); border-color: #b87820; color: #e8a030; }
+.issue.dup  { background: var(--red-dim); border-color: #b03030; color: #e06060; }
+.issue.ok   { background: var(--green-dim); border-color: #2a7040; color: #4a9060; }
+.issue.note { background: var(--purple-dim); border-color: #6b4a9a; color: #c4a0f0; }
+
+/* legend */
+.legend {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
+  font-size: 10px;
+  font-family: ui-monospace, 'SF Mono', monospace;
+  color: var(--muted);
+  margin-top: 14px;
+  max-width: 640px;
+}
+.li { display: flex; align-items: center; gap: 4px; }
+.ld {
+  width: 10px; height: 10px;
+  border-radius: 2px;
+  border: 1.5px solid;
+}
+
+/* tooltip */
+#tooltip {
+  position: fixed;
+  background: var(--surface2);
+  border: 1px solid #3a4555;
+  border-radius: 6px;
+  padding: 7px 11px;
+  font-size: 11px;
+  font-family: ui-monospace, 'SF Mono', monospace;
+  color: var(--text);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.1s;
+  z-index: 100;
+  max-width: 240px;
+  line-height: 1.5;
+}
+#tooltip.show { opacity: 1; }
+#tooltip .tt-key { font-size: 13px; font-weight: 700; color: var(--blue); margin-bottom: 2px; }
+#tooltip .tt-role { color: var(--dim); font-size: 9px; text-transform: uppercase; letter-spacing: 0.06em; margin-top: 2px; }
+#tooltip .tt-cost { color: var(--teal); font-size: 10px; margin-top: 3px; }
+#tooltip .tt-note { color: var(--orange); font-size: 10px; margin-top: 3px; }
+#tooltip .tt-chg { color: var(--green); font-size: 10px; margin-top: 3px; }
+
+/* thumb OS callout */
+.os-callout {
+  margin-top: 10px;
+  font-family: ui-monospace, 'SF Mono', monospace;
+  font-size: 12px;
+  text-align: center;
+  color: var(--text);
+  letter-spacing: 0.04em;
+}
+.os-callout span.sep { color: var(--dim); margin: 0 6px; }
+.os-callout span.k {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--border2);
+  background: var(--surface2);
+  margin: 0 2px;
+}
+.os-callout span.layer-k { border-color: #3a5090; color: #90b0f0; }
+.os-callout span.type-k { border-color: #2a6040; color: #50a870; }
+
+/* glyph coverage */
+.glyph-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+}
+.glyph-chip {
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-family: ui-monospace, 'SF Mono', monospace;
+  border-radius: 3px;
+  border: 1px solid var(--border);
+  background: var(--surface2);
+  color: var(--text);
+  cursor: default;
+}
+.glyph-chip.ok { border-color: #2a7040; background: var(--green-dim); color: #6bcf8e; }
+.glyph-chip.shift { border-color: #3a70a0; background: #0d1a28; color: #80c0f0; }
+.glyph-chip.layer { border-color: #6a50a0; background: var(--purple-dim); color: #c0a0f0; }
+.glyph-chip.miss { border-color: #b03030; background: var(--red-dim); color: #e06060; }
+.glyph-chip.space { width: 36px; font-size: 8px; }
+</style>
+</head>
+<body>
+
+<h1>Ferris Sweep — A+C Layout Lab</h1>
+<p class="subtitle">
+  Ferris is not a small Sofle. Design the thumb OS first, then place must-haves by effort.
+  No hold-Enter. One canonical home per action.
+</p>
+
+<div class="philo">
+  <div class="philo-card">
+    <strong>Sofle</strong>
+    More keys → less modality. ~5 thumbs/side can dedicate Shift, Enter, Spc, LWR, RSE, FUNC, ADJ.
+    Optimizes <em>coverage</em>. Dups are cheap.
+  </div>
+  <div class="philo-card">
+    <strong>Ferris</strong>
+    Fewer keys → stronger modality. 2 thumbs/side = tiny OS; layers are modes of thought.
+    Optimizes <em>stable OS + clean modes</em>. Empty is honest. Dups are expensive.
+  </div>
+</div>
+
+<!-- OS / variation -->
+<div class="row-tabs" id="varTabs"></div>
+<div class="desc" id="varDesc"></div>
+<div class="os-callout" id="osCallout"></div>
+
+<!-- View mode -->
+<div class="seg" id="viewSeg" style="margin-top:14px"></div>
+
+<!-- Layer -->
+<div class="seg" id="layerSeg"></div>
+
+<div class="main">
+  <div class="kb-col">
+    <div class="kb-wrap">
+      <canvas id="kb"></canvas>
+    </div>
+    <div class="issues" id="issues"></div>
+    <div class="legend" id="legend"></div>
+  </div>
+
+  <div class="side">
+    <div class="panel" id="panelChecklist">
+      <h3>Must-have checklist · this layer</h3>
+      <div id="checklist"></div>
+    </div>
+    <div class="panel" id="panelAccess">
+      <h3>Access cost</h3>
+      <div id="accessLegend"></div>
+      <p style="margin-top:8px;font-size:10px;color:var(--dim)">
+        In Access view, keys are tinted by how expensive they are to reach from rest.
+      </p>
+    </div>
+    <div class="panel">
+      <h3>Tri-layer chord tree</h3>
+      <div class="chord" id="chordTree"></div>
+    </div>
+    <div class="panel">
+      <h3>Glyph coverage · ASCII printable</h3>
+      <p style="margin-bottom:8px;font-size:10px;color:var(--dim)">
+        Every printable ASCII char must have a home. Red = missing. Hover a chip for path.
+      </p>
+      <div id="glyphGrid" class="glyph-grid"></div>
+      <div id="glyphMissing" style="margin-top:8px;font-size:11px;font-family:ui-monospace,'SF Mono',monospace;color:var(--red)"></div>
+    </div>
+    <div class="panel">
+      <h3>Principles (A+C)</h3>
+      <ul>
+        <li>Thumbs = OS only (layers + Spc + Enter)</li>
+        <li>Enter is a <span class="mono">tap</span>, never a hold</li>
+        <li>Dedicated <span class="mono">Shift</span> on base — HRM is bonus</li>
+        <li>One canonical home per glyph — dups only if intentional</li>
+        <li>Never delete a glyph without re-homing it</li>
+        <li>Raise = nav + F-keys; edit chords live on FUNC</li>
+        <li>ADJ/FUNC stay sparse — empty is OK</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<div id="tooltip"></div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════════════════
+// Colour tokens
+// ═══════════════════════════════════════════════════════════════════════════════
+const ROLE = {
+  alpha:  { fill:'#1f2740', border:'#323d5c', text:'#dde2f0' },
+  mod:    { fill:'#182040', border:'#4a6090', text:'#90b0f0' },
+  layer:  { fill:'#101a38', border:'#3a5090', text:'#6090d0' },
+  type:   { fill:'#102018', border:'#2a6040', text:'#50a870' }, // space/enter
+  nav:    { fill:'#0c2420', border:'#2a8070', text:'#39d2c0' },
+  symbol: { fill:'#1a1830', border:'#5a4a80', text:'#c4b0f0' },
+  num:    { fill:'#1a2030', border:'#3a6080', text:'#80b8e0' },
+  media:  { fill:'#201828', border:'#704070', text:'#e0a0d0' },
+  edit:   { fill:'#201a10', border:'#806030', text:'#e0c070' },
+  fn:     { fill:'#181828', border:'#505080', text:'#a0a0e0' },
+  empty:  { fill:'#111420', border:'#1c2236', text:'#3a4560' },
+  active: { fill:'#0a1a40', border:'#2060c0', text:'#4a9eff' },
+  chg:    { fill:'#0f2818', border:'#2a8050', text:'#5adf9a' },
+  dup:    { fill:'#2a1010', border:'#b03030', text:'#e06060' },
+  miss:   { fill:'#2a1a08', border:'#b07820', text:'#e0a030' },
+  system: { fill:'#1a1520', border:'#604080', text:'#c090e0' },
+};
+
+// Access-cost tints (overlaid in access view)
+const COST = {
+  tap:     { fill:'#0f2818', border:'#2a8050', text:'#5adf9a', label:'tap — base, no layer' },
+  hold:    { fill:'#1a2030', border:'#3a70a0', text:'#80c0f0', label:'hold home-row mod' },
+  layer:   { fill:'#1a1830', border:'#6a50a0', text:'#c0a0f0', label:'hold one layer (LWR or RSE)' },
+  tri:     { fill:'#201028', border:'#9040a0', text:'#e0a0f0', label:'tri-layer (both thumbs)' },
+  reach:   { fill:'#2a1a08', border:'#b07820', text:'#e0a030', label:'top-row reach (expensive on mobile)' },
+  missing: { fill:'#2a1010', border:'#b03030', text:'#e06060', label:'not reachable / wrong home' },
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Key factory
+// role: alpha|mod|layer|type|nav|symbol|num|media|edit|fn|empty|system
+// cost: tap|hold|layer|tri|reach
+// ═══════════════════════════════════════════════════════════════════════════════
+const key = (l, opts = {}) => ({
+  l,
+  t: opts.t || opts.role || 'alpha',
+  role: opts.role || opts.t || 'alpha',
+  s: opts.s,           // hold sublabel
+  sup: opts.sup,       // shift corner
+  note: opts.note,
+  cost: opts.cost || 'tap',
+  chg: !!opts.chg,
+  action: opts.action || l,
+});
+
+const empty = (note) => key('', { role: 'empty', t: 'empty', note, cost: 'tap' });
+const chgEmpty = (note) => key('', { role: 'empty', t: 'chg', note, cost: 'tap', chg: true });
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Shared layer content builders (C checklists applied)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/** Alphas — same QWERTY block everywhere */
+function alphaBlock() {
+  return {
+    left: [
+      [key('q'), key('w'), key('e'), key('r'), key('t')],
+      [
+        key('a', { s: 'ctrl', cost: 'hold', note: 'home-row mod' }),
+        key('s', { s: 'meta', cost: 'hold' }),
+        key('d', { s: 'alt',  cost: 'hold' }),
+        key('f', { s: 'sft',  cost: 'hold', note: 'home-row Shift — bonus; dedicated Shift on top row in A/A′' }),
+        key('g'),
+      ],
+      [key('z'), key('x'), key('c'), key('v'), key('b')],
+    ],
+    right: [
+      [key('y'), key('u'), key('i'), key('o'), key('p')],
+      [
+        key('h', { s: 'sft',  cost: 'hold', note: 'home-row Shift — bonus' }),
+        key('j', { s: 'alt',  cost: 'hold' }),
+        key('k', { s: 'meta', cost: 'hold' }),
+        key('l', { s: 'ctrl', cost: 'hold' }),
+        key(';', { role: 'symbol', sup: ':', cost: 'tap' }),
+      ],
+      [
+        key('n'), key('m'),
+        key(',', { role: 'symbol', sup: '<' }),
+        key('.', { role: 'symbol', sup: '>' }),
+        key('Bksp', { role: 'mod', t: 'mod', action: 'backspace' }),
+      ],
+    ],
+  };
+}
+
+/**
+ * LOWER — numbers + symbols, ONE canonical home each.
+ *
+ * Re-homes (explicit — never silent):
+ *   ^  was base top → Lower top direct
+ *   ?  was only Shift+/ (easy to miss) → Lower top direct
+ *   _ |  common code glyphs → Lower top direct (also Shift+- and Shift+\ )
+ *   !@#$%&*()  via Shift+number (needs dedicated Shift on base)
+ *   + " { } etc. as labeled
+ */
+function lowerContent() {
+  const c = 'layer';
+  return {
+    label: 'Lower',
+    topRow: [
+      key('Tab', { role: 'mod', t: 'mod', cost: 'reach' }),
+      key('Esc', { role: 'mod', t: 'mod', cost: 'reach' }),
+      // was dup ( ) [ ] — now high-freq glyphs that need a visible home
+      key('?', {
+        role: 'symbol', cost: c, chg: true,
+        note: 'DIRECT tap — was only Shift+/ on shipped (easy to miss)',
+      }),
+      key('^', {
+        role: 'symbol', cost: c, chg: true,
+        note: 'DIRECT tap — moved from base top. Also Shift+6 as US muscle memory',
+      }),
+      key('_', {
+        role: 'symbol', cost: c, chg: true,
+        note: 'DIRECT — also Shift+- ',
+      }),
+      key('|', {
+        role: 'symbol', cost: c, chg: true,
+        note: 'DIRECT — also Shift+\\ ',
+      }),
+      key('{', { role: 'symbol', cost: c }),
+      key('}', { role: 'symbol', cost: c }),
+    ],
+    left: [
+      [
+        key('1', { role: 'num', sup: '!', cost: c, note: 'Shift+1 → !' }),
+        key('2', { role: 'num', sup: '@', cost: c }),
+        key('3', { role: 'num', sup: '#', cost: c }),
+        key('4', { role: 'num', sup: '$', cost: c }),
+        key('5', { role: 'num', sup: '%', cost: c }),
+      ],
+      [
+        key('`', { role: 'symbol', cost: c }),
+        key('-', { role: 'symbol', cost: c, note: 'Shift+- → _ (also direct _ on top)' }),
+        key('=', { role: 'symbol', sup: '+', cost: c, note: 'Shift+= → +' }),
+        key('[', { role: 'symbol', cost: c }),
+        key(']', { role: 'symbol', cost: c }),
+      ],
+      [
+        key('~', { role: 'symbol', cost: c }),
+        key('\\', { role: 'symbol', cost: c, note: 'Shift+\\ → | (also direct | on top)' }),
+        key('(', { role: 'symbol', cost: c }),
+        key(')', { role: 'symbol', cost: c }),
+        key("'", { role: 'symbol', sup: '"', cost: c, note: "Shift+' → \"" }),
+      ],
+    ],
+    right: [
+      [
+        key('6', { role: 'num', cost: c, note: 'Shift+6 → ^ (canonical ^ is top-row direct)' }),
+        key('7', { role: 'num', sup: '&', cost: c }),
+        key('8', { role: 'num', sup: '*', cost: c }),
+        key('9', { role: 'num', cost: c, note: 'Shift+9 → ( — canonical ( is left direct)' }),
+        key('0', { role: 'num', cost: c, note: 'Shift+0 → ) — canonical ) is left direct' }),
+      ],
+      [
+        key('/', { role: 'symbol', cost: c, note: 'plain slash; ? is direct on top' }),
+        key(':', { role: 'symbol', cost: c }),
+        key('"', { role: 'symbol', cost: c }),
+        key('<', { role: 'symbol', cost: c }),
+        key('>', { role: 'symbol', cost: c }),
+      ],
+      [
+        key('!', { role: 'symbol', cost: c, note: 'also Shift+1' }),
+        key('@', { role: 'symbol', cost: c }),
+        key('#', { role: 'symbol', cost: c }),
+        key('$', { role: 'symbol', cost: c }),
+        key('Del', { role: 'mod', t: 'mod', cost: c }),
+      ],
+    ],
+  };
+}
+
+/** RAISE — nav cluster + F-keys; NO edit-chord soup */
+function raiseContent() {
+  const c = 'layer';
+  return {
+    label: 'Raise',
+    topRow: [
+      key('Tab', { role: 'mod', t: 'mod', cost: 'reach' }),
+      key('Esc', { role: 'mod', t: 'mod', cost: 'reach' }),
+      key('F1', { role: 'fn', cost: 'reach' }),
+      key('F2', { role: 'fn', cost: 'reach' }),
+      key('F3', { role: 'fn', cost: 'reach' }),
+      key('F4', { role: 'fn', cost: 'reach' }),
+      key('F5', { role: 'fn', cost: 'reach' }),
+      key('F6', { role: 'fn', cost: 'reach' }),
+    ],
+    left: [
+      [
+        key('F7', { role: 'fn', cost: c }),
+        key('F8', { role: 'fn', cost: c }),
+        key('F9', { role: 'fn', cost: c }),
+        key('F10', { role: 'fn', cost: c }),
+        key('F11', { role: 'fn', cost: c }),
+      ],
+      [
+        key('F12', { role: 'fn', cost: c }),
+        key('Ins', { role: 'nav', cost: c }),
+        key('Home', { role: 'nav', cost: c }),
+        key('PgUp', { role: 'nav', cost: c }),
+        key('PgDn', { role: 'nav', cost: c }),
+      ],
+      [
+        key('End', { role: 'nav', cost: c }),
+        empty('edit chords moved to FUNC'),
+        empty(),
+        empty(),
+        empty(),
+      ],
+    ],
+    right: [
+      // inverted-T-ish / vim-friendly cluster — ONE nav home
+      [
+        key('←', { role: 'nav', cost: c }),
+        key('↓', { role: 'nav', cost: c }),
+        key('↑', { role: 'nav', cost: c }),
+        key('→', { role: 'nav', cost: c }),
+        empty('was dup PgDn'),
+      ],
+      [
+        key('Home', { role: 'nav', cost: c }),
+        key('End', { role: 'nav', cost: c }),
+        key('PgUp', { role: 'nav', cost: c }),
+        key('PgDn', { role: 'nav', cost: c }),
+        empty(),
+      ],
+      [
+        empty('Cut/Copy/Paste → FUNC only'),
+        empty(),
+        empty(),
+        empty(),
+        key('Bksp', { role: 'mod', t: 'mod', cost: c }),
+      ],
+    ],
+  };
+}
+
+/** ADJ — media/system, sparse OK */
+function adjContent() {
+  const c = 'tri';
+  return {
+    label: 'Adj',
+    topRow: [
+      key('Tab', { role: 'mod', t: 'mod', cost: 'reach' }),
+      key('Esc', { role: 'mod', t: 'mod', cost: 'reach' }),
+      key('Br-', { role: 'media', cost: c }),
+      key('Br+', { role: 'media', cost: c }),
+      key('Mute', { role: 'media', cost: c }),
+      key('Vol-', { role: 'media', cost: c }),
+      key('Vol+', { role: 'media', cost: c }),
+      key('Play', { role: 'media', cost: c }),
+    ],
+    left: [
+      [
+        key('Prev', { role: 'media', cost: c }),
+        key('Play', { role: 'media', cost: c }),
+        key('Next', { role: 'media', cost: c }),
+        empty(), empty(),
+      ],
+      [empty(), empty(), empty(), empty(), empty()],
+      [empty(), empty(), empty(), empty(), empty()],
+    ],
+    right: [
+      [empty(), empty(), empty(), empty(), empty()],
+      [
+        key('BT', { role: 'system', cost: c }),
+        key('WiFi', { role: 'system', cost: c }),
+        empty(), empty(), empty(),
+      ],
+      [empty(), empty(), empty(), empty(), key('Bksp', { role: 'mod', t: 'mod', cost: c })],
+    ],
+  };
+}
+
+/** FUNC — editor actions only */
+function funcContent() {
+  const c = 'tri';
+  return {
+    label: 'Func',
+    topRow: [
+      key('Tab', { role: 'mod', t: 'mod', cost: 'reach' }),
+      key('Esc', { role: 'mod', t: 'mod', cost: 'reach' }),
+      key('Undo', { role: 'edit', cost: c }),
+      key('Redo', { role: 'edit', cost: c }),
+      key('Cut', { role: 'edit', cost: c }),
+      key('Copy', { role: 'edit', cost: c }),
+      key('Paste', { role: 'edit', cost: c }),
+      key('SelAll', { role: 'edit', cost: c }),
+    ],
+    left: [
+      [
+        key('Save', { role: 'edit', cost: c }),
+        key('Find', { role: 'edit', cost: c }),
+        key('Repl', { role: 'edit', cost: c }),
+        key('Cmnt', { role: 'edit', cost: c }),
+        key('Dup', { role: 'edit', cost: c }),
+      ],
+      [key('Fmt', { role: 'edit', cost: c }), empty(), empty(), empty(), empty()],
+      [empty(), empty(), empty(), empty(), empty()],
+    ],
+    right: [
+      [empty(), empty(), empty(), empty(), empty()],
+      [empty(), empty(), empty(), empty(), empty()],
+      [empty(), empty(), empty(), empty(), key('Bksp', { role: 'mod', t: 'mod', cost: c })],
+    ],
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Thumb OS builders
+// Physical order L→R within each half.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/** Current shipped: [LWR|Spc] [Spc|RSE] */
+function thumbsCurrent(layer) {
+  const lwrActive = layer === 'lower';
+  const rseActive = layer === 'raise';
+  const onLower = layer === 'lower';
+  return {
+    thumbL: [
+      key('LWR', {
+        role: 'layer', t: lwrActive ? 'active' : 'layer',
+        s: lwrActive ? 'active' : 'hold=lwr', cost: 'tap',
+      }),
+      onLower
+        ? key('Esc', { role: 'mod', t: 'mod', cost: 'layer' })
+        : key('Spc', { role: 'type', t: 'type', cost: 'tap' }),
+    ],
+    thumbR: [
+      onLower
+        ? key('Enter', { role: 'type', t: 'type', cost: 'layer', note: 'Enter only on Lower today' })
+        : key('Spc', { role: 'type', t: 'type', cost: 'tap' }),
+      key('RSE', {
+        role: 'layer', t: rseActive ? 'active' : 'layer',
+        s: rseActive ? 'active' : 'hold=rse', cost: 'tap',
+      }),
+    ],
+  };
+}
+
+/** A — layers outside, type inside: [LWR|Spc] [Enter|RSE] */
+function thumbsA(layer) {
+  const lwrActive = layer === 'lower';
+  const rseActive = layer === 'raise';
+  const onLower = layer === 'lower';
+  return {
+    thumbL: [
+      key('LWR', {
+        role: 'layer', t: lwrActive ? 'active' : 'layer',
+        s: lwrActive ? 'active' : 'hold=lwr', cost: 'tap', chg: true,
+        note: 'outer left — layer',
+      }),
+      onLower
+        ? key('Esc', { role: 'mod', t: 'mod', cost: 'layer' })
+        : key('Spc', { role: 'type', t: 'type', cost: 'tap', note: 'inner left — rest/type' }),
+    ],
+    thumbR: [
+      key('Enter', {
+        role: 'type', t: 'type', cost: 'tap', chg: true,
+        note: 'inner right — Enter is a TAP on every layer',
+      }),
+      key('RSE', {
+        role: 'layer', t: rseActive ? 'active' : 'layer',
+        s: rseActive ? 'active' : 'hold=rse', cost: 'tap', chg: true,
+        note: 'outer right — layer',
+      }),
+    ],
+  };
+}
+
+/** A′ — type outside, layers inside: [Spc|LWR] [RSE|Enter] */
+function thumbsAPrime(layer) {
+  const lwrActive = layer === 'lower';
+  const rseActive = layer === 'raise';
+  const onLower = layer === 'lower';
+  return {
+    thumbL: [
+      onLower
+        ? key('Esc', { role: 'mod', t: 'mod', cost: 'layer', chg: true })
+        : key('Spc', {
+            role: 'type', t: 'type', cost: 'tap', chg: true,
+            note: 'outer left — Space',
+          }),
+      key('LWR', {
+        role: 'layer', t: lwrActive ? 'active' : 'layer',
+        s: lwrActive ? 'active' : 'hold=lwr', cost: 'tap', chg: true,
+        note: 'inner left — easy tri-layer chord with RSE',
+      }),
+    ],
+    thumbR: [
+      key('RSE', {
+        role: 'layer', t: rseActive ? 'active' : 'layer',
+        s: rseActive ? 'active' : 'hold=rse', cost: 'tap', chg: true,
+        note: 'inner right — easy tri-layer chord with LWR',
+      }),
+      key('Enter', {
+        role: 'type', t: 'type', cost: 'tap', chg: true,
+        note: 'outer right — Enter is a TAP on every layer',
+      }),
+    ],
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Full variations
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function buildBase(thumbsFn, { cleanTop = false } = {}) {
+  const a = alphaBlock();
+  const topRow = cleanTop
+    ? [
+        key('Tab', { role: 'mod', t: 'mod', cost: 'reach' }),
+        key('Esc', { role: 'mod', t: 'mod', cost: 'reach' }),
+        key('`', { role: 'symbol', cost: 'reach' }),
+        key('Shift', {
+          role: 'mod', t: 'mod', cost: 'reach', s: 'hold', chg: true,
+          note: 'DEDICATED Shift (was ^). ^ re-homed to Lower top as direct tap. HRM f/h still work.',
+        }),
+        key('Ctrl', { role: 'mod', t: 'mod', cost: 'reach', s: 'hold' }),
+        key('Alt', { role: 'mod', t: 'mod', cost: 'reach', s: 'hold' }),
+        key('😊', { role: 'system', cost: 'reach' }),
+        key('Bksp', {
+          role: 'mod', t: 'mod', cost: 'reach',
+          note: 'top Bksp (mobile reach). Corner Bksp kept — bilateral OK for delete.',
+        }),
+      ]
+    : [
+        key('Tab', { role: 'mod', t: 'mod', cost: 'reach' }),
+        key('Esc', { role: 'mod', t: 'mod', cost: 'reach' }),
+        key('`', { role: 'symbol', cost: 'reach' }),
+        key('^', {
+          role: 'miss', t: 'miss', cost: 'reach',
+          note: 'Shipped: bare ^. No dedicated Shift on base — only HRM f/h',
+        }),
+        key('Ctrl', { role: 'mod', t: 'mod', cost: 'reach', s: 'hold' }),
+        key('Alt', { role: 'mod', t: 'mod', cost: 'reach', s: 'hold' }),
+        key('😊', { role: 'system', cost: 'reach' }),
+        key('Bksp', {
+          role: 'dup', t: 'dup', cost: 'reach',
+          note: 'Bksp also at bottom-right corner',
+        }),
+      ];
+
+  // mark corner bksp as dup on current only
+  if (!cleanTop) {
+    a.right[2][4] = key('Bksp', {
+      role: 'dup', t: 'dup', action: 'backspace',
+      note: 'Bksp also in top row',
+    });
+  }
+
+  const th = thumbsFn('base');
+  return {
+    label: 'Base',
+    topRow,
+    left: a.left,
+    right: a.right,
+    ...th,
+  };
+}
+
+function buildLower(thumbsFn, { clean = false } = {}) {
+  const body = clean
+    ? lowerContent()
+    : {
+        // current shipped lower with dups
+        label: 'Lower',
+        topRow: [
+          key('Tab', { role: 'mod', t: 'mod', cost: 'reach' }),
+          key('Esc', { role: 'mod', t: 'mod', cost: 'reach' }),
+          key('(', { role: 'dup', t: 'dup', cost: 'layer', note: '( also on left row-2' }),
+          key(')', { role: 'dup', t: 'dup', cost: 'layer', note: ') also on left row-2' }),
+          key('[', { role: 'dup', t: 'dup', cost: 'layer', note: '[ also on left row-1' }),
+          key(']', { role: 'dup', t: 'dup', cost: 'layer', note: '] also on left row-1' }),
+          key('{', { role: 'symbol', cost: 'layer' }),
+          key('}', { role: 'symbol', cost: 'layer' }),
+        ],
+        left: [
+          [
+            key('1', { role: 'num', sup: '!' }), key('2', { role: 'num', sup: '@' }),
+            key('3', { role: 'num', sup: '#' }), key('4', { role: 'num', sup: '$' }),
+            key('5', { role: 'num', sup: '%' }),
+          ],
+          [
+            key('`', { role: 'symbol' }), key('-', { role: 'symbol', sup: '_' }),
+            key('=', { role: 'symbol', sup: '+' }),
+            key('[', { role: 'dup', t: 'dup', note: '[ also top' }),
+            key(']', { role: 'dup', t: 'dup', note: '] also top' }),
+          ],
+          [
+            key('~', { role: 'symbol' }), key('\\', { role: 'symbol', sup: '|' }),
+            key('(', { role: 'dup', t: 'dup', note: '( also top' }),
+            key(')', { role: 'dup', t: 'dup', note: ') also top' }),
+            key("'", { role: 'symbol', sup: '"' }),
+          ],
+        ],
+        right: [
+          [
+            key('6', { role: 'num', sup: '^' }), key('7', { role: 'num', sup: '&' }),
+            key('8', { role: 'num', sup: '*' }), key('9', { role: 'num', sup: '(' }),
+            key('0', { role: 'num', sup: ')' }),
+          ],
+          [
+            key('/', { role: 'symbol', sup: '?' }), key(':', { role: 'symbol', sup: ';' }),
+            key("'", { role: 'symbol', sup: '"' }), key('<', { role: 'symbol' }),
+            key('>', { role: 'symbol' }),
+          ],
+          [
+            key('!', { role: 'symbol' }), key('@', { role: 'symbol' }),
+            key('#', { role: 'symbol' }), key('$', { role: 'symbol' }),
+            key('Del', { role: 'mod', t: 'mod' }),
+          ],
+        ],
+      };
+
+  // stamp layer cost
+  const stamp = (rows) => rows.map(r => r.map(k =>
+    k.role === 'empty' || k.t === 'empty' ? k : { ...k, cost: k.cost || 'layer' }
+  ));
+  body.left = stamp(body.left);
+  body.right = stamp(body.right);
+
+  return { ...body, ...thumbsFn('lower') };
+}
+
+function buildRaise(thumbsFn, { clean = false } = {}) {
+  if (clean) {
+    return { ...raiseContent(), ...thumbsFn('raise') };
+  }
+  // current with dup PgDn + edit soup
+  const c = 'layer';
+  return {
+    label: 'Raise',
+    topRow: [
+      key('Tab', { role: 'mod', t: 'mod', cost: 'reach' }),
+      key('Esc', { role: 'mod', t: 'mod', cost: 'reach' }),
+      key('F1', { role: 'fn', cost: 'reach' }), key('F2', { role: 'fn', cost: 'reach' }),
+      key('F3', { role: 'fn', cost: 'reach' }), key('F4', { role: 'fn', cost: 'reach' }),
+      key('F5', { role: 'fn', cost: 'reach' }), key('F6', { role: 'fn', cost: 'reach' }),
+    ],
+    left: [
+      [key('F7', { role: 'fn', cost: c }), key('F8', { role: 'fn', cost: c }),
+       key('F9', { role: 'fn', cost: c }), key('F10', { role: 'fn', cost: c }),
+       key('F11', { role: 'fn', cost: c })],
+      [key('F12', { role: 'fn', cost: c }), key('Ins', { role: 'nav', cost: c }),
+       key('Home', { role: 'nav', cost: c }), key('PgUp', { role: 'nav', cost: c }),
+       key('PgDn', { role: 'nav', cost: c })],
+      [key('End', { role: 'nav', cost: c }),
+       key('Cut', { role: 'edit', cost: c, note: 'also on right + FUNC' }),
+       key('Copy', { role: 'edit', cost: c }), key('Paste', { role: 'edit', cost: c }),
+       key('Undo', { role: 'edit', cost: c })],
+    ],
+    right: [
+      [key('←', { role: 'nav', cost: c }), key('↓', { role: 'nav', cost: c }),
+       key('↑', { role: 'nav', cost: c }), key('→', { role: 'nav', cost: c }),
+       key('PgDn', { role: 'dup', t: 'dup', cost: c, note: 'exact dup of right[1][3]' })],
+      [key('Home', { role: 'nav', cost: c }), key('End', { role: 'nav', cost: c }),
+       key('PgUp', { role: 'nav', cost: c }),
+       key('PgDn', { role: 'dup', t: 'dup', cost: c, note: 'exact dup' }), empty()],
+      [key('Cut', { role: 'edit', cost: c }), key('Copy', { role: 'edit', cost: c }),
+       key('Paste', { role: 'edit', cost: c }), key('Undo', { role: 'edit', cost: c }),
+       key('Bksp', { role: 'mod', t: 'mod', cost: c })],
+    ],
+    ...thumbsFn('raise'),
+  };
+}
+
+function buildAdj(thumbsFn) {
+  const body = adjContent();
+  // adj thumbs: keep layer keys, clear type keys (or keep enter on A/A')
+  const th = thumbsFn('adj');
+  // For adj/func, type keys can stay (Enter still useful) but Spc often empty on current
+  return { ...body, ...th };
+}
+
+function buildFunc(thumbsFn) {
+  return { ...funcContent(), ...thumbsFn('func') };
+}
+
+// ── Issues + checklists per variation/layer ──────────────────────────────────
+
+const CHECKLISTS = {
+  base: [
+    { id: 'alphas', label: 'Full alpha block', test: () => true },
+    { id: 'spc', label: 'Space on thumbs', test: () => true },
+    { id: 'enter', label: 'Enter as TAP on base', test: (v) => v === 'a' || v === 'aprime' },
+    { id: 'shift', label: 'Dedicated Shift key (visible)', test: (v) => v === 'a' || v === 'aprime' },
+    { id: 'hrm', label: 'Home-row mods (incl. Shift bonus)', test: () => true },
+    { id: 'lwr', label: 'LWR on thumbs', test: () => true },
+    { id: 'rse', label: 'RSE on thumbs', test: () => true },
+    { id: 'no-hold-enter', label: 'No hold-Enter', test: () => true },
+  ],
+  lower: [
+    { id: 'nums', label: 'Digits 0–9', test: () => true },
+    { id: 'qmark', label: '? has a visible home', test: (v) => v === 'a' || v === 'aprime' },
+    { id: 'caret', label: '^ has a visible home', test: () => true },
+    { id: 'brackets', label: 'Brackets once (no top dups)', test: (v) => v === 'a' || v === 'aprime' },
+    { id: 'shift-compose', label: 'Shift+number → !@#$%…', test: (v) => v === 'a' || v === 'aprime' },
+    { id: 'enter', label: 'Enter still on thumbs', test: (v) => v === 'a' || v === 'aprime' || v === 'current' },
+  ],
+  raise: [
+    { id: 'arrows', label: 'Arrow cluster (one home)', test: () => true },
+    { id: 'nav', label: 'Home/End/PgUp/PgDn once each', test: (v) => v === 'a' || v === 'aprime' },
+    { id: 'fn', label: 'F1–F12', test: () => true },
+    { id: 'no-edit', label: 'No edit-chord soup (→ FUNC)', test: (v) => v === 'a' || v === 'aprime' },
+    { id: 'enter', label: 'Enter on thumbs', test: (v) => v === 'a' || v === 'aprime' },
+  ],
+  adj: [
+    { id: 'media', label: 'Vol / brightness / transport', test: () => true },
+    { id: 'sparse', label: 'Sparse OK — not filled for show', test: () => true },
+    { id: 'tri', label: 'Reached only via tri-layer', test: () => true },
+  ],
+  func: [
+    { id: 'edit', label: 'Cut/Copy/Paste/Undo canonical here', test: (v) => v === 'a' || v === 'aprime' },
+    { id: 'ide', label: 'Save/Find/Repl/Cmnt/…', test: () => true },
+    { id: 'sparse', label: 'Sparse OK', test: () => true },
+  ],
+};
+
+function issuesFor(varId, layerId) {
+  if (varId === 'current') {
+    const m = {
+      base: [
+        { type: 'miss', text: '⚑ No dedicated Shift — only hold f/h' },
+        { type: 'miss', text: '⚑ Enter only via Lower thumb — not on base' },
+        { type: 'dup',  text: '⊗ Bksp top-row AND corner' },
+        { type: 'note', text: '◆ Dual Spc — Sofle habit, costs an OS slot' },
+      ],
+      lower: [
+        { type: 'dup',  text: '⊗ ( ) [ ] duplicated top + main — 4 wasted' },
+        { type: 'miss', text: '⚑ ? only as Shift+/ — easy to not see' },
+        { type: 'ok',   text: '✓ Enter lives on right thumb here' },
+        { type: 'ok',   text: '✓ ^ via Shift+6 (and bare ^ was on base top)' },
+      ],
+      raise: [
+        { type: 'dup',  text: '⊗ PgDn twice on right' },
+        { type: 'dup',  text: '⊗ Cut/Copy/Paste also on left + FUNC' },
+        { type: 'miss', text: '⚑ No Enter on raise thumbs' },
+      ],
+      adj:  [{ type: 'ok', text: '✓ Sparse media layer — honest' }],
+      func: [{ type: 'ok', text: '✓ Sparse editor layer — honest' }],
+    };
+    return m[layerId] || [];
+  }
+
+  const m = {
+    base: [
+      { type: 'ok', text: '✓ Dedicated Shift on top (was ^)' },
+      { type: 'ok', text: '✓ Enter is a tap on base thumbs' },
+      { type: 'ok', text: '✓ Single Spc — OS slot spent on Enter' },
+      { type: 'note', text: varId === 'aprime'
+        ? '◆ A′ — layers inside, easy LWR+RSE chord'
+        : '◆ A — type inside, layers on outer thumbs' },
+    ],
+    lower: [
+      { type: 'ok', text: '✓ ? direct on top — no longer Shift-only' },
+      { type: 'ok', text: '✓ ^ direct on top — re-homed from base' },
+      { type: 'ok', text: '✓ _ | direct on top; { } kept' },
+      { type: 'ok', text: '✓ !@#$%&*+ via Shift+number / Shift+=' },
+      { type: 'note', text: '◆ Bracket dups removed — one home each on main' },
+    ],
+    raise: [
+      { type: 'ok', text: '✓ One PgDn, one nav cluster' },
+      { type: 'ok', text: '✓ Edit chords removed — live on FUNC' },
+      { type: 'ok', text: '✓ Enter on thumbs' },
+    ],
+    adj:  [{ type: 'ok', text: '✓ Sparse — tri-layer media only' }],
+    func: [{ type: 'ok', text: '✓ Canonical edit home — no Raise mirror' }],
+  };
+  return m[layerId] || [];
+}
+
+function howForCheck(item, varId, layerId) {
+  const map = {
+    enter: {
+      current: layerId === 'lower' ? 'Lower right thumb only' : 'missing on this layer',
+      a: 'right inner thumb (tap)',
+      aprime: 'right outer thumb (tap)',
+    },
+    spc: {
+      current: 'both inner thumbs',
+      a: 'left inner thumb',
+      aprime: 'left outer thumb',
+    },
+    shift: {
+      current: 'MISSING dedicated — only hold f/h',
+      a: 'base top row (was ^)',
+      aprime: 'base top row (was ^)',
+    },
+    qmark: {
+      current: 'only Shift+/ (sup label)',
+      a: 'Lower top direct',
+      aprime: 'Lower top direct',
+    },
+    caret: {
+      current: 'base top bare ^ · also Shift+6',
+      a: 'Lower top direct (moved from base)',
+      aprime: 'Lower top direct (moved from base)',
+    },
+    brackets: {
+      current: 'duped top + main',
+      a: 'main grid only',
+      aprime: 'main grid only',
+    },
+    'shift-compose': {
+      current: 'HRM only — flaky with layer hold',
+      a: 'dedicated Shift + number row',
+      aprime: 'dedicated Shift + number row',
+    },
+    'no-edit': {
+      current: 'Cut/Copy/Paste on Raise both sides',
+      a: 'FUNC only',
+      aprime: 'FUNC only',
+    },
+    edit: {
+      current: 'split across Raise + FUNC',
+      a: 'FUNC is canonical',
+      aprime: 'FUNC is canonical',
+    },
+    nav: {
+      current: 'PgDn duplicated',
+      a: 'single homes',
+      aprime: 'single homes',
+    },
+  };
+  const row = map[item.id];
+  if (!row) {
+    if (item.id === 'hrm') return 'hold a/s/d/f · h/j/k/l';
+    if (item.id === 'lwr' || item.id === 'rse') return 'thumb OS';
+    if (item.id === 'tri') return 'LWR then RSE → ADJ · RSE then LWR → FUNC';
+    if (item.id === 'sparse') return 'empty slots intentional';
+    return '';
+  }
+  return row[varId] || '';
+}
+
+// ── Glyph coverage inventory ─────────────────────────────────────────────────
+// Walk every key on every layer; record tap glyphs + shift-superscript glyphs.
+
+const SPECIAL_SKIP = new Set([
+  'Tab','Esc','Bksp','Del','Spc','Enter','Shift','Ctrl','Alt','Meta',
+  'LWR','RSE','Undo','Redo','Cut','Copy','Paste','SelAll','Save','Find',
+  'Repl','Cmnt','Dup','Fmt','Prev','Play','Next','Mute','Vol-','Vol+',
+  'Br-','Br+','BT','WiFi','Ins','Home','End','PgUp','PgDn',
+  'F1','F2','F3','F4','F5','F6','F7','F8','F9','F10','F11','F12',
+  '←','↓','↑','→','😊',
+]);
+
+function collectGlyphs(varId) {
+  const v = VARIATIONS[varId];
+  /** @type {Map<string, {path:string, kind:string}[]>} */
+  const map = new Map();
+  const add = (ch, path, kind) => {
+    if (ch == null || ch === '') return;
+    // only single printable ASCII for the grid
+    if (ch.length !== 1) return;
+    const code = ch.charCodeAt(0);
+    if (code < 32 || code > 126) return;
+    if (!map.has(ch)) map.set(ch, []);
+    map.get(ch).push({ path, kind });
+  };
+
+  for (const [layerId, layer] of Object.entries(v.layers)) {
+    const zones = [
+      ['top', layer.topRow],
+      ...layer.left.map((row, i) => [`L${i}`, row]),
+      ...layer.right.map((row, i) => [`R${i}`, row]),
+      ['thumbL', layer.thumbL],
+      ['thumbR', layer.thumbR],
+    ];
+    for (const [zone, keys] of zones) {
+      keys.forEach((k, i) => {
+        if (!k || !k.l) return;
+        const path = `${layerId}.${zone}[${i}]`;
+        if (k.l === 'Spc') { add(' ', `${path} Space`, 'tap'); return; }
+        if (k.l === 'Enter') return; // not a glyph
+        if (SPECIAL_SKIP.has(k.l)) return;
+        // tap glyph
+        add(k.l, `${path} tap`, layerId === 'base' ? 'tap' : 'layer');
+        // shift superscript = Shift + this key
+        if (k.sup) add(k.sup, `${path} Shift+${k.l}`, 'shift');
+      });
+    }
+  }
+
+  // Alpha block implies A-Z via Shift+letter on base
+  for (let i = 0; i < 26; i++) {
+    const low = String.fromCharCode(97 + i);
+    const up = String.fromCharCode(65 + i);
+    if (map.has(low) && !map.has(up)) {
+      add(up, `base Shift+${low}`, 'shift');
+    }
+  }
+
+  // Explicit number-row shift map when dedicated Shift exists (A/A′)
+  // Mirror US keyboard for any num key that didn't get a sup label
+  if (varId === 'a' || varId === 'aprime') {
+    const us = { '1':'!','2':'@','3':'#','4':'$','5':'%','6':'^','7':'&','8':'*','9':'(','0':')' };
+    for (const [n, sym] of Object.entries(us)) {
+      if (map.has(n) && !map.has(sym)) {
+        add(sym, `lower Shift+${n} (US)`, 'shift');
+      } else if (map.has(n) && map.has(sym)) {
+        // already present; ensure a shift path note if only direct
+        const paths = map.get(sym);
+        if (!paths.some(p => p.kind === 'shift')) {
+          paths.push({ path: `lower Shift+${n} (US alt)`, kind: 'shift' });
+        }
+      }
+    }
+    // standard pairs
+    const pairs = [['-'], ['_'], ['='], ['+'], ['\\'], ['|'], ["'"], ['"']];
+    // _ | + " already direct or sup — fine
+  }
+
+  return map;
+}
+
+function renderGlyphCoverage() {
+  const grid = document.getElementById('glyphGrid');
+  const missEl = document.getElementById('glyphMissing');
+  if (!grid) return;
+  grid.innerHTML = '';
+
+  const map = collectGlyphs(activeVar);
+  const missing = [];
+
+  // space first, then 33-126
+  const chars = [' '];
+  for (let c = 33; c <= 126; c++) chars.push(String.fromCharCode(c));
+
+  chars.forEach(ch => {
+    const paths = map.get(ch);
+    const chip = document.createElement('div');
+    chip.className = 'glyph-chip';
+    if (ch === ' ') {
+      chip.textContent = 'spc';
+      chip.classList.add('space');
+    } else {
+      chip.textContent = ch;
+    }
+    if (!paths || paths.length === 0) {
+      chip.classList.add('miss');
+      chip.title = 'MISSING — no home';
+      missing.push(ch === ' ' ? 'space' : ch);
+    } else {
+      const kinds = new Set(paths.map(p => p.kind));
+      if (kinds.has('tap')) chip.classList.add('ok');
+      else if (kinds.has('layer')) chip.classList.add('layer');
+      else chip.classList.add('shift');
+      chip.title = paths.map(p => `${p.kind}: ${p.path}`).join('\n');
+    }
+    grid.appendChild(chip);
+  });
+
+  if (missing.length) {
+    missEl.style.color = 'var(--red)';
+    missEl.textContent = `Missing (${missing.length}): ${missing.map(c => c === ' ' ? '␣' : c).join(' ')}`;
+  } else {
+    missEl.style.color = 'var(--green)';
+    missEl.textContent = '✓ All 95 printable ASCII chars have a home';
+  }
+}
+
+// ── Assemble variations ──────────────────────────────────────────────────────
+
+const VARIATIONS = {
+  current: {
+    label: 'Current',
+    sub: 'as shipped · Sofle-port',
+    desc: 'Sofle layers squeezed onto 4 thumbs. <span class="hi">Dual Spc burns an OS slot</span>; Enter only appears on Lower; dups paper over missing coverage. Works, but thinks like Sofle.',
+    os: ['LWR', 'Spc', 'Spc', 'RSE'],
+    osRoles: ['layer', 'type', 'type', 'layer'],
+    layers: {
+      base:  buildBase(thumbsCurrent, { cleanTop: false }),
+      lower: buildLower(thumbsCurrent, { clean: false }),
+      raise: buildRaise(thumbsCurrent, { clean: false }),
+      adj:   buildAdj(thumbsCurrent),
+      func:  buildFunc(thumbsCurrent),
+    },
+  },
+  a: {
+    label: 'A · type inside',
+    sub: '[LWR|Spc] [Enter|RSE]',
+    desc: 'Thumb OS: <code>LWR · Spc · Enter · RSE</code>. <span class="ok">Dedicated Shift on base top</span> (slot was ^). <span class="ok">^ and ? re-homed to Lower top as direct taps</span>. Enter is a tap. Type keys on inner thumbs.',
+    os: ['LWR', 'Spc', 'Enter', 'RSE'],
+    osRoles: ['layer', 'type', 'type', 'layer'],
+    layers: {
+      base:  buildBase(thumbsA, { cleanTop: true }),
+      lower: buildLower(thumbsA, { clean: true }),
+      raise: buildRaise(thumbsA, { clean: true }),
+      adj:   buildAdj(thumbsA),
+      func:  buildFunc(thumbsA),
+    },
+  },
+  aprime: {
+    label: "A′ · layers inside",
+    sub: '[Spc|LWR] [RSE|Enter]',
+    desc: 'Thumb OS: <code>Spc · LWR · RSE · Enter</code>. Same content as A: <span class="ok">Shift on base</span>, <span class="ok">? ^ _ | on Lower top</span>. Layers on inner thumbs — <span class="hi">easiest tri-layer chord</span>. Preferred when ADJ/FUNC matter.',
+    os: ['Spc', 'LWR', 'RSE', 'Enter'],
+    osRoles: ['type', 'layer', 'layer', 'type'],
+    layers: {
+      base:  buildBase(thumbsAPrime, { cleanTop: true }),
+      lower: buildLower(thumbsAPrime, { clean: true }),
+      raise: buildRaise(thumbsAPrime, { clean: true }),
+      adj:   buildAdj(thumbsAPrime),
+      func:  buildFunc(thumbsAPrime),
+    },
+  },
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Geometry + render
+// ═══════════════════════════════════════════════════════════════════════════════
+const DPR = Math.min(window.devicePixelRatio || 1, 2);
+const W = 500;
+const PAD = 12;
+const KG = 3.5;
+const RG = 4;
+const KH = 40;
+const KH_T = 32;
+const KH_TH = 46;
+const GUTTER = 16;
+const STAG_L = [0, 0.20, 0.40, 0.60, 0.80];
+const STAG_R = [0.80, 0.60, 0.40, 0.20, 0];
+const HW = (W - 2 * PAD - GUTTER) / 2;
+const TOP_KW = (W - 2 * PAD - 7 * KG) / 8;
+const MAIN_KW = (HW - 4 * KG) / 5;
+const THUMB_W = (HW - KG) / 2;
+const TOP_Y = PAD;
+const MAIN_Y = TOP_Y + KH_T + RG;
+const MAX_STAG = 0.80 * KH;
+const THUMB_Y = MAIN_Y + 3 * (KH + RG) + MAX_STAG + RG + 4;
+const CANVAS_H = THUMB_Y + KH_TH + PAD;
+
+const canvas = document.getElementById('kb');
+canvas.width = W * DPR;
+canvas.height = CANVAS_H * DPR;
+canvas.style.width = W + 'px';
+canvas.style.height = CANVAS_H + 'px';
+const ctx = canvas.getContext('2d');
+ctx.scale(DPR, DPR);
+
+let activeVar = 'aprime';
+let activeLayer = 'base';
+let activeView = 'layout'; // layout | roles | access
+let keyRects = [];
+
+function colorFor(k) {
+  if (activeView === 'access') {
+    if (!k || k.l === '' && (k.role === 'empty' || k.t === 'empty')) return ROLE.empty;
+    if (k.t === 'dup' || k.role === 'dup') return COST.missing;
+    return COST[k.cost] || COST.tap;
+  }
+  if (activeView === 'roles') {
+    if (k.t === 'active') return ROLE.active;
+    if (k.t === 'chg' && k.l === '') return ROLE.chg;
+    if (k.t === 'dup') return ROLE.dup;
+    if (k.t === 'miss') return ROLE.miss;
+    return ROLE[k.role] || ROLE.alpha;
+  }
+  // layout view — emphasize chg/dup/miss/active, else role
+  if (k.t === 'active') return ROLE.active;
+  if (k.t === 'dup') return ROLE.dup;
+  if (k.t === 'miss') return ROLE.miss;
+  if (k.chg && k.l) return ROLE.chg;
+  if (k.t === 'chg' && k.l === '') return ROLE.chg;
+  if (k.t === 'mod' || k.role === 'mod') return ROLE.mod;
+  if (k.t === 'layer' || k.role === 'layer') return ROLE.layer;
+  if (k.role === 'type') return ROLE.type;
+  if (k.role === 'nav') return ROLE.nav;
+  if (k.role === 'empty' || k.t === 'empty') return ROLE.empty;
+  return ROLE.alpha;
+}
+
+function drawKey(x, y, w, h, k) {
+  const isEmpty = !k || (k.l === '' && (k.role === 'empty' || k.t === 'empty'));
+  const isChgEmpty = k && k.l === '' && (k.t === 'chg' || k.chg);
+
+  if (isEmpty && !isChgEmpty) {
+    ctx.fillStyle = ROLE.empty.fill;
+    ctx.strokeStyle = ROLE.empty.border;
+    ctx.lineWidth = 0.5;
+    ctx.beginPath(); ctx.roundRect(x, y, w, h, 4); ctx.fill(); ctx.stroke();
+    return;
+  }
+
+  const col = colorFor(k || { role: 'empty' });
+
+  // shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.45)';
+  ctx.beginPath(); ctx.roundRect(x + 1, y + 2, w, h, 4); ctx.fill();
+
+  ctx.fillStyle = col.fill;
+  ctx.strokeStyle = col.border;
+  const thick = k && (k.t === 'dup' || k.t === 'miss' || k.chg || k.t === 'chg' || k.t === 'active');
+  ctx.lineWidth = thick ? 1.5 : 0.75;
+
+  if (isChgEmpty) ctx.setLineDash([3, 2]);
+  ctx.beginPath(); ctx.roundRect(x, y, w, h, 4); ctx.fill(); ctx.stroke();
+  ctx.setLineDash([]);
+
+  if (!k || !k.l) return;
+
+  const fontSize = w < 30 ? 8 : w < 40 ? 9 : 10;
+  ctx.fillStyle = col.text;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = `600 ${fontSize}px 'SF Mono', ui-monospace, Consolas, monospace`;
+
+  const hasSub = !!k.s;
+  const labelY = y + h / 2 + (hasSub ? -4 : 0);
+  ctx.fillText(k.l, x + w / 2, labelY);
+
+  if (hasSub) {
+    ctx.globalAlpha = 0.55;
+    ctx.font = `400 7px 'SF Mono', ui-monospace, monospace`;
+    ctx.fillText(k.s, x + w / 2, y + h / 2 + 5);
+    ctx.globalAlpha = 1;
+  }
+  if (k.sup) {
+    ctx.globalAlpha = 0.55;
+    ctx.font = `400 7px 'SF Mono', ui-monospace, monospace`;
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'top';
+    ctx.fillText(k.sup, x + w - 3, y + 3);
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.globalAlpha = 1;
+  }
+}
+
+function render() {
+  const variation = VARIATIONS[activeVar];
+  const data = variation.layers[activeLayer];
+  keyRects = [];
+
+  ctx.clearRect(0, 0, W, CANVAS_H);
+  ctx.fillStyle = '#161b22';
+  ctx.fillRect(0, 0, W, CANVAS_H);
+
+  data.topRow.forEach((k, i) => {
+    const x = PAD + i * (TOP_KW + KG);
+    drawKey(x, TOP_Y, TOP_KW, KH_T, k);
+    keyRects.push({ x, y: TOP_Y, w: TOP_KW, h: KH_T, key: k });
+  });
+
+  data.left.forEach((row, ri) => {
+    const baseY = MAIN_Y + ri * (KH + RG);
+    row.forEach((k, ci) => {
+      const x = PAD + ci * (MAIN_KW + KG);
+      const y = baseY + STAG_L[ci] * KH;
+      drawKey(x, y, MAIN_KW, KH, k);
+      keyRects.push({ x, y, w: MAIN_KW, h: KH, key: k });
+    });
+  });
+
+  data.right.forEach((row, ri) => {
+    const baseY = MAIN_Y + ri * (KH + RG);
+    const startX = PAD + HW + GUTTER;
+    row.forEach((k, ci) => {
+      const x = startX + ci * (MAIN_KW + KG);
+      const y = baseY + STAG_R[ci] * KH;
+      drawKey(x, y, MAIN_KW, KH, k);
+      keyRects.push({ x, y, w: MAIN_KW, h: KH, key: k });
+    });
+  });
+
+  data.thumbL.forEach((k, i) => {
+    const x = PAD + i * (THUMB_W + KG);
+    drawKey(x, THUMB_Y, THUMB_W, KH_TH, k);
+    keyRects.push({ x, y: THUMB_Y, w: THUMB_W, h: KH_TH, key: k });
+  });
+  data.thumbR.forEach((k, i) => {
+    const x = PAD + HW + GUTTER + i * (THUMB_W + KG);
+    drawKey(x, THUMB_Y, THUMB_W, KH_TH, k);
+    keyRects.push({ x, y: THUMB_Y, w: THUMB_W, h: KH_TH, key: k });
+  });
+
+  // gutter
+  const gx = PAD + HW + GUTTER / 2;
+  ctx.strokeStyle = '#21262d';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([3, 5]);
+  ctx.beginPath();
+  ctx.moveTo(gx, MAIN_Y - 2);
+  ctx.lineTo(gx, THUMB_Y + KH_TH);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // issues
+  const issueEl = document.getElementById('issues');
+  issueEl.innerHTML = '';
+  issuesFor(activeVar, activeLayer).forEach(issue => {
+    const el = document.createElement('div');
+    el.className = 'issue ' + issue.type;
+    el.textContent = issue.text;
+    issueEl.appendChild(el);
+  });
+
+  renderChecklist();
+  renderOsCallout();
+  renderChord();
+  renderLegend();
+  renderGlyphCoverage();
+}
+
+function renderChecklist() {
+  const el = document.getElementById('checklist');
+  el.innerHTML = '';
+  const items = CHECKLISTS[activeLayer] || [];
+  items.forEach(item => {
+    const pass = item.test(activeVar);
+    // partial: current has enter only on lower
+    let state = pass ? 'yes' : 'no';
+    if (item.id === 'enter' && activeVar === 'current' && activeLayer === 'lower') state = 'partial';
+    if (item.id === 'spc' && (activeVar === 'a' || activeVar === 'aprime')) state = 'yes';
+
+    const row = document.createElement('div');
+    row.className = 'check-item';
+    const how = howForCheck(item, activeVar, activeLayer);
+    row.innerHTML = `
+      <div class="check-dot ${state}"></div>
+      <div>
+        <div class="check-label">${item.label}</div>
+        ${how ? `<div class="check-how">${how}</div>` : ''}
+      </div>`;
+    el.appendChild(row);
+  });
+}
+
+function renderOsCallout() {
+  const v = VARIATIONS[activeVar];
+  const el = document.getElementById('osCallout');
+  const parts = v.os.map((label, i) => {
+    const role = v.osRoles[i];
+    const cls = role === 'layer' ? 'layer-k' : 'type-k';
+    return `<span class="k ${cls}">${label}</span>`;
+  });
+  el.innerHTML = parts[0] + parts[1] + '<span class="sep">│</span>' + parts[2] + parts[3];
+}
+
+function renderChord() {
+  const v = VARIATIONS[activeVar];
+  const [a, b, c, d] = v.os;
+  const el = document.getElementById('chordTree');
+  el.innerHTML = `
+    <div><span class="node">rest</span> → <span class="layer">BASE</span></div>
+    <div>hold <span class="node">${v.osRoles[0] === 'layer' ? a : b}</span> → <span class="layer">LOWER</span></div>
+    <div>hold <span class="node">${v.osRoles[2] === 'layer' ? c : d}</span> → <span class="layer">RAISE</span></div>
+    <div>hold LWR then RSE → <span class="tri">ADJ</span></div>
+    <div>hold RSE then LWR → <span class="tri">FUNC</span></div>
+    <div style="margin-top:6px;color:var(--dim);font-size:10px">
+      ${activeVar === 'aprime'
+        ? 'A′: LWR+RSE are neighbours (inners) — cheapest tri-chord.'
+        : activeVar === 'a'
+          ? 'A: LWR+RSE are outers — wider tri-chord, easier Spc/Enter rest.'
+          : 'Current: dual Spc, no base Enter — tri-chord uses outers.'}
+    </div>`;
+}
+
+function renderLegend() {
+  const el = document.getElementById('legend');
+  el.innerHTML = '';
+  let items;
+  if (activeView === 'access') {
+    items = Object.entries(COST).map(([id, c]) => [c, c.label]);
+  } else if (activeView === 'roles') {
+    items = [
+      [ROLE.alpha, 'alpha'], [ROLE.mod, 'mod'], [ROLE.layer, 'layer'],
+      [ROLE.type, 'space/enter'], [ROLE.nav, 'nav'], [ROLE.num, 'number'],
+      [ROLE.symbol, 'symbol'], [ROLE.fn, 'fn'], [ROLE.edit, 'edit'],
+      [ROLE.media, 'media'], [ROLE.chg, 'changed vs current'],
+      [ROLE.dup, 'duplicate'], [ROLE.empty, 'empty'],
+    ];
+  } else {
+    items = [
+      [ROLE.alpha, 'normal'], [ROLE.mod, 'modifier'], [ROLE.layer, 'layer'],
+      [ROLE.type, 'space/enter'], [ROLE.chg, 'changed in A/A′'],
+      [ROLE.dup, 'duplicate'], [ROLE.miss, 'candidate/miss'],
+      [ROLE.empty, 'empty'], [ROLE.active, 'active layer key'],
+    ];
+  }
+  items.forEach(([col, label]) => {
+    const li = document.createElement('div');
+    li.className = 'li';
+    const ld = document.createElement('div');
+    ld.className = 'ld';
+    ld.style.background = col.fill;
+    ld.style.borderColor = col.border;
+    li.appendChild(ld);
+    li.appendChild(document.createTextNode(label));
+    el.appendChild(li);
+  });
+
+  // access side legend
+  const al = document.getElementById('accessLegend');
+  al.innerHTML = '';
+  Object.entries(COST).forEach(([id, c]) => {
+    const row = document.createElement('div');
+    row.className = 'cost-row';
+    row.innerHTML = `<div class="cost-swatch" style="background:${c.fill};border-color:${c.border}"></div><span>${c.label}</span>`;
+    al.appendChild(row);
+  });
+}
+
+// ── Tooltip ──────────────────────────────────────────────────────────────────
+const tooltip = document.getElementById('tooltip');
+
+function hitTest(cx, cy) {
+  for (let i = keyRects.length - 1; i >= 0; i--) {
+    const r = keyRects[i];
+    if (cx >= r.x && cx <= r.x + r.w && cy >= r.y && cy <= r.y + r.h) return r;
+  }
+  return null;
+}
+
+canvas.addEventListener('mousemove', e => {
+  const rect = canvas.getBoundingClientRect();
+  const cx = e.clientX - rect.left;
+  const cy = e.clientY - rect.top;
+  const hit = hitTest(cx, cy);
+
+  if (hit && hit.key && (hit.key.l || hit.key.note)) {
+    const k = hit.key;
+    let html = `<div class="tt-key">${k.l || '(empty)'}</div>`;
+    if (k.s) html += `<div>hold: <strong>${k.s}</strong></div>`;
+    if (k.sup) html += `<div>shift: <strong>${k.sup}</strong></div>`;
+    html += `<div class="tt-role">${k.role || k.t || 'key'}</div>`;
+    if (k.cost && COST[k.cost]) html += `<div class="tt-cost">access: ${COST[k.cost].label}</div>`;
+    if (k.chg) html += `<div class="tt-chg">↺ changed vs Current</div>`;
+    if (k.note) html += `<div class="tt-note">⚑ ${k.note}</div>`;
+    tooltip.innerHTML = html;
+    tooltip.style.left = (e.clientX + 12) + 'px';
+    tooltip.style.top = (e.clientY - 10) + 'px';
+    tooltip.classList.add('show');
+    canvas.style.cursor = 'pointer';
+  } else {
+    tooltip.classList.remove('show');
+    canvas.style.cursor = 'default';
+  }
+});
+canvas.addEventListener('mouseleave', () => tooltip.classList.remove('show'));
+
+// ── UI wiring ────────────────────────────────────────────────────────────────
+const varTabsEl = document.getElementById('varTabs');
+const varDescEl = document.getElementById('varDesc');
+
+Object.entries(VARIATIONS).forEach(([id, v]) => {
+  const btn = document.createElement('button');
+  btn.className = 'tab-btn' + (id === activeVar ? ' active' : '');
+  btn.innerHTML = `<span class="t">${v.label}</span><span class="s">${v.sub}</span>`;
+  btn.addEventListener('click', () => {
+    activeVar = id;
+    varTabsEl.querySelectorAll('.tab-btn').forEach(t => t.classList.remove('active'));
+    btn.classList.add('active');
+    varDescEl.innerHTML = v.desc;
+    render();
+  });
+  varTabsEl.appendChild(btn);
+});
+varDescEl.innerHTML = VARIATIONS[activeVar].desc;
+
+const viewSeg = document.getElementById('viewSeg');
+[
+  ['layout', 'Layout'],
+  ['roles', 'Roles'],
+  ['access', 'Access cost'],
+].forEach(([id, label]) => {
+  const btn = document.createElement('button');
+  btn.textContent = label;
+  btn.className = id === activeView ? 'active' : '';
+  btn.addEventListener('click', () => {
+    activeView = id;
+    viewSeg.querySelectorAll('button').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    render();
+  });
+  viewSeg.appendChild(btn);
+});
+
+const layerSeg = document.getElementById('layerSeg');
+['base', 'lower', 'raise', 'adj', 'func'].forEach(id => {
+  const btn = document.createElement('button');
+  btn.textContent = id;
+  btn.className = id === activeLayer ? 'active' : '';
+  btn.addEventListener('click', () => {
+    activeLayer = id;
+    layerSeg.querySelectorAll('button').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    render();
+  });
+  layerSeg.appendChild(btn);
+});
+
+render();
+</script>
+</body>
+</html>
