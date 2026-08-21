@@ -83,3 +83,4 @@ android/scripts/__pycache__/
 # Python
 __pycache__/
 *.pyc
+android/app/src/main/assets/sk/
