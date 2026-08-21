@@ -9,8 +9,8 @@ package com.codekeyboard
  *   Thumb     2 large keys per side, centred under each half
  *
  * Stagger (fraction of keyHeight):
- *   Left  cols 0-4: [0.00, 0.25, 0.50, 0.50, 0.75]  — flatter pinky than Sofle
- *   Right cols 0-4: [0.75, 0.50, 0.50, 0.25, 0.00]
+ *   Left  cols 0-4: [0.00, 0.25, 0.50, 0.75, 1.00]
+ *   Right cols 0-4: [1.00, 0.75, 0.50, 0.25, 0.00]
  */
 class FerrisSweepLayoutComputer(
     internal val density: Float,
@@ -43,10 +43,10 @@ class FerrisSweepLayoutComputer(
         return minOf(geometricMax, capPx)
     }
 
-    internal val staggerLeft  = listOf(0f, 0.25f, 0.50f, 0.50f, 0.75f)
-    internal val staggerRight = listOf(0.75f, 0.50f, 0.50f, 0.25f, 0f)
+    internal val staggerLeft  = listOf(0f, 0.25f, 0.50f, 0.75f, 1.00f)
+    internal val staggerRight = listOf(1.00f, 0.75f, 0.50f, 0.25f, 0f)
 
-    private val maxStagger = 0.75f
+    private val maxStagger = 1.00f
     private val numRows    = 3
 
     private fun halfWidth(screenW: Int) = (screenW - 2 * padding - halfGap(screenW)) / 2f
