@@ -1,27 +1,37 @@
 package com.codekeyboard
 
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.io.File
 
-// Test-only stand-in for a future Bigram.kt (not requested this session) —
-// exists here purely to exercise Ngram's cascade with 2 real orders.
-private class TestBigram(dataSource: NgramDataSource) : AbstractNgram(order = 2, dataSource = dataSource)
+// Test-only fake NgramModel implementations — NgramSanityTest exercises the
+// Ngram cascade's blending logic (ADR-008 task L), not any specific data
+// source. The JSON-backed Trigram/BigramModelAdapter were removed (ADR-010
+// tasks L/M); the cascade itself is still the production path.
+private class FakeNgram(
+    override val order: Int,
+    private val data: Map<List<String>, Pair<List<String>, Int>>,
+) : NgramModel {
+    override fun nextWords(vararg context: String, prefix: String, n: Int): List<String> {
+        val key = context.toList()
+        val (words, _) = data[key] ?: return emptyList()
+        val pfx = prefix.lowercase()
+        return words.filter { pfx.isEmpty() || it.startsWith(pfx) }.take(n)
+    }
 
-private fun jsonFile(content: String): File =
-    File.createTempFile("ngram_test", ".json").apply { writeText(content) }
+    override fun support(vararg context: String): Int =
+        data[context.toList()]?.second ?: 0
+}
 
 class NgramSanityTest {
 
     @Test fun `single tier is used unchanged when only one tier has enough context or data`() {
-        val trigramJson = jsonFile("""{"i want": {"followers": [["to", 0.9], ["a", 0.5]], "support": 100}}""")
-        val bigramJson = jsonFile(
-            """{"want": {"followers": [["some", 0.7]], "support": 5},
-                "coffee": {"followers": [["please", 0.6]], "support": 50}}"""
-        )
-        val trigram = Trigram(JsonNgramDataSource(trigramJson))
-        val bigram = TestBigram(JsonNgramDataSource(bigramJson))
+        val trigram = FakeNgram(3, mapOf(
+            listOf("i", "want") to (listOf("to", "a") to 100),
+        ))
+        val bigram = FakeNgram(2, mapOf(
+            listOf("want") to (listOf("some") to 5),
+            listOf("coffee") to (listOf("please") to 50),
+        ))
         val ngram = Ngram(listOf(trigram, bigram))
 
         // Only 1 word of context: trigram needs 2, doesn't qualify — bigram alone answers.
@@ -40,10 +50,12 @@ class NgramSanityTest {
         // Trigram heavily outweighs bigram in support (100 vs 5) — this is the
         // ADR-008 task L fix: previously trigram would have overridden bigram
         // unconditionally just for answering first, regardless of support.
-        val trigramJson = jsonFile("""{"i want": {"followers": [["to", 0.9], ["a", 0.5]], "support": 100}}""")
-        val bigramJson = jsonFile("""{"want": {"followers": [["some", 0.7]], "support": 5}}""")
-        val trigram = Trigram(JsonNgramDataSource(trigramJson))
-        val bigram = TestBigram(JsonNgramDataSource(bigramJson))
+        val trigram = FakeNgram(3, mapOf(
+            listOf("i", "want") to (listOf("to", "a") to 100),
+        ))
+        val bigram = FakeNgram(2, mapOf(
+            listOf("want") to (listOf("some") to 5),
+        ))
         val ngram = Ngram(listOf(trigram, bigram))
 
         // Limited to top-2: the heavily-favored trigram tier's words win the top spots.
@@ -61,67 +73,34 @@ class NgramSanityTest {
         // The exact failure mode ADR-008 measured: a thin trigram context
         // (support=10) previously overrode a strong bigram context (support=4000)
         // just by answering first. Now the bigram's answer should dominate.
-        val trigramJson = jsonFile("""{"let me": {"followers": [["tell", 1.0]], "support": 10}}""")
-        val bigramJson = jsonFile("""{"me": {"followers": [["know", 1.0]], "support": 4000}}""")
-        val trigram = Trigram(JsonNgramDataSource(trigramJson))
-        val bigram = TestBigram(JsonNgramDataSource(bigramJson))
+        val trigram = FakeNgram(3, mapOf(
+            listOf("let", "me") to (listOf("tell") to 10),
+        ))
+        val bigram = FakeNgram(2, mapOf(
+            listOf("me") to (listOf("know") to 4000),
+        ))
         val ngram = Ngram(listOf(trigram, bigram))
 
         val top = ngram.nextWords(listOf("let", "me"), n = 1)
         assertEquals(listOf("know"), top)
     }
 
-    @Test fun `malformed or missing asset degrades to empty and cascade falls through`() {
-        val malformedJson = File.createTempFile("malformed_trigram", ".json")
-        malformedJson.writeText("this is not json {")
-
-        val missingFile = File.createTempFile("missing_trigram", ".json")
-        missingFile.delete()
-
-        val malformedTrigram = Trigram(JsonNgramDataSource(malformedJson))
-        val missingTrigram = Trigram(JsonNgramDataSource(missingFile))
-
-        // No crash on a malformed asset — tier degrades to "no data".
-        assertEquals(emptyList<String>(), malformedTrigram.nextWords("i", "want"))
-        assertEquals(0, malformedTrigram.support("i", "want"))
-        // No crash on a missing asset — tier degrades to "no data".
-        assertEquals(emptyList<String>(), missingTrigram.nextWords("i", "want"))
-
-        // Cascade falls through a degraded trigram tier to the bigram tier.
-        val bigramJson = jsonFile("""{"want": {"followers": [["some", 0.7]], "support": 5}}""")
-        val ngram = Ngram(listOf(malformedTrigram, TestBigram(JsonNgramDataSource(bigramJson))))
+    @Test fun `tier with no data degrades to empty and cascade falls through`() {
+        // A tier that returns empty (no data for the context) must not block
+        // the cascade — the lower tier answers.
+        val emptyTrigram = FakeNgram(3, emptyMap())
+        val bigram = FakeNgram(2, mapOf(
+            listOf("want") to (listOf("some") to 5),
+        ))
+        val ngram = Ngram(listOf(emptyTrigram, bigram))
         assertEquals(listOf("some"), ngram.nextWords(listOf("want")))
     }
 
     @Test fun `maxContextNeeded derives from highest order in list`() {
-        val trigram = Trigram(JsonNgramDataSource(jsonFile("{}")))
-        val bigram = TestBigram(JsonNgramDataSource(jsonFile("{}")))
+        val trigram = FakeNgram(3, emptyMap())
+        val bigram = FakeNgram(2, emptyMap())
         assertEquals(2, Ngram(listOf(trigram, bigram)).maxContextNeeded)
         assertEquals(1, Ngram(listOf(bigram)).maxContextNeeded)
         assertEquals(0, Ngram(emptyList()).maxContextNeeded)
-    }
-
-    @Test fun `BigramModelAdapter delegates nextWords and support to the real BigramModel`() {
-        val seedJson = File.createTempFile("adapter_seed", ".json")
-        seedJson.writeText("""{"want": [["some", 0.7], ["more", 0.5]]}""")
-        val userFile = File.createTempFile("adapter_user", ".json").apply { writeText("{}") }
-        val bigram = BigramModel(seedJson, userFile).also { it.load() }
-        val adapter = BigramModelAdapter(bigram)
-
-        assertEquals(2, adapter.order)
-        assertEquals(listOf("some", "more"), adapter.nextWords("want"))
-        assertEquals(listOf("some"), adapter.nextWords("want", prefix = "so"))
-        assertEquals(emptyList<String>(), adapter.nextWords())
-
-        // support() defaults to 0 before loadSupport() is called — degrades
-        // gracefully rather than throwing, matching AbstractNgram's pattern.
-        assertEquals(0, adapter.support("want"))
-        assertEquals(0, adapter.support())
-
-        val supportFile = File.createTempFile("adapter_support", ".json")
-        supportFile.writeText("""{"want": 12345}""")
-        bigram.loadSupport(supportFile)
-        assertEquals(12345, adapter.support("want"))
-        assertEquals(0, adapter.support("unknown"))
     }
 }
