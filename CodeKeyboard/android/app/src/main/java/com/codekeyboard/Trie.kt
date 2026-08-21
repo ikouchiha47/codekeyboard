@@ -5,7 +5,7 @@ import java.io.File
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
-class Trie private constructor(private val buf: ByteBuffer) {
+class Trie private constructor(private val buf: ByteBuffer) : PrefixDictionary {
 
     companion object {
         private const val MAGIC_TRIF = "TRIF"
@@ -108,15 +108,14 @@ class Trie private constructor(private val buf: ByteBuffer) {
         }
     }
 
-    fun has(word: String): Boolean {
+    override fun has(word: String): Boolean {
         if (word.isEmpty()) return false
         val idx = walk(word.lowercase())
         if (idx < 0) return false
         return (nodeFlags(idx) and 1) != 0
     }
 
-    // Returns up to max completions for the given prefix, ordered by frequency.
-    fun suggest(prefix: String, max: Int = 3): List<String> {
+    override fun suggest(prefix: String, max: Int): List<String> {
         if (prefix.isEmpty() || max <= 0) return emptyList()
         val lower = prefix.lowercase()
         val startIdx = walk(lower)

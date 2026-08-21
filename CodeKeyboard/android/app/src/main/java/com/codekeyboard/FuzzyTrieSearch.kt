@@ -11,12 +11,17 @@ interface TrieAdapter<Node> {
     fun iterateChildren(node: Node, block: (Char, Node) -> Unit)
 }
 
-class UserTrieAdapter(trie: UserTrie) : TrieAdapter<UserTrieNode> {
+class UserTrieAdapter(private val trie: UserTrie) : TrieAdapter<UserTrieNode> {
     override val root: UserTrieNode = trie.root
     override fun isTerminal(node: UserTrieNode) = node.isTerminal
     override fun frequency(node: UserTrieNode) = node.frequency
     override fun iterateChildren(node: UserTrieNode, block: (Char, UserTrieNode) -> Unit) =
         node.children.forEach { (ch, child) -> block(ch, child) }
+
+    /** Returns top-k completions for the given prefix, as words only (no scores). */
+    fun suggest(prefix: String, k: Int): List<String> {
+        return trie.suggest(prefix, k).map { it.word }
+    }
 }
 
 class BaseTrieAdapter(private val trie: Trie) : TrieAdapter<Int> {

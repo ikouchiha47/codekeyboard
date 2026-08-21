@@ -56,7 +56,7 @@ import kotlin.math.pow
 class BigramModel private constructor(
     private val seedJsonReader: () -> String,
     private val userFile: File,
-) {
+) : BigramProvider {
 
     // Production loader — reads bigrams.json from Android assets and persists
     // learned bigrams under the app's files dir.
@@ -128,6 +128,16 @@ class BigramModel private constructor(
         }
     }
 
+    /** Loads the user-learned bigrams from disk (public for PackBackedBigramModel). */
+    fun loadUserLayer() {
+        loadUserBigrams()
+    }
+
+    /** Persists the user-learned bigrams to disk (public for PackBackedBigramModel). */
+    fun persistUserLayer() {
+        persistAsync()
+    }
+
     private fun loadUserBigrams() {
         try {
             if (!userFile.exists()) return
@@ -182,7 +192,7 @@ class BigramModel private constructor(
      * Returns top N next-word candidates given the previous committed word.
      * If prefix is non-empty, filters to candidates starting with prefix.
      */
-    fun nextWords(prevWord: String, prefix: String = "", n: Int = 5): List<String> {
+    override fun nextWords(prevWord: String, prefix: String, n: Int): List<String> {
         val prev = prevWord.lowercase()
         val pfx = prefix.lowercase()
 
@@ -202,6 +212,26 @@ class BigramModel private constructor(
             .sortedByDescending { it.value }
             .take(n)
             .map { it.key }
+    }
+
+    /**
+     * Returns the user-learned layer's real scores for the given previous word.
+     *
+     * Unlike [nextWords] (which blends seed + user), this returns ONLY the
+     * user-learned candidates with their real formula_p scores, so a
+     * pack-backed caller can blend them with the pack's static seed scores
+     * using the same SEED_WEIGHT/USER_WEIGHT formula.
+     *
+     * @return list of (word, formulaP(dee)) in score-descending order
+     */
+    fun userLayerScores(prevWord: String, prefix: String = "", n: Int = 20): List<Pair<String, Float>> {
+        val prev = prevWord.lowercase()
+        val pfx = prefix.lowercase()
+        return (user[prev] ?: emptyList())
+            .map { entry -> entry.word to formulaP(entry.dee).toFloat() }
+            .filter { pfx.isEmpty() || it.first.startsWith(pfx) }
+            .sortedByDescending { it.second }
+            .take(n)
     }
 
     /**
@@ -260,4 +290,46 @@ class BigramModel private constructor(
             }
         }
     }
+
+    // ── ADR-008 task L: support (confidence) exposure ──────────────────────
+    // Purely additive — no existing method above this line is touched. Not
+    // called from load(); callers opt in explicitly (see CodeKeyboardIME.kt)
+    // so load()'s existing body and behavior stay unchanged too.
+    //
+    // bigrams.json itself deliberately keeps its original bare-array shape
+    // (loadSeed() above is unmodified and still parses it that way) — the
+    // per-context total observed count lives in a separate companion file
+    // (bigrams_support.json, built by extract_bigrams_v2.py's --support-output)
+    // instead of changing bigrams.json's shape, which would have broken
+    // loadSeed()'s existing parsing.
+
+    private val support = mutableMapOf<String, Int>()
+
+    fun loadSupport(context: Context, assetName: String = "bigrams_support.json") {
+        loadSupport { context.assets.open(assetName).bufferedReader().readText() }
+    }
+
+    fun loadSupport(file: File) {
+        loadSupport { file.readText() }
+    }
+
+    private fun loadSupport(reader: () -> String) {
+        try {
+            val obj = JSONObject(reader())
+            val keys = obj.keys()
+            while (keys.hasNext()) {
+                val key = keys.next()
+                support[key] = obj.getInt(key)
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("BigramModel", "Failed to load support: $e")
+        }
+    }
+
+    /** Total observed count backing prevWord's followers, or 0 if unknown
+     *  (e.g. loadSupport() was never called, or the word wasn't in the
+     *  training corpus) — the confidence signal Ngram's cascade compares
+     *  across tiers, since the followers' own scores are normalized
+     *  per-context and can't be compared across different contexts. */
+    fun support(prevWord: String): Int = support[prevWord.lowercase()] ?: 0
 }

@@ -81,12 +81,17 @@ Single file, all sections byte-aligned, mmap-friendly. Sections in order:
 │   vocab_count u32  node_count u32             │
 │   follower_count u32  phrase_count u32        │
 │   offsets: vocab, nodes, children, followers  │
+│   char_trie_offset u64  char_trie_nodes u32   │
 │   file_size u64                               │
 ├───────────────────────────────────────────────┤
 │ Vocab table                                   │
 │   offsets: u32 × vocab_count                  │
 │   blob: UTF-8 strings, NUL-terminated         │
 │   (word-ID = array index, sorted by string)   │
+├───────────────────────────────────────────────┤
+│ Character trie (WORD tier)                    │
+│   UTF-8 code-point trie over the full vocab   │
+│   prefix completion + fuzzy + unigram scores  │
 ├───────────────────────────────────────────────┤
 │ Trie nodes (16 bytes each, flat array)        │
 │   children_offset u32  child_count u16        │
@@ -141,6 +146,9 @@ Single file, all sections byte-aligned, mmap-friendly. Sections in order:
 - **Phrase terminals:** a node with `phrase_score > 0` is a complete multi-word
   phrase; the trie path from root to that node *is* the phrase. No separate
   phrase section needed — `phrase_count` = nodes with `phrase_score > 0`.
+- **Character trie (WORD tier):** a second, *character*-keyed trie over the full
+  vocab (see below). Terminal `freq` = log10 unigram score — this is the full
+  unigram score source (all 65,535 words, not just the top-255 root followers).
 
 ### Context trie semantics
 
@@ -162,6 +170,42 @@ for the next word-ID (O(log children) per step). At the context node, read the
 follower list directly. Phrase suggestion = bounded walk from the context node
 collecting phrase terminals within `max_extension` words (v1: 1–3).
 
+### Character trie (WORD tier)
+
+The context trie above answers *"what comes next"*. Current-word completion and
+typo correction need a **character**-keyed structure over the vocabulary, so the
+pack carries a second trie:
+
+- **Nodes:** `char u32` (Unicode code point; 0 = root), `flags u8` (bit0 =
+  terminal, bit1 = hasChildren), `children_offset u32`, `freq u8` (terminal =
+  log10 unigram score, same header range; 0 otherwise).
+- **Children:** per node, `childCount u8` + entries of `char u32` +
+  `child_index u32`.
+- **Terminal freq = unigram score.** The char trie *is* the full unigram score
+  table (1 byte per word, indexed by trie position) — no separate table needed.
+
+Serves four seams:
+
+1. **Prefix completion** — walk the prefix, DFS collect terminals, rank by freq
+   (replaces `Trie.suggest`).
+2. **Fuzzy search** — `BevaTrieSearch` over a `TrieAdapter` on this section
+   (replaces `Trie` + `BevaTrieSearch`).
+3. **Membership** — `has(word)` (replaces `Trie.has`).
+4. **Unigram backoff** — terminal freq by word (replaces `en.trie` as the
+   unigram source for the cascade / `NgramModel(order=1)`).
+
+**Why in-pack and not `en.trie` (decision 2026-08-20):** TRIF stores chars as
+`u8` and `build-trie.js` filters to `[a-z]+` — **ASCII-only**. It cannot
+represent accented or CJK vocabulary. The char trie is keyed by Unicode code
+points, so **one pack per locale works for any language**. This is the
+multi-language requirement (ADR-009 goal 6) made concrete.
+
+**Size:** ~5–7 MB for 65K English words (nodes + children). The alternative
+(binary-search prefix over the sorted vocab + SymSpell fuzzy, no trie) was
+considered: it saves the section but loses frequency ranking without a separate
+unigram table and requires new fuzzy code. The char trie reuses proven
+`BevaTrieSearch` and gives ranking for free.
+
 ### Reader API (Kotlin)
 
 ```kotlin
@@ -175,11 +219,18 @@ class LanguagePack private constructor(private val buf: MappedByteBuffer) {
 
     fun followers(context: List<Int>): List<Pair<Int, Float>>  // ranked, decoded scores
     fun phrases(context: List<Int>, maxExtension: Int = 3): List<Pair<List<Int>, Float>>
+
+    // WORD tier (character trie section):
+    fun suggest(prefix: String, max: Int): List<Pair<String, Float>>  // frequency-ranked
+    fun has(word: String): Boolean                                    // membership
+    fun unigramScore(wordId: Int): Float                              // terminal freq
+    // fuzzy: BevaTrieSearch over a TrieAdapter on the char-trie section
 }
 
 // Adapters to existing seams (ADR-009):
-//   WordDictionary  — prefix/fuzzy current-word completion (vocab + trie)
+//   WordDictionary  — prefix/fuzzy current-word completion (char-trie section)
 //   NgramModel(order=2/3) — next-word from context (follower lists)
+//   NgramModel(order=1) — unigram backoff (char-trie terminal freq)
 //   PhraseCompleter — multi-word chips (phrase terminals)
 ```
 
@@ -195,6 +246,7 @@ scored trigram JSON (nested: {"ctx": {"followers": [...], "support": N}})
   → pass 1: vocab union + log10 range (trigram + top-255 unigram tiers)
   → select top-65,535 vocab by unigram count (prune out-of-vocab contexts/followers)
   → pass 2: three-tier trie (root unigrams / depth-1 bigrams / depth-2 trigrams)
+  → pass 3: character trie over vocab (WORD tier), terminal freq = unigram score
   → quantize scores to u8 (log10 map over header range)
   → write en.cklm
 JSON kept only as debug/eval intermediate.
@@ -231,7 +283,7 @@ fixture regressions, reader parity exact. If the bar fails, widen quantization
 | `scripts/compile_cklm.py` | **New** | JSON/counts → `en.cklm` (prune, quantize, trie, vocab) |
 | `scripts/verify_quantization.py` | **New** | Top-N agreement: quantized vs unquantized |
 | `android/app/src/main/java/com/codekeyboard/LanguagePack.kt` | **New** | mmap reader + vocab/trie/follower/phrase access |
-| `android/app/src/main/java/com/codekeyboard/WordDictionary.kt` | **New** | Pack-backed prefix/fuzzy completion (replaces `Trie` for locale) |
+| `android/app/src/main/java/com/codekeyboard/WordDictionary.kt` | **New** | Pack-backed prefix/fuzzy completion over char-trie section (replaces `Trie` for locale) |
 | `android/app/src/main/java/com/codekeyboard/PackNgramModel.kt` | **New** | `NgramModel(order=2/3)` over pack follower lists |
 | `android/app/src/main/java/com/codekeyboard/PhraseCompleter.kt` | **New** | Phrase-terminal walk (v1 minimal) |
 | `android/app/src/main/assets/en.cklm` | **New** | Compiled pack (replaces `en.trie` + `bigrams.json` + `trigrams.json` in prod) |
@@ -254,6 +306,9 @@ fixture regressions, reader parity exact. If the bar fails, widen quantization
   8-byte double; ~2.7M followers ≈ 19 MB saved vs doubles).
 - Phrase support is free at the format level (trie terminals) — no redesign when
   sentence completion lands.
+- **Multi-language:** the char-trie WORD tier is keyed by Unicode code points —
+  one pack per locale works for any language (TRIF is ASCII-only and cannot
+  represent accented/CJK vocab).
 - ADR-008 cascade policy work still applies on top of pack-backed models.
 
 ### Harder / deferred
@@ -279,6 +334,8 @@ fixture regressions, reader parity exact. If the bar fails, widen quantization
 | AOSP `.dict` | Ready-made packs, but no trigrams/phrases, 8 MB cap, dictionary-not-LM |
 | u16 word IDs | 2 bytes/follower entry (vs 4 for u32); 64K vocab ceiling documented |
 | u8 scores | 1 byte/follower; 256 levels ≈ 0.04 log10/step — must pass verification gate |
+| Char-trie WORD tier in-pack | ~5–7 MB for 65K English words; reuses proven `BevaTrieSearch`, gives frequency-ranked completion + full unigram scores for free |
+| Keep `en.trie` for WORD tier | Zero new format work, but TRIF is ASCII-only — dead end for multi-language |
 | Phrase terminals in trie | One structure for words+phrases; phrase walk is bounded (1–3 words) |
 
 ---
@@ -293,9 +350,9 @@ fixture regressions, reader parity exact. If the bar fails, widen quantization
 | B | ✅ `scripts/verify_quantization.py` — quantize scored JSON to u8, re-rank, report top-N agreement vs unquantized (linear + `--log10` modes) |
 | C | ✅ Decision gate: PASSED — log10 100% top-1/5/10, zero flips → u8 confirmed |
 | D | ✅ `scripts/compile_cklm.py` — vocab + trie + follower lists + phrase terminals → `en.cklm` (three-input, vocab cap, log10) |
-| E | `LanguagePack.kt` — mmap reader (header, vocab, trie walk, follower decode, phrase walk) |
+| E | `LanguagePack.kt` — mmap reader (header, vocab, trie walk, follower decode, phrase walk) — **done; add char-trie section read (format v1 change)** |
 | F | `LanguagePackTest.kt` — reader parity vs quantized JSON + lookup correctness |
-| G | `WordDictionary.kt` — pack-backed prefix/fuzzy completion; parity vs `Trie` |
+| G | `WordDictionary.kt` — pack-backed prefix/fuzzy completion over char-trie section; parity vs `Trie` |
 | H | `PackNgramModel.kt` — `NgramModel(order=2/3)` over pack follower lists |
 | I | Wire `Ngram` + `CodeKeyboardIME` + `SuggestionStrategy` to pack behind flag; JSON/TRIF fallback |
 | J | Eval harness (ADR-007): pack-backed vs JSON baseline — no regression |
@@ -340,6 +397,9 @@ A → B → C → D → E → F → G/H → I → J → K → L → M
 
 - **B/C was the risk gate — now PASSED** (log10 100% top-1/5/10, zero flips).
   u8 confirmed; no 2-byte scores needed.
+- **Char-trie section (2026-08-20):** format v1 change — header gains
+  `char_trie_offset`/`char_trie_nodes` (from reserved bytes); compiler emits the
+  section (pass 3); reader (E) must read it; `WordDictionary` (G) consumes it.
 - **E** is the highest-risk implementation task: mmap reader correctness (endian,
   offsets, bounds) — `LanguagePackTest` parity is mandatory, not optional.
 - **I** touches shipping IME code; keep behind a flag with JSON/TRIF fallback
@@ -361,6 +421,10 @@ A → B → C → D → E → F → G/H → I → J → K → L → M
 4. **Verification:** quantization gate (top-N agreement) before shipping; reader
    parity test; ADR-007 eval no-regression.
 5. **Phrases:** supported at the format level now; extraction/UI is a follow-on.
+6. **WORD tier in-pack (2026-08-20):** a UTF-8 character-trie section (terminal
+   freq = unigram score) provides frequency-ranked prefix completion,
+   `BevaTrieSearch` fuzzy, full unigram backoff, and membership — replacing
+   `en.trie`. TRIF is ASCII-only and cannot serve multi-language.
 
 ---
 

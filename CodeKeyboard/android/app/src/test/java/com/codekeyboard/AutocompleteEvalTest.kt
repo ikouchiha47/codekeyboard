@@ -72,16 +72,31 @@ class AutocompleteEvalTest {
         return context to prefix
     }
 
-    private fun buildProductionStrategy(): SuggestionStrategy {
-        val trie = Trie.load(File("src/main/assets/en.trie"))
-        val bigramModel = BigramModel(
-            seedJsonFile = File("src/main/assets/bigrams.json"),
-            // Nonexistent path — fresh install, no learned bigrams yet.
+    /**
+     * Pack-backed strategy — the CKLM path that CodeKeyboardIME now wires up
+     * (ADR-010 task I). Loads en.cklm from the real asset path, builds
+     * WordDictionary + PackNgramModel(order=2) + PackBackedBigramModel, and
+     * exercises the same suggestion pipeline. This is the production path;
+     * the legacy en.trie/bigrams.json path is being removed (tasks L/M).
+     *
+     * This is the integration gate that catches wiring bugs the component
+     * tests miss: a missing/misplaced en.cklm asset, or a score-blend
+     * regression in PackBackedBigramModel, both surface as a pass-rate drop.
+     */
+    private fun buildPackStrategy(): SuggestionStrategy {
+        val pack = LanguagePack.open(File("src/main/assets/en.cklm"))
+        val wordDict = WordDictionary(pack)
+        val userTrie = UserTrie() // fresh install — no learned words
+        val userAdapter = UserTrieAdapter(userTrie)
+        val baseAdapter = wordDict.adapter
+        // Empty user layer — fresh install. Seed file is unused by the pack path.
+        val userBigram = BigramModel(
+            seedJsonFile = File.createTempFile("eval_user_bigrams", ".json").apply { delete() },
             userFile = File.createTempFile("eval_user_bigrams", ".json").apply { delete() },
         )
-        bigramModel.load()
-        val userTrie = UserTrie() // fresh install — no learned words
-        return BigramAwareSuggestionStrategy(MergedSuggestionStrategy(userTrie, trie), bigramModel)
+        userBigram.loadUserLayer()
+        val packBigram = PackBackedBigramModel(PackNgramModel(pack, order = 2), userBigram)
+        return BigramAwareSuggestionStrategy(MergedSuggestionStrategy(userAdapter, baseAdapter, wordDict), packBigram)
     }
 
     private fun runEval(strategy: SuggestionStrategy, cases: List<Case>): List<Result> =
@@ -125,7 +140,7 @@ class AutocompleteEvalTest {
     }
 
     @Test fun `report autocomplete accuracy against checkpointed baseline`() {
-        val strategy = buildProductionStrategy()
+        val strategy = buildPackStrategy()
         val cases = loadCases("autocomplete_eval_cases.tsv")
         val results = runEval(strategy, cases)
         printReport("Curated eval report", results, CURATED_BASELINE_PASS_RATE)
@@ -139,11 +154,31 @@ class AutocompleteEvalTest {
     }
 
     @Test fun `report autocomplete accuracy against real-text generated corpus`() {
-        val strategy = buildProductionStrategy()
+        val strategy = buildPackStrategy()
         val cases = loadCases("autocomplete_eval_cases_generated.tsv")
         val results = runEval(strategy, cases)
         printReport("Generated-corpus eval report (single-ground-truth, no gate)", results, null)
         // No assertion here on purpose — see class kdoc: a miss can be a
         // legitimate synonym of the real source-text word, not a real defect.
+    }
+
+    /**
+     * Pack-backed eval (ADR-010 task J gate): run the same curated fixture
+     * through the CKLM pack path and assert it meets the same checkpointed
+     * baseline as the legacy path. This is the regression gate that must be
+     * green before removing the legacy assets (tasks L/M).
+     */
+    @Test fun `pack-backed autocomplete accuracy meets checkpointed baseline`() {
+        val strategy = buildPackStrategy()
+        val cases = loadCases("autocomplete_eval_cases.tsv")
+        val results = runEval(strategy, cases)
+        printReport("Pack-backed curated eval report", results, CURATED_BASELINE_PASS_RATE)
+
+        val overallPassRate = results.count { it.passed }.toDouble() / results.size
+        assertTrue(
+            "Pack-backed autocomplete pass rate $overallPassRate dropped below checkpointed baseline " +
+                "$CURATED_BASELINE_PASS_RATE — see printed report above for regressions",
+            overallPassRate >= CURATED_BASELINE_PASS_RATE
+        )
     }
 }

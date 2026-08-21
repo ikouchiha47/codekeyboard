@@ -27,7 +27,7 @@ class CodeKeyboardIME : InputMethodService() {
 
     private lateinit var keyboardView: NativeKeyboardView
     private lateinit var suggestionBar: SuggestionBarView
-    private lateinit var trie: Trie
+    private lateinit var wordDict: WordDictionary
     private lateinit var userTrie: UserTrie
     private lateinit var suggestionStrategy: SuggestionStrategy
     private lateinit var wordLearner: WordLearner
@@ -46,8 +46,12 @@ class CodeKeyboardIME : InputMethodService() {
     private var supportsComposing = true
     private val flushExecutor = Executors.newSingleThreadExecutor()
     private var emojiPanel: EmojiPanelView? = null
-    private lateinit var bigramModel: BigramModel
+    private lateinit var packBigram: PackBackedBigramModel
+    private lateinit var ngram: Ngram
     private var prevCommittedWord = ""
+    // Rolling window of recently committed words, sized off the cascade's
+    // highest order (ADR-008) — feeds the trigram tier's 2-word context.
+    private val recentContext = ArrayDeque<String>()
 
     // ── Emoji panel ───────────────────────────────────────────────────────────
 
@@ -101,12 +105,46 @@ class CodeKeyboardIME : InputMethodService() {
         super.onCreate()
         KeyboardSettings.init(this)
         SnippetStore.init()
-        trie = Trie.load(this)
+
+        // Load CKLM language pack for the active locale (configurable via RN settings).
+        // The locale is read from SharedPreferences ("language", default "en") — the
+        // same bridge the RN settings screen uses for layout/keymap. Pack asset is
+        // copied from assets to filesDir on first run for mmap access.
+        val locale = KeyboardSettings.getString("language", "en")
+        val packAssetName = "$locale.cklm"
+        val packFile = File(filesDir, packAssetName)
+        if (!packFile.exists()) {
+            assets.open(packAssetName).use { input ->
+                packFile.outputStream().use { output ->
+                    input.copyTo(output)
+                }
+            }
+        }
+        val pack = LanguagePack.open(packFile)
+        wordDict = WordDictionary(pack)
         userTrie = UserTrie.load(File(filesDir, "user.trie"))
-        bigramModel = BigramModel(this).also { it.load() }
+
+        // Pack-backed n-gram cascade: trigram (order=3) + bigram (order=2)
+        ngram = Ngram(listOf(
+            PackNgramModel(pack, order = 3),
+            PackNgramModel(pack, order = 2),
+        ))
+
+        // Pack-backed bigram with user-learned decay layer for personalization.
+        // The user layer file is configurable; the static seed comes from the pack
+        // (PackBackedBigramModel ignores BigramModel's seed, so we pass the user file
+        // as both args — loadSeed() reads it but the pack path doesn't use it).
+        val userBigram = BigramModel(File(filesDir, "user_bigrams.json"), File(filesDir, "user_bigrams.json"))
+        userBigram.loadUserLayer()
+        packBigram = PackBackedBigramModel(PackNgramModel(pack, order = 2), userBigram)
+
+        // Create adapters for fuzzy search
+        val userAdapter = UserTrieAdapter(userTrie)
+        val baseAdapter = wordDict.adapter
+
         suggestionStrategy = BigramAwareSuggestionStrategy(
-            MergedSuggestionStrategy(userTrie, trie), bigramModel)
-        wordLearner = WordLearner(userTrie) { word -> trie.suggest(word, 1).firstOrNull() == word }
+            MergedSuggestionStrategy(userAdapter, baseAdapter, wordDict), packBigram)
+        wordLearner = WordLearner(userTrie) { word -> wordDict.suggest(word, 1).firstOrNull() == word }
         Metrics.client = LogMetrics
     }
 
@@ -226,6 +264,7 @@ class CodeKeyboardIME : InputMethodService() {
         }
         composing.clear()
         prevCommittedWord = ""
+        recentContext.clear()
         currentInputConnection?.finishComposingText()
         if (::suggestionBar.isInitialized) suggestionBar.clear()
 
@@ -254,6 +293,10 @@ class CodeKeyboardIME : InputMethodService() {
         val snapshot = userTrie
         val target = File(filesDir, "user.trie")
         flushExecutor.submit { snapshot.save(target) }
+        // Also persist the user-learned bigram layer
+        if (::packBigram.isInitialized) {
+            flushExecutor.submit { packBigram.persistUserLayer() }
+        }
     }
 
     private fun isPasswordField(info: EditorInfo): Boolean {
@@ -341,7 +384,7 @@ class CodeKeyboardIME : InputMethodService() {
             "space"       -> {
                 flushComposing(ic)
                 commitCharAndNotify(ic, " ")
-                val next = bigramModel.nextWords(prevCommittedWord, n = 5)
+                val next = ngram.nextWords(recentContext.toList(), n = 5)
                 if (next.isNotEmpty()) suggestionBar.update("", next)
             }
             "emoji"       -> showEmojiPanel()
@@ -536,6 +579,14 @@ class CodeKeyboardIME : InputMethodService() {
         suggestionBar.update(fragment, suggestions)
     }
 
+    // ADR-008: keep the cascade's rolling context window in sync with
+    // committed words. Sized off ngram.maxContextNeeded so a later-added
+    // pentagram widens it automatically (Open/Closed).
+    private fun pushRecentWord(word: String) {
+        recentContext.addLast(word)
+        while (recentContext.size > ngram.maxContextNeeded) recentContext.removeFirst()
+    }
+
     private fun flushComposing(ic: InputConnection?) {
         val typed = composing.flush()
         if (typed.isNotEmpty()) {
@@ -554,7 +605,8 @@ class CodeKeyboardIME : InputMethodService() {
             Metrics.histogram("keyboard.word.keystrokes", keystrokesSinceCommit.toDouble(),
                 "method" to "typed")
             Metrics.incr("keyboard.word.committed", "method" to "typed")
-            if (prevCommittedWord.isNotEmpty()) bigramModel.recordTransition(prevCommittedWord, word)
+if (prevCommittedWord.isNotEmpty()) packBigram.recordTransition(prevCommittedWord, word)
+            pushRecentWord(word)
             prevCommittedWord = word
         }
         keystrokesSinceCommit = 0
@@ -589,11 +641,12 @@ class CodeKeyboardIME : InputMethodService() {
         Metrics.histogram("keyboard.word.keystrokes", keystrokesSinceCommit.toDouble(),
             "method" to "suggestion")
         Metrics.incr("keyboard.word.committed", "method" to "suggestion")
-        if (prevCommittedWord.isNotEmpty()) bigramModel.recordTransition(prevCommittedWord, word)
+        if (prevCommittedWord.isNotEmpty()) packBigram.recordTransition(prevCommittedWord, word)
+        pushRecentWord(word)
         prevCommittedWord = word
         keystrokesSinceCommit = 0
         // Show next-word suggestions immediately after tap
-        val next = bigramModel.nextWords(word, n = 5)
+        val next = ngram.nextWords(recentContext.toList(), n = 5)
         if (next.isNotEmpty()) suggestionBar.update("", next) else suggestionBar.clear()
     }
 

@@ -129,6 +129,14 @@ dependencies {
     // used by unit tests throws "not mocked" for org.json/android.util.Log
     // calls; this lets BigramModel's real JSON-parsing code run as-is.
     testImplementation("org.json:json:20231013")
+    // Jackson for streaming JSON parsing (parity test)
+    testImplementation("com.fasterxml.jackson.core:jackson-core:2.17.1")
+}
+
+// Increase test heap for large JSON streaming
+tasks.withType(Test) {
+    maxHeapSize = "2g"
+    jvmArgs '-XX:+UseG1GC'
 }
 
 // Integration tests: load real assets (en.trie) and run correctness + perf checks.

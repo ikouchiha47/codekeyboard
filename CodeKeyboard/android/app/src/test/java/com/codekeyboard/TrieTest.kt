@@ -87,11 +87,11 @@ class TrieTest {
     // ── Correctness: suggest() ────────────────────────────────────────────────
 
     @Test fun `suggest returns empty list for empty prefix`() {
-        assertTrue(trie.suggest("").isEmpty())
+        assertTrue(trie.suggest("", 5).isEmpty())
     }
 
     @Test fun `suggest returns empty list for nonexistent prefix`() {
-        assertTrue(trie.suggest("xqzjw").isEmpty())
+        assertTrue(trie.suggest("xqzjw", 5).isEmpty())
     }
 
     @Test fun `suggest hel returns help in results`() {

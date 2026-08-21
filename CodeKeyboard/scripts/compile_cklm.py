@@ -291,6 +291,7 @@ class NodeMeta:
     follower_count: int = 0
     phrase_score: int = 0
     flags: int = 0
+    support: int = 0
     # Temp: children being built for this node (list of (word_id, child_node_index))
     children: List[Tuple[int, int]] = field(default_factory=list)
     # Temp: followers being built for this node (list of (word_id, quantized_score))
@@ -315,7 +316,7 @@ def pass1_collect(
     thr: int,
     max_vocab: int = 65535,
     max_unigram_followers: int = 255,
-) -> Tuple[List[str], Dict[str, int], float, float, List[Tuple[str, int]]]:
+) -> Tuple[List[str], Dict[str, int], float, float, List[Tuple[str, int]], Dict[str, int]]:
     """
     Pass 1: collect vocab, select top-max_vocab words by unigram count, and
     compute the global log10 score range.
@@ -324,9 +325,10 @@ def pass1_collect(
     unigram tier only. Bigram scores are EXCLUDED from the range: the bigram
     tail below the floor clamps to byte 0 (secondary tier).
 
-    Returns (vocab_list, word_to_id, log10_min, log10_max, unigram_top).
+    Returns (vocab_list, word_to_id, log10_min, log10_max, unigram_top, unigram_counts_selected).
     vocab_list is sorted lexicographically (word IDs = position in it).
     unigram_top is the top-max_unigram_followers (word, count) pairs.
+    unigram_counts_selected is the unigram count for each word in the selected vocab.
     """
     vocab = set()
     log10_min = float('inf')
@@ -397,7 +399,11 @@ def pass1_collect(
         print(f"  Vocab capped: {len(vocab):,} -> {len(selected):,} (top {max_vocab:,} by unigram count)")
     vocab_list = sorted(selected)
     word_to_id = {w: i for i, w in enumerate(vocab_list)}
-    return vocab_list, word_to_id, log10_min, log10_max, unigram_top
+    
+    # Build unigram counts for selected vocab only (for char-trie terminal freq)
+    unigram_counts_selected = {w: unigram_counts.get(w, 0) for w in vocab_list}
+    
+    return vocab_list, word_to_id, log10_min, log10_max, unigram_top, unigram_counts_selected
 
 
 def load_phrases(phrases_path: str, word_to_id: Dict[str, int]) -> Dict[str, float]:
@@ -438,6 +444,7 @@ def pass2_build(
     children_temp: IO[bytes],
     followers_temp: IO[bytes],
     unigram_top: List[Tuple[str, int]],
+    bigram_support_path: str | None = None,
 ) -> Tuple[List[NodeMeta], int, int, int]:
     """
     Pass 2: build three-tier trie, write children/followers to temp files.
@@ -484,9 +491,16 @@ def pass2_build(
         # Sort by score descending (already in count-descending order from TSV, but ensure)
         root_followers.sort(key=lambda x: x[1], reverse=True)
         nodes[0].followers = root_followers
+        # Root support = total unigram count (sum of all unigram counts from unigram_top)
+        nodes[0].support = sum(count for _, count in unigram_top)
 
     # --- Tier 2: Bigrams at depth-1 ---
     if bigram_path:
+        # Load bigram support map ({"w1": N}) if provided — real counts, not normalized scores
+        bigram_support: Dict[str, int] = {}
+        if bigram_support_path:
+            with open(bigram_support_path, 'r', encoding='utf-8') as f:
+                bigram_support = json.load(f)
         for ctx, followers in stream_bigrams(bigram_path):
             # Context is a single word
             ctx_word_id = word_to_id.get(ctx)
@@ -500,6 +514,8 @@ def pass2_build(
                 nodes.append(NodeMeta())
                 nodes[0].children.append((ctx_word_id, child_idx))
                 child_map[key] = child_idx
+            # Bigram support = real observed count from bigrams_support.json (fallback: sum of follower scores)
+            nodes[child_idx].support = int(bigram_support.get(ctx, sum(c for _, c in followers)))
             # Attach followers to this depth-1 node
             for word, score in followers:
                 word_id = word_to_id.get(word)
@@ -537,6 +553,9 @@ def pass2_build(
                 nodes[node_idx].children.append((word_id, child_idx))
                 child_map[key] = child_idx
             node_idx = child_idx
+
+        # Set support for this context node (from entry.support)
+        nodes[node_idx].support = entry.support
 
         # Attach followers to the final node
         for word, score in entry.followers:
@@ -582,6 +601,136 @@ def pass2_build(
     return nodes, len(nodes), total_followers, phrase_count
 
 
+def pass3_build_char_trie(
+    vocab: List[str],
+    unigram_counts: Dict[str, int],
+    log10_min: float,
+    log10_max: float,
+) -> Tuple[List[Tuple[int, int, int, int]], List[Tuple[int, int]], int]:
+    """
+    Pass 3: Build character trie (WORD tier) over the full vocab.
+    
+    Returns (char_nodes, char_children, char_trie_nodes_count).
+    char_nodes: list of (char, flags, children_offset, freq) for each node
+    char_children: list of (char, child_index) for all children, in node order
+    char_trie_nodes_count: total number of nodes
+    
+    Node layout (12 bytes each):
+    - char: u32 (Unicode code point; 0 = root)
+    - flags: u8 (bit0 = isTerminal, bit1 = hasChildren)
+    - children_offset: u32 (byte offset into char_children data, relative to char-trie section start)
+    - freq: u8 (terminal = log10-encoded unigram score; 0 otherwise)
+    - 2 reserved bytes
+    
+    Children data layout (per node, in node order):
+    - childCount: u8
+    - childCount entries of: char u32 + child_index u32 (8 bytes each)
+    Children sorted by char for deterministic output.
+    """
+    # Build trie structure in memory first
+    # Each node: {'char': int, 'children': dict[char->node_idx], 'terminal_word': str|None, 'word_id': int|None}
+    nodes = [{'char': 0, 'children': {}, 'terminal_word': None, 'word_id': None}]  # root at index 0
+    
+    # Insert all vocab words
+    for word_id, word in enumerate(vocab):
+        node_idx = 0
+        for ch in word:
+            cp = ord(ch)
+            if cp not in nodes[node_idx]['children']:
+                new_idx = len(nodes)
+                nodes[node_idx]['children'][cp] = new_idx
+                nodes.append({'char': cp, 'children': {}, 'terminal_word': None, 'word_id': None})
+            node_idx = nodes[node_idx]['children'][cp]
+        # Mark terminal
+        nodes[node_idx]['terminal_word'] = word
+        nodes[node_idx]['word_id'] = word_id
+    
+    # Compute unigram scores for terminal nodes
+    # Score = count / max_count (same as root followers), log10-encoded over header range
+    max_count = max(unigram_counts.values()) if unigram_counts else 1
+    
+    def quantize_unigram_score(count: int) -> int:
+        if count <= 0:
+            return 0
+        score = count / max_count
+        if score <= 0:
+            return 0
+        log10_score = math.log10(score)
+        if log10_max == log10_min:
+            return 255
+        byte_val = round((log10_score - log10_min) / (log10_max - log10_min) * 255)
+        return max(0, min(255, byte_val))
+    
+    # Now do a DFS to assign node indices in pre-order (root first, then children sorted by char)
+    # This gives us the final node order for the flat array
+    final_nodes = []
+    final_children = []  # list of (char, child_index) per node, in node order
+    
+    def dfs(node_idx: int) -> int:
+        """Returns the assigned index in final_nodes."""
+        node = nodes[node_idx]
+        my_index = len(final_nodes)
+        
+        # Build this node FIRST (pre-order)
+        flags = 0
+        if node['terminal_word'] is not None:
+            flags |= 1  # bit0 = isTerminal
+        # We'll determine hasChildren after processing children
+        
+        # Children offset will be filled in later (relative to char-trie section start)
+        # For now, store the child entries
+        freq = 0
+        if node['terminal_word'] is not None:
+            count = unigram_counts.get(node['terminal_word'], 0)
+            freq = quantize_unigram_score(count)
+        
+        # Placeholder for children - will fill in after recursive calls
+        final_nodes.append({
+            'char': node['char'],
+            'flags': flags,
+            'children': [],  # Will be filled below
+            'freq': freq,
+        })
+        
+        # Process children in sorted order by char
+        sorted_children = sorted(node['children'].items())
+        child_entries = []
+        for ch, child_idx in sorted_children:
+            child_final_idx = dfs(child_idx)
+            child_entries.append((ch, child_final_idx))
+        
+        # Update the node with children and hasChildren flag
+        final_nodes[my_index]['children'] = child_entries
+        if child_entries:
+            final_nodes[my_index]['flags'] |= 2  # bit1 = hasChildren
+        
+        return my_index
+    
+    dfs(0)  # Start from root
+    
+    # Now compute children offsets and flatten
+    # Children data starts after the node array
+    node_count = len(final_nodes)
+    node_array_size = node_count * 12  # 12 bytes per node
+    
+    char_nodes = []
+    char_children = []
+    children_offset = node_array_size  # Start of children data
+    
+    for node in final_nodes:
+        child_count = len(node['children'])
+        char_nodes.append((node['char'], node['flags'], children_offset, node['freq']))
+        
+        if child_count > 0:
+            char_children.append((child_count,))  # marker for childCount
+            for ch, child_idx in node['children']:
+                char_children.append((ch, child_idx))
+            # Update children_offset for next node
+            children_offset += 1 + child_count * 8  # 1 byte childCount + 8 bytes per child
+    
+    return char_nodes, char_children, node_count
+
+
 def write_cklm(
     output_path: str,
     vocab: List[str],
@@ -591,6 +740,9 @@ def write_cklm(
     log10_min: float,
     log10_max: float,
     phrase_count: int,
+    char_nodes: List[Tuple[int, int, int, int]],
+    char_children: List[Tuple],
+    char_trie_node_count: int,
 ):
     """Write the final CKLM binary file."""
     vocab_count = len(vocab)
@@ -606,23 +758,38 @@ def write_cklm(
         vocab_blob.extend(word.encode('utf-8'))
         vocab_blob.append(0)  # NUL terminator
 
+    # Build char-trie section in memory
+    # Node array: 12 bytes each (char u32, flags u8, children_offset u32, freq u8, 2 reserved)
+    char_node_array = bytearray()
+    for char, flags, children_offset, freq in char_nodes:
+        char_node_array.extend(struct.pack('<IBIBBB', char, flags, children_offset, freq, 0, 0))
+    
+    # Children data
+    char_children_data = bytearray()
+    for entry in char_children:
+        if len(entry) == 1:
+            # childCount marker
+            char_children_data.append(entry[0])
+        else:
+            # (char, child_index)
+            char_children_data.extend(struct.pack('<II', entry[0], entry[1]))
+    
+    char_trie_section_size = len(char_node_array) + len(char_children_data)
+
     # Calculate section offsets
     header_size = 96
     vocab_section_size = 4 * vocab_count + len(vocab_blob)
-    nodes_section_size = 16 * node_count
-    children_section_size = children_temp.tell()
-    followers_section_size = followers_temp.tell()
-
-    offset_vocab = header_size
-    offset_nodes = offset_vocab + vocab_section_size
+    char_trie_offset = header_size + vocab_section_size
+    nodes_section_size = 20 * node_count
+    offset_nodes = char_trie_offset + char_trie_section_size
     offset_children = offset_nodes + nodes_section_size
-    offset_followers = offset_children + children_section_size
-    file_size = offset_followers + followers_section_size
+    offset_followers = offset_children + children_temp.tell()
+    file_size = offset_followers + followers_temp.tell()
 
     with open(output_path, 'wb') as f:
-        # Header
+        # Header (updated format: char_trie_offset u64 at byte 72, char_trie_nodes u32 at byte 80, 12 bytes reserved)
         f.write(struct.pack(
-            '<4sHBBffIIIIQQQQQ24s',
+            '<4sHBBffIIIIQQQQQQI12s',
             b'CKLM',           # magic
             1,                # version
             2,                # word_id_bytes (u16)
@@ -633,12 +800,14 @@ def write_cklm(
             node_count,       # node_count
             follower_count,   # follower_count
             phrase_count,     # phrase_count
-            offset_vocab,     # offset_vocab
+            header_size,      # offset_vocab (always 96)
             offset_nodes,     # offset_nodes
             offset_children,  # offset_children
             offset_followers, # offset_followers
             file_size,        # file_size
-            b'\x00' * 24      # reserved2
+            char_trie_offset, # char_trie_offset (NEW)
+            char_trie_node_count, # char_trie_nodes (NEW)
+            b'\x00' * 12      # reserved (12 bytes, was 24)
         ))
 
         # Vocab section: offsets then blob
@@ -646,16 +815,22 @@ def write_cklm(
             f.write(struct.pack('<I', off))
         f.write(vocab_blob)
 
-        # Nodes section
+        # Char-trie section (WORD tier)
+        f.write(char_node_array)
+        f.write(char_children_data)
+
+        # Nodes section (context trie) — 20 bytes each: children_offset u32, child_count u16,
+        # followers_offset u32, follower_count u8, phrase_score u8, flags u8, support u32, 3 reserved
         for node in nodes:
             f.write(struct.pack(
-                '<IHIBBBBBB',
-                node.children_offset,
-                node.child_count,
-                node.followers_offset,
-                node.follower_count,
-                node.phrase_score,
-                node.flags,
+                '<IHIBBBIBBB',
+                int(node.children_offset),
+                int(node.child_count),
+                int(node.followers_offset),
+                int(node.follower_count),
+                int(node.phrase_score),
+                int(node.flags),
+                int(node.support),
                 0, 0, 0  # reserved
             ))
 
@@ -668,12 +843,12 @@ def write_cklm(
         f.write(followers_temp.read())
 
 
-def verify_cklm(output_path: str, vocab: List[str], nodes: List[NodeMeta], log10_min: float, log10_max: float):
+def verify_cklm(output_path: str, vocab: List[str], nodes: List[NodeMeta], log10_min: float, log10_max: float, char_trie_node_count: int = 0):
     """Verify the written CKLM file by reading it back."""
     with open(output_path, 'rb') as f:
-        # Read header
+        # Read header (new format with char_trie_offset and char_trie_nodes)
         header = f.read(96)
-        magic, version, word_id_bytes, reserved, score_min, score_max, vocab_count, node_count, follower_count, phrase_count, offset_vocab, offset_nodes, offset_children, offset_followers, file_size, reserved2 = struct.unpack('<4sHBBffIIIIQQQQQ24s', header)
+        magic, version, word_id_bytes, reserved, score_min, score_max, vocab_count, node_count, follower_count, phrase_count, offset_vocab, offset_nodes, offset_children, offset_followers, file_size, char_trie_offset, char_trie_nodes, reserved2 = struct.unpack('<4sHBBffIIIIQQQQQQI12s', header)
 
         assert magic == b'CKLM', f"Bad magic: {magic}"
         assert version == 1, f"Bad version: {version}"
@@ -682,6 +857,9 @@ def verify_cklm(output_path: str, vocab: List[str], nodes: List[NodeMeta], log10
         assert abs(score_max - log10_max) < 1e-5, f"score_max mismatch: {score_max} vs {log10_max}"
         assert vocab_count == len(vocab), f"vocab_count mismatch: {vocab_count} vs {len(vocab)}"
         assert node_count == len(nodes), f"node_count mismatch: {node_count} vs {len(nodes)}"
+        if char_trie_node_count > 0:
+            assert char_trie_nodes == char_trie_node_count, f"char_trie_nodes mismatch: {char_trie_nodes} vs {char_trie_node_count}"
+            assert char_trie_offset > 0 and char_trie_offset < file_size, f"char_trie_offset invalid: {char_trie_offset}"
 
         # Read vocab
         f.seek(offset_vocab)
@@ -694,15 +872,17 @@ def verify_cklm(output_path: str, vocab: List[str], nodes: List[NodeMeta], log10
             read_word = vocab_blob[start:end].decode('utf-8')
             assert read_word == word, f"Vocab word {i} mismatch: {read_word!r} vs {word!r}"
 
-        # Read nodes
+        # Read nodes (20 bytes each: children_offset u32, child_count u16,
+        # followers_offset u32, follower_count u8, phrase_score u8, flags u8, support u32, 3 reserved)
         f.seek(offset_nodes)
         for i, node in enumerate(nodes):
-            children_offset, child_count, followers_offset, follower_count, phrase_score, flags, r1, r2, r3 = struct.unpack('<IHIBBBBBB', f.read(16))
+            children_offset, child_count, followers_offset, follower_count, phrase_score, flags, support, r1, r2, r3 = struct.unpack('<IHIBBBIBBB', f.read(20))
             assert children_offset == node.children_offset, f"Node {i} children_offset mismatch"
             assert child_count == node.child_count, f"Node {i} child_count mismatch"
             assert followers_offset == node.followers_offset, f"Node {i} followers_offset mismatch"
             assert follower_count == node.follower_count, f"Node {i} follower_count mismatch"
             assert phrase_score == node.phrase_score, f"Node {i} phrase_score mismatch"
+            assert support == node.support, f"Node {i} support mismatch: {support} vs {node.support}"
 
         # Verify children sorted by word_id
         f.seek(offset_children)
@@ -725,6 +905,24 @@ def verify_cklm(output_path: str, vocab: List[str], nodes: List[NodeMeta], log10
                     word_id, score = struct.unpack('<HB', f.read(3))
                     assert score <= prev_score, f"Followers not in score-descending order at node"
                     prev_score = score
+
+        # Verify char-trie section (basic sanity)
+        if char_trie_nodes > 0:
+            f.seek(char_trie_offset)
+            # Check root node
+            root_data = f.read(12)
+            char, flags, children_offset, freq, r1, r2 = struct.unpack('<IBIBBB', root_data)
+            assert char == 0, f"Root node char should be 0, got {char}"
+            assert flags & 2, f"Root node should have children flag"
+            
+            # Check root has children
+            f.seek(char_trie_offset + children_offset)
+            child_count = f.read(1)[0]
+            assert child_count > 0, f"Root should have children"
+            
+            # Walk a known word if vocab has common words
+            # (Just verify structure, not specific words since vocab is synthetic)
+            print(f"  Char-trie: {char_trie_nodes} nodes, root has {child_count} children")
 
     print("  Verification passed!")
 
@@ -869,6 +1067,7 @@ def main():
     parser.add_argument('--model', help='Scored trigram model JSON file (required)')
     parser.add_argument('--output', help='Output CKLM file path (required)')
     parser.add_argument('--bigrams', help='Optional scored bigram JSON file (flat shape)')
+    parser.add_argument('--bigrams-support', help='Optional bigram support JSON file ({"w1": N} shape)')
     parser.add_argument('--unigrams', help='Optional unigram TSV file (word\\tcount)')
     parser.add_argument('--phrases', help='Optional phrases file (phrase\\tscore per line)')
     parser.add_argument('--thr', type=int, default=0, help='Support threshold for trigrams (default: 0)')
@@ -895,7 +1094,7 @@ def main():
         generate_synthetic_unigrams(synth_unigrams, num_words=50)
 
         # Need vocab first to generate phrases, so do a quick pass1
-        vocab, word_to_id, _, _, _ = pass1_collect(synth_trigrams, synth_bigrams, synth_unigrams, args.thr)
+        vocab, word_to_id, _, _, _, _ = pass1_collect(synth_trigrams, synth_bigrams, synth_unigrams, args.thr)
         generate_synthetic_phrases(synth_phrases, synth_trigrams, synth_bigrams, num_phrases=10)
 
         args.model = synth_trigrams
@@ -920,7 +1119,7 @@ def main():
 
     # Pass 1
     print("Pass 1: collecting vocab and log10 score range...")
-    vocab, word_to_id, log10_min, log10_max, unigram_top = pass1_collect(
+    vocab, word_to_id, log10_min, log10_max, unigram_top, unigram_counts = pass1_collect(
         args.model, args.bigrams, args.unigrams, args.thr,
         args.max_vocab, args.max_unigram_followers
     )
@@ -942,16 +1141,24 @@ def main():
             args.model, args.bigrams, args.thr,
             word_to_id, log10_min, log10_max,
             phrase_scores, children_temp, followers_temp,
-            unigram_top
+            unigram_top, args.bigrams_support
         )
         print(f"  Nodes: {node_count:,}")
         print(f"  Followers: {follower_count:,}")
         print(f"  Phrases: {phrase_count:,}")
 
+        # Pass 3: Build character trie (WORD tier)
+        print("Pass 3: building character trie...")
+        char_nodes, char_children, char_trie_node_count = pass3_build_char_trie(
+            vocab, unigram_counts, log10_min, log10_max
+        )
+        print(f"  Char-trie nodes: {char_trie_node_count:,}")
+
         # Write output
         print("Writing CKLM file...")
         write_cklm(args.output, vocab, nodes, children_temp, followers_temp,
-                   log10_min, log10_max, phrase_count)
+                   log10_min, log10_max, phrase_count,
+                   char_nodes, char_children, char_trie_node_count)
 
     # Stats
     file_size = os.path.getsize(args.output)
@@ -959,14 +1166,15 @@ def main():
     print(f"Output: {args.output}")
     print(f"File size: {file_size:,} bytes ({file_size / 1e6:.2f} MB)")
     print(f"Vocab: {len(vocab):,}")
-    print(f"Nodes: {node_count:,}")
+    print(f"Context-trie nodes: {node_count:,}")
+    print(f"Char-trie nodes: {char_trie_node_count:,}")
     print(f"Followers: {follower_count:,}")
     print(f"Phrases: {phrase_count:,}")
     print(f"Log10 score range: [{log10_min:.6f}, {log10_max:.6f}]")
 
     if args.self_test:
         print("\nRunning verification...")
-        verify_cklm(args.output, vocab, nodes, log10_min, log10_max)
+        verify_cklm(args.output, vocab, nodes, log10_min, log10_max, char_trie_node_count)
         print("Self-test PASSED")
 
         # Vocab cap test: 30 unigram words capped at 20
@@ -974,7 +1182,7 @@ def main():
         with _tf.NamedTemporaryFile(mode='w', suffix='.tsv', delete=False) as f:
             cap_tsv = f.name
         generate_synthetic_unigrams(cap_tsv, num_words=30)
-        cap_vocab, _, _, _, _ = pass1_collect(synth_trigrams, synth_bigrams, cap_tsv, args.thr, max_vocab=20)
+        cap_vocab, _, _, _, _, _ = pass1_collect(synth_trigrams, synth_bigrams, cap_tsv, args.thr, max_vocab=20)
         assert len(cap_vocab) <= 20, f"Vocab cap failed: {len(cap_vocab)} > 20"
         print(f"Vocab cap test: {len(cap_vocab)} words (<= 20) OK")
 
