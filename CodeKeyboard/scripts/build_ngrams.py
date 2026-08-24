@@ -249,12 +249,14 @@ def step_reconcile(args, runs_dir: Path, counts_db: Path) -> None:
     conn.execute("CREATE TABLE unigrams(w TEXT, count INTEGER)")
     conn.execute("CREATE TABLE bigrams(ctx TEXT, w TEXT, count INTEGER)")
     conn.execute("CREATE TABLE trigrams(ctx TEXT, w TEXT, count INTEGER)")
+    if args.order >= 4:
+        conn.execute("CREATE TABLE fourgrams(ctx TEXT, w TEXT, count INTEGER)")
 
     uni_runs = sorted(runs_dir.glob("w*_r*.uni.tsv"))
     n_uni = _merge_into_table(conn, "unigrams", uni_runs, 1)
     log(f"[3/5 reconcile] unigrams={n_uni} from {len(uni_runs)} runs")
 
-    for k, table in ((2, "bigrams"), (3, "trigrams")):
+    for k, table in ((2, "bigrams"), (3, "trigrams"), (4, "fourgrams")):
         if k > args.order:
             break
         runs = sorted(runs_dir.glob(f"w*_r*.n{k}.tsv"))
@@ -266,6 +268,8 @@ def step_reconcile(args, runs_dir: Path, counts_db: Path) -> None:
     conn.execute("CREATE INDEX idx_bi ON bigrams(ctx, w)")
     if args.order >= 3:
         conn.execute("CREATE INDEX idx_tri ON trigrams(ctx, w)")
+    if args.order >= 4:
+        conn.execute("CREATE INDEX idx_four ON fourgrams(ctx, w)")
     conn.commit()
     conn.close()
 
@@ -282,6 +286,8 @@ def step_normalize(args, counts_db: Path, norm_db: Path) -> None:
     tune_sqlite(dst)
     dst.execute("CREATE TABLE cont_p(w TEXT PRIMARY KEY, p REAL)")
     dst.execute("CREATE TABLE bigram_ctx(ctx TEXT PRIMARY KEY, total INTEGER, distinct_n INTEGER)")
+    if args.order >= 4:
+        dst.execute("CREATE TABLE trigram_ctx(ctx TEXT PRIMARY KEY, total INTEGER, distinct_n INTEGER)")
 
     # Continuation probability P_continuation(w):
     #   (# distinct bigram types ending in w) / (# distinct bigram types overall)
@@ -299,6 +305,13 @@ def step_normalize(args, counts_db: Path, norm_db: Path) -> None:
         "INSERT INTO bigram_ctx(ctx, total, distinct_n) VALUES(?, ?, ?)",
         src.execute("SELECT ctx, SUM(count), COUNT(*) FROM bigrams GROUP BY ctx"),
     )
+    if args.order >= 4:
+        # Per trigram context: total count and number of distinct followers.
+        # Needed for 4-gram backoff computation.
+        dst.executemany(
+            "INSERT INTO trigram_ctx(ctx, total, distinct_n) VALUES(?, ?, ?)",
+            src.execute("SELECT ctx, SUM(count), COUNT(*) FROM trigrams GROUP BY ctx"),
+        )
     dst.commit()
     dst.close()
     src.close()
@@ -323,6 +336,28 @@ def score_bigram(followers: dict, cont_p: dict, discount: float, max_f: int):
 
 def score_trigram(followers: dict, backoff: dict, cont_p: dict,
                   discount: float, max_f: int):
+    total = sum(followers.values())
+    if total <= 0:
+        return None
+    lam = (discount * len(followers)) / total
+    scored = []
+    for w in set(followers) | set(backoff):
+        c = followers.get(w, 0)
+        scored.append((w, max(c - discount, 0) / total + lam * backoff.get(w, cont_p.get(w, 0.0))))
+    scored.sort(key=lambda p: (-p[1], p[0]))
+    top = scored[:max_f]
+    mx = top[0][1] or 1.0
+    return {"followers": [[w, round(s / mx, 4)] for w, s in top], "support": total}
+
+
+def score_ngram(followers: dict, backoff: dict, cont_p: dict,
+                discount: float, max_f: int):
+    """Generalized Kneser-Ney scoring for n-grams (n >= 3).
+    
+    The backoff distribution should be the (n-1)-gram distribution for the
+    context's suffix (last n-2 words). For trigrams, backoff is bigram P(w|w2).
+    For 4-grams, backoff is trigram P(w|w2 w3).
+    """
     total = sum(followers.values())
     if total <= 0:
         return None
@@ -457,6 +492,65 @@ def step_score(args, counts_db: Path, norm_db: Path, output: Path) -> None:
             tf.write("}")
         tri_tmp.replace(output)
         log(f"[5/5 score] trigrams={n_tri}")
+
+    # ---- fourgrams.json (order-4) ----
+    if args.order >= 4:
+        four_tmp = output.with_name(output.stem.replace("trigrams", "fourgrams") + ".json.tmp")
+        n_four = 0
+        # Memoized Kneser-Ney backoff distribution per last two words (w2 w3),
+        # pruned to top max_followers. Same pattern as trigram backoff but the
+        # backoff key is the last 2 words of the 3-word context.
+        # For 4-gram context "w1 w2 w3", backoff = trigram distribution of "w2 w3".
+        backoff_cache: dict[str, dict] = {}
+        trigram_ctx = {ctx: (total, dn) for ctx, total, dn in
+                       norm.execute("SELECT ctx, total, distinct_n FROM trigram_ctx")}
+        log(f"[5/5 score] trigram_ctx={len(trigram_ctx)}")
+
+        def backoff_4gram(w2_w3: str) -> dict:
+            hit = backoff_cache.get(w2_w3)
+            if hit is not None:
+                return hit
+            bo: dict = {}
+            stats = trigram_ctx.get(w2_w3)
+            if stats:
+                lower_total, lower_distinct = stats
+                if lower_total:
+                    lower_lam = (args.discount * lower_distinct) / lower_total
+                    probs = ((w, (max(c - args.discount, 0) / lower_total
+                                  + lower_lam * cont_p.get(w, 0.0)))
+                             for w, c in counts.execute(
+                                 "SELECT w, count FROM trigrams WHERE ctx=?", (w2_w3,)))
+                    bo = dict(heapq.nlargest(args.max_followers, probs,
+                                             key=lambda x: x[1]))
+            backoff_cache[w2_w3] = bo
+            return bo
+
+        with four_tmp.open("w", encoding="utf-8") as ff:
+            ff.write("{")
+            first = True
+            for ctx, fol in _grouped(counts.execute(
+                    "SELECT ctx, w, count FROM fourgrams ORDER BY ctx, w")):
+                total = sum(fol.values())
+                if total < args.min_ngram_count:
+                    continue
+                # ctx is "w1 w2 w3", backoff key is "w2 w3"
+                w2_w3 = " ".join(ctx.split()[-2:])
+                entry = score_ngram(fol, backoff_4gram(w2_w3), cont_p,
+                                    args.discount, args.max_followers)
+                if not entry:
+                    continue
+                if not first:
+                    ff.write(",")
+                ff.write(json.dumps(ctx, ensure_ascii=False) + ":" +
+                         json.dumps(entry, ensure_ascii=False, separators=(",", ":")))
+                first = False
+                n_four += 1
+                if n_four % 200_000 == 0:
+                    log(f"[5/5 score] fourgrams {n_four}")
+            ff.write("}")
+        four_out = output.with_name(output.stem.replace("trigrams", "fourgrams") + ".json")
+        four_tmp.replace(four_out)
+        log(f"[5/5 score] fourgrams={n_four}")
 
     counts.close()
     norm.close()
