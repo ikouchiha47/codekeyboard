@@ -126,6 +126,20 @@ android {
         includeInApk = false
         includeInBundle = false
     }
+
+    // Prevent non-arm64 .so files from being extracted/merged from AARs during
+    // intermediate build steps. abiFilters above stops local C++ compilation for
+    // other ABIs; this stops AGP from unpacking them out of prebuilt AARs
+    // (react-android.aar ships all 4 ABIs — each ~200 MB for libreactnative.so).
+    packagingOptions {
+        jniLibs {
+            excludes += [
+                "**/armeabi-v7a/**",
+                "**/x86/**",
+                "**/x86_64/**",
+            ]
+        }
+    }
 }
 
 dependencies {
