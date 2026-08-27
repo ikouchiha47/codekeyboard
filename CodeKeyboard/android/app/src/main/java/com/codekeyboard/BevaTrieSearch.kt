@@ -44,8 +44,9 @@ object BevaTrieSearch {
         val n = q.length
         // Scale threshold to half-steps so adjacent subs (cost 0.5) fit as integers.
         val k = threshold * 2
+        // Each insertion costs 2 half-steps, so e half-steps allows only e/2 free insertions at root.
         val initialEv = IntArray(k + 1) { e ->
-            val maxPos = minOf(e, n)
+            val maxPos = minOf(e / 2, n)
             (1 shl (maxPos + 1)) - 1
         }
         val results = mutableListOf<FuzzyResult>()

@@ -190,7 +190,42 @@ class BevaTrieSearchTest {
         assertTrue("search not found for 'swsrch'", results.any { it.word == "search" })
     }
 
+    // ── Property: BEVA+proximity == brute-force weighted scan ────────────────
+
+    @Test fun `BEVA with QwertyAdjacency matches brute-force weighted scan`() {
+        val words = listOf("help" to 4, "helm" to 2, "hero" to 5, "here" to 1,
+                           "herd" to 3, "her" to 7, "search" to 10, "seraph" to 3)
+        words.forEach { (w, n) -> repeat(n) { trie.insert(w) } }
+        val adjacency = QwertyAdjacency()
+
+        val queries = listOf("srwach", "sesrcg", "helo", "hreo", "serap")
+        for (q in queries) {
+            val threshold = FuzzyThreshold.forLength(q.length)
+            if (threshold == 0) continue
+            val beva = BevaTrieSearch.search(adapter, q, threshold, Int.MAX_VALUE, adjacency)
+                .map { it.word }.toSet()
+            val brute = words.map { it.first }
+                .filter { weightedLevenshtein(q, it, adjacency) <= threshold.toFloat() }
+                .toSet()
+            assertEquals("BEVA+proximity != brute for '$q'", brute, beva)
+        }
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
+
+    private fun weightedLevenshtein(a: String, b: String, adj: KeyAdjacency): Float {
+        val dp = Array(a.length + 1) { FloatArray(b.length + 1) }
+        for (i in 0..a.length) dp[i][0] = i.toFloat()
+        for (j in 0..b.length) dp[0][j] = j.toFloat()
+        for (i in 1..a.length) for (j in 1..b.length) {
+            dp[i][j] = minOf(
+                dp[i - 1][j] + 1f,
+                dp[i][j - 1] + 1f,
+                dp[i - 1][j - 1] + adj.substitutionCost(a[i - 1], b[j - 1])
+            )
+        }
+        return dp[a.length][b.length]
+    }
 
     private fun levenshtein(a: String, b: String): Int {
         val dp = Array(a.length + 1) { IntArray(b.length + 1) }
