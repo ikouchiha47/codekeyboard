@@ -141,6 +141,12 @@ class LanguagePack private constructor(private val buf: ByteBuffer) {
     /** Vocabulary size. */
     val vocabSize: Int get() = vocabCount
 
+    /** Iterates every vocabulary word, in vocab order. Used to build indexes
+     *  (e.g. the SymSpell delete-index) over the full pack vocabulary. */
+    fun allWords(): Sequence<String> = sequence {
+        for (id in 0 until vocabCount) yield(word(id))
+    }
+
     /** Total number of context-trie nodes. */
     val nodeCount: Int get() = nodeCountVal
 

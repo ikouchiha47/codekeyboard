@@ -7,6 +7,13 @@ package com.codekeyboard
 interface PrefixDictionary {
     fun suggest(prefix: String, max: Int): List<String>
     fun has(word: String): Boolean
+
+    /**
+     * Correction path (ADR-013). Default: no corrections. Pack-backed
+     * implementations (WordDictionary) return layout-aware SymSpell +
+     * BevaTrieSearch candidates, best first.
+     */
+    fun correct(word: String, maxResults: Int): List<FuzzyResult> = emptyList()
 }
 
 /**
@@ -52,8 +59,13 @@ class MergedSuggestionStrategy(
         // produces wrong results because DFS order is alphabetical, not by quality.
         val userFuzzy = BevaTrieSearch.search(userAdapter, word, threshold, Int.MAX_VALUE)
         val baseFuzzy = BevaTrieSearch.search(baseAdapter, word, threshold, Int.MAX_VALUE)
+        // ADR-013: also pull layout-aware SymSpell corrections from the base dict
+        // (WordDictionary.correct merges Beva + SymSpell, reranked by proximity).
+        val baseCorrections = baseDict.correct(word, limit)
         val userWords = userFuzzy.map { it.word }.toSet()
-        return (userFuzzy + baseFuzzy.filter { it.word !in userWords })
+        return (userFuzzy + baseFuzzy + baseCorrections)
+            .distinctBy { it.word }
+            .filterNot { it.word in userWords }
             .sortedWith(compareBy(
                 { it.editDistance },
                 { -commonPrefixLength(word, it.word) },

@@ -53,4 +53,48 @@ class WordDictionary(private val pack: LanguagePack) : PrefixDictionary {
 
     /** Returns the underlying LanguagePack for advanced use cases. */
     val languagePack: LanguagePack get() = pack
+
+    // ── SymSpell correction (ADR-013) ──────────────────────────────────────────
+
+    /**
+     * Lazily-built SymSpell delete-index over the full pack vocabulary.
+     * Built once on first use; memory is bounded by the vocab size × delete
+     * variants at maxDist 2 (ADR-013 Task H gates this on device).
+     */
+    private val symSpellIndex: SymSpellIndex by lazy {
+        val vocab = pack.allWords().filter { it.length > 3 }.toSet()
+        SymSpellIndex.build(vocab, maxDist = 2)
+    }
+
+    private val symSpellCorrector: SymSpellCorrector by lazy {
+        SymSpellCorrector(symSpellIndex, QwertyAdjacency(), maxDist = 2)
+    }
+
+    /**
+     * Correction path (ADR-013): merges BevaTrieSearch (trie edit-distance)
+     * with SymSpell (delete-index reachability, catches multi-key slides),
+     * deduplicates, and reranks with the layout-aware [ProximityScorer].
+     *
+     * Returns candidates with the adjacency-weighted distance, best first.
+     */
+    override fun correct(word: String, maxResults: Int): List<FuzzyResult> {
+        val threshold = FuzzyThreshold.forLength(word.length)
+        if (threshold == 0) return emptyList()
+
+        val beva = BevaTrieSearch.search(adapter, word, threshold, maxResults * 2)
+        val sym = symSpellCorrector.correct(word)
+        return merge(word, beva, sym).take(maxResults)
+    }
+
+    /** Merge by word, keeping the lower edit distance; rerank with ProximityScorer. */
+    private fun merge(input: String, a: List<FuzzyResult>, b: List<FuzzyResult>): List<FuzzyResult> {
+        val byWord = LinkedHashMap<String, FuzzyResult>()
+        for (r in a + b) {
+            val existing = byWord[r.word]
+            if (existing == null || r.editDistance < existing.editDistance) {
+                byWord[r.word] = r
+            }
+        }
+        return ProximityScorer(QwertyAdjacency()).rank(input, byWord.values.toList())
+    }
 }
