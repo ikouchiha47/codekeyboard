@@ -84,3 +84,6 @@ android/scripts/__pycache__/
 __pycache__/
 *.pyc
 android/app/src/main/assets/sk/
+
+# ADR-012 corpus/build artifacts (not committed)
+tmp/

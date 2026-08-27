@@ -8,13 +8,15 @@ package com.codekeyboard
  *
  * - order = 2 (bigram): uses 1-word context (unigram context in pack terms)
  * - order = 3 (trigram): uses 2-word context (bigram context in pack terms)
+ * - order = 4 (4-gram): uses 3-word context (trigram context in pack terms)
  *
  * The pack's context-trie depth semantics:
  * - depth 0 (root) = unigram context (no preceding words)
  * - depth 1 = bigram context (1 preceding word)
  * - depth 2 = trigram context (2 preceding words)
+ * - depth 3 = 4-gram context (3 preceding words)
  *
- * So for order=2 we use depth-1 nodes, for order=3 we use depth-2 nodes.
+ * So for order=2 we use depth-1 nodes, order=3 depth-2, order=4 depth-3.
  */
 class PackNgramModel(
     private val pack: LanguagePack,
@@ -22,7 +24,9 @@ class PackNgramModel(
 ) : NgramModel {
 
     init {
-        require(order == 2 || order == 3) { "PackNgramModel only supports order 2 (bigram) or 3 (trigram), got $order" }
+        require(order == 2 || order == 3 || order == 4) {
+            "PackNgramModel only supports order 2 (bigram), 3 (trigram), or 4 (4-gram), got $order"
+        }
     }
 
     /**
