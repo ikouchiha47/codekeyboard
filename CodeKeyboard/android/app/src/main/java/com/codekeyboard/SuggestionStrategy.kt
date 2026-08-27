@@ -61,15 +61,13 @@ class MergedSuggestionStrategy(
         // baseFuzzy ran uniform-cost BEVA — superseded by baseCorrections (proximity-weighted).
         // val baseFuzzy = BevaTrieSearch.search(baseAdapter, word, threshold, Int.MAX_VALUE)
         val baseCorrections = baseDict.correct(word, Int.MAX_VALUE)
-        val userWords = userFuzzy.map { it.word }.toSet()
-        // Keep lowest editDistance per word so proximity-weighted score wins over uniform.
+        // Merge by word keeping lowest editDistance; proximity-weighted beats uniform.
         val byWord = LinkedHashMap<String, FuzzyResult>()
         for (r in userFuzzy + baseCorrections) {
             val existing = byWord[r.word]
             if (existing == null || r.editDistance < existing.editDistance) byWord[r.word] = r
         }
         return byWord.values.toList()
-            .filterNot { it.word in userWords }
             .sortedWith(compareBy(
                 { it.editDistance },
                 { -commonPrefixLength(word, it.word) },

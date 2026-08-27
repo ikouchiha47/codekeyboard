@@ -17,10 +17,12 @@ class WordLearner(
         userTrie.insert(word)
     }
 
-    // Called when the user explicitly taps a suggestion. Always learn it —
-    // an explicit tap is an unambiguous signal of intent.
+    // Called when the user explicitly taps a suggestion. Only learn if not
+    // already in the base dictionary — common words don't need personal tracking
+    // and pollute fuzzy correction results for base-dict words.
     fun learnFromTap(word: String) {
         if (!isLearnable(word)) return
+        if (dictionary.isKnownWord(word)) return
         userTrie.insert(word)
     }
 

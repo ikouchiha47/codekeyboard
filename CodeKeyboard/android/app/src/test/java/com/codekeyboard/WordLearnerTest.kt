@@ -61,10 +61,17 @@ class WordLearnerTest {
         assertTrue(userTrie.suggest("ikou", 5).any { it.word == "ikouchiha47" })
     }
 
-    @Test fun `tap — known word is learned`() {
+    @Test fun `tap — known base-dict word is NOT learned`() {
+        // Known words are already in the base dictionary — no need to track personally.
+        // Learning them pollutes fuzzy correction results for base-dict words.
         knownWords += "hello"
         learner.learnFromTap("hello")
-        assertTrue(userTrie.suggest("hel", 5).any { it.word == "hello" })
+        assertTrue(userTrie.suggest("hel", 5).none { it.word == "hello" })
+    }
+
+    @Test fun `tap — unknown word IS learned`() {
+        learner.learnFromTap("ikouchiha47")
+        assertTrue(userTrie.suggest("ikou", 5).any { it.word == "ikouchiha47" })
     }
 
     @Test fun `tap — snippet trigger word is NOT learned`() {

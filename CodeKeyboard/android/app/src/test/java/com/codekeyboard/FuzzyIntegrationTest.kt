@@ -82,6 +82,18 @@ class FuzzyIntegrationTest {
         assertTrue("should find 'occurred'", results.any { it.word == "occurred" })
     }
 
+    // ── Proximity BEVA — no garbage candidates ─────────────────────────────────
+
+    @Test fun `sesrcg finds search and NOT seaver desert decry`() {
+        val results = BevaTrieSearch.search(adapter, "sesrcg", 2, Int.MAX_VALUE, QwertyAdjacency())
+        val words = results.map { it.word }.toSet()
+        println("sesrcg results (${results.size}): ${results.sortedBy { it.editDistance }.take(15).map { "${it.word}(d=${it.editDistance})" }}")
+        assertTrue("search must be found", "search" in words)
+        assertFalse("seaver must NOT be found (weighted dist > 2)", "seaver" in words)
+        assertFalse("desert must NOT be found", "desert" in words)
+        assertFalse("decry must NOT be found", "decry" in words)
+    }
+
     // ── Performance ────────────────────────────────────────────────────────────
 
     @Test fun `benchmark raiming k=2 no cap`() {
