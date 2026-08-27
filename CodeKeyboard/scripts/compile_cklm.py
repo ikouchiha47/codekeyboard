@@ -316,6 +316,7 @@ def pass1_collect(
     thr: int,
     max_vocab: int = 65535,
     max_unigram_followers: int = 255,
+    fourgram_path: str | None = None,
 ) -> Tuple[List[str], Dict[str, int], float, float, List[Tuple[str, int]], Dict[str, int]]:
     """
     Pass 1: collect vocab, select top-max_vocab words by unigram count, and
@@ -364,6 +365,20 @@ def pass1_collect(
                 vocab.add(word)
                 if score <= 0:
                     raise ValueError(f"Bigram follower score must be > 0, got {score} for word {word!r}")
+                total_followers += 1
+
+    # Fourgrams: vocab only (context + follower words must survive into the
+    # pack so depth-3 paths don't get pruned as OOV). Range is computed from
+    # the trigram + unigram tiers (see ADR-012) — fourgram scores are clamped
+    # into the same global log10 range.
+    if fourgram_path:
+        for entry in stream_trigrams(fourgram_path):
+            if entry.support < thr:
+                continue
+            for word in entry.ctx.split():
+                vocab.add(word)
+            for word, score in entry.followers:
+                vocab.add(word)
                 total_followers += 1
 
     # Unigrams: counts for vocab ranking + top-N for range and root followers
@@ -445,6 +460,7 @@ def pass2_build(
     followers_temp: IO[bytes],
     unigram_top: List[Tuple[str, int]],
     bigram_support_path: str | None = None,
+    fourgram_path: str | None = None,
 ) -> Tuple[List[NodeMeta], int, int, int]:
     """
     Pass 2: build three-tier trie, write children/followers to temp files.
@@ -564,6 +580,51 @@ def pass2_build(
                 continue  # out-of-vocab follower
             qscore = quantize_log10(score, log10_min, log10_max)
             nodes[node_idx].followers.append((word_id, qscore))
+
+    # --- Tier 4: Fourgrams at depth-3 (deepens the context trie) ---
+    # The 4-gram JSON has 3-word context keys ("w1 w2 w3" -> followers).
+    # Reuse stream_trigrams (same JSON shape), but traverse 3 words deep so
+    # the trie reaches depth-3. The char-trie/reader already support arbitrary
+    # depth; this just adds the data.
+    if fourgram_path:
+        for entry in stream_trigrams(fourgram_path):
+            if entry.support < thr:
+                continue
+
+            ctx_words = entry.ctx.split()
+            if len(ctx_words) < 3:
+                continue  # only true 4-gram contexts deepen the trie
+            ctx_ids = []
+            skip = False
+            for w in ctx_words:
+                word_id = word_to_id.get(w)
+                if word_id is None:
+                    skip = True
+                    break
+                ctx_ids.append(word_id)
+            if skip:
+                continue
+
+            # Traverse from root, finding or creating depth-3 nodes
+            node_idx = 0
+            for word_id in ctx_ids:
+                key = (node_idx, word_id)
+                child_idx = child_map.get(key)
+                if child_idx is None:
+                    child_idx = len(nodes)
+                    nodes.append(NodeMeta())
+                    nodes[node_idx].children.append((word_id, child_idx))
+                    child_map[key] = child_idx
+                node_idx = child_idx
+
+            nodes[node_idx].support = entry.support
+
+            for word, score in entry.followers:
+                word_id = word_to_id.get(word)
+                if word_id is None:
+                    continue
+                qscore = quantize_log10(score, log10_min, log10_max)
+                nodes[node_idx].followers.append((word_id, qscore))
 
     # Finalize all nodes (write to temp files)
     for node_idx in range(len(nodes)):
@@ -1068,6 +1129,7 @@ def main():
     parser.add_argument('--output', help='Output CKLM file path (required)')
     parser.add_argument('--bigrams', help='Optional scored bigram JSON file (flat shape)')
     parser.add_argument('--bigrams-support', help='Optional bigram support JSON file ({"w1": N} shape)')
+    parser.add_argument('--fourgrams', help='Optional scored 4-gram model JSON file (3-word ctx keys, deepens trie to depth-3)')
     parser.add_argument('--unigrams', help='Optional unigram TSV file (word\\tcount)')
     parser.add_argument('--phrases', help='Optional phrases file (phrase\\tscore per line)')
     parser.add_argument('--thr', type=int, default=0, help='Support threshold for trigrams (default: 0)')
@@ -1121,7 +1183,7 @@ def main():
     print("Pass 1: collecting vocab and log10 score range...")
     vocab, word_to_id, log10_min, log10_max, unigram_top, unigram_counts = pass1_collect(
         args.model, args.bigrams, args.unigrams, args.thr,
-        args.max_vocab, args.max_unigram_followers
+        args.max_vocab, args.max_unigram_followers, args.fourgrams
     )
     print(f"  Vocab size: {len(vocab):,}")
     print(f"  Log10 score range: [{log10_min:.6f}, {log10_max:.6f}]")
@@ -1141,7 +1203,7 @@ def main():
             args.model, args.bigrams, args.thr,
             word_to_id, log10_min, log10_max,
             phrase_scores, children_temp, followers_temp,
-            unigram_top, args.bigrams_support
+            unigram_top, args.bigrams_support, args.fourgrams
         )
         print(f"  Nodes: {node_count:,}")
         print(f"  Followers: {follower_count:,}")
