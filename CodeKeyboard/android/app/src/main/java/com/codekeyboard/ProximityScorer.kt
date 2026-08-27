@@ -9,7 +9,7 @@ package com.codekeyboard
  * makes proximity-plausible corrections rank above random noise at the same
  * edit distance.
  */
-class ProximityScorer(private val adjacency: KeyAdjacency) {
+class ProximityScorer(internal val adjacency: KeyAdjacency) {
 
     /**
      * Weighted edit distance between [input] and [candidate].

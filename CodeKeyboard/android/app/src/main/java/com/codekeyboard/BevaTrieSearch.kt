@@ -28,23 +28,29 @@ package com.codekeyboard
 
 object BevaTrieSearch {
 
+    // adjacency: optional KeyAdjacency for proximity-weighted substitution cost.
+    // Adjacent-key substitutions cost 1 half-step; non-adjacent cost 2 half-steps.
+    // Threshold is doubled internally so half-steps fit in the Int error array.
+    // With NoAdjacency (default) behaviour is identical to uniform-cost BEVA.
     fun <Node> search(
         adapter: TrieAdapter<Node>,
         word: String,
         threshold: Int,
         maxResults: Int,
+        adjacency: KeyAdjacency = NoAdjacency,
     ): List<FuzzyResult> {
         if (threshold <= 0 || word.isEmpty() || maxResults <= 0) return emptyList()
         val q = word.lowercase()
         val n = q.length
-        // At root: evBits[e] = bits 0..min(e,n) all set.
-        // With e errors and 0 trie chars, we can have skipped up to e query chars.
-        val initialEv = IntArray(threshold + 1) { e ->
+        // Scale threshold to half-steps so adjacent subs (cost 0.5) fit as integers.
+        val k = threshold * 2
+        val initialEv = IntArray(k + 1) { e ->
             val maxPos = minOf(e, n)
-            (1 shl (maxPos + 1)) - 1   // bits 0..maxPos
+            (1 shl (maxPos + 1)) - 1
         }
         val results = mutableListOf<FuzzyResult>()
-        dfs(adapter, adapter.root, StringBuilder(), initialEv, q, threshold, results, maxResults)
+        dfs(adapter, adapter.root, StringBuilder(), initialEv, q, k, adjacency, results, maxResults)
+        // Convert half-step distances back to whole-step for FuzzyResult.editDistance.
         return results.sortedWith(compareBy({ it.editDistance }, { -it.frequency }))
     }
 
@@ -55,50 +61,57 @@ object BevaTrieSearch {
         ev: IntArray,
         q: String,
         k: Int,
+        adjacency: KeyAdjacency,
         results: MutableList<FuzzyResult>,
         maxResults: Int,
     ) {
         if (results.size >= maxResults) return
 
         if (adapter.isTerminal(node) && prefix.isNotEmpty()) {
-            val dist = editDist(ev, q.length)
-            if (dist <= k) {
+            val halfDist = editDist(ev, q.length)
+            if (halfDist <= k) {
+                // Round up half-steps to whole edit distance for external consumers.
+                val dist = (halfDist + 1) / 2
                 results += FuzzyResult(prefix.toString(), dist, adapter.frequency(node))
             }
         }
 
-        // Prune: if no error budget has any reachable position, stop.
         if (ev[k] == 0) return
 
         adapter.iterateChildren(node) { ch, child ->
             if (results.size >= maxResults) return@iterateChildren
-            val newEv = transition(ev, ch, q, k) ?: return@iterateChildren
+            val newEv = transition(ev, ch, q, k, adjacency) ?: return@iterateChildren
             prefix.append(ch)
-            dfs(adapter, child, prefix, newEv, q, k, results, maxResults)
+            dfs(adapter, child, prefix, newEv, q, k, adjacency, results, maxResults)
             prefix.deleteCharAt(prefix.length - 1)
         }
     }
 
-    // Returns min e such that bit n is set in ev[e].
-    // Returns k+1 if no such e exists.
     private fun editDist(ev: IntArray, n: Int): Int {
         val bit = 1 shl n
         for (e in ev.indices) if (ev[e] and bit != 0) return e
         return ev.size
     }
 
-    // Compute new bitmask EV after descending trie edge with char ch.
-    // Returns null if all entries are zero (prune the subtree).
-    private fun transition(ev: IntArray, ch: Char, q: String, k: Int): IntArray? {
+    private fun transition(ev: IntArray, ch: Char, q: String, k: Int, adjacency: KeyAdjacency): IntArray? {
         val n = q.length
-        // posMask: bits 0..n are valid (positions 0 = "matched nothing" to n = "matched all")
         val posMask = (1 shl (n + 1)) - 1
-        // queryPosMask: bits 0..n-1 valid for matching (positions that still have a query char)
-        val queryPosMask = posMask ushr 1   // bits 0..n-1
+        val queryPosMask = posMask ushr 1
 
-        // matchMask: bit p set if q[p] == ch (so a match at position p advances to p+1)
+        // Three masks based on adjacency cost (in half-steps):
+        //   matchMask    — q[p] == ch             → cost 0
+        //   adjMask      — q[p] adjacent to ch    → cost 1 half-step
+        //   nonAdjMask   — everything else        → cost 2 half-steps (= 1 whole error)
         var matchMask = 0
-        for (p in 0 until n) if (q[p] == ch) matchMask = matchMask or (1 shl p)
+        var adjMask = 0
+        for (p in 0 until n) {
+            val qc = q[p]
+            when {
+                qc == ch -> matchMask = matchMask or (1 shl p)
+                adjacency.substitutionCost(qc, ch) < 1f -> adjMask = adjMask or (1 shl p)
+            }
+        }
+        val nonAdjMask = queryPosMask and matchMask.inv() and adjMask.inv()
 
         val nv = IntArray(k + 1)
 
@@ -106,27 +119,30 @@ object BevaTrieSearch {
             val bits = ev[e]
             if (bits == 0) continue
 
-            // Match: positions where q[p] == ch → advance to p+1
+            // Exact match: no cost
             nv[e] = nv[e] or ((bits and matchMask) shl 1)
 
-            if (e < k) {
-                // Substitution: any position p < n → advance to p+1, cost 1 error
-                nv[e + 1] = nv[e + 1] or ((bits and queryPosMask) shl 1)
-                // Deletion: skip the trie char, stay at same position, cost 1 error
-                nv[e + 1] = nv[e + 1] or bits
-            }
+            // Adjacent substitution: 1 half-step
+            if (e + 1 <= k) nv[e + 1] = nv[e + 1] or ((bits and adjMask) shl 1)
+
+            // Non-adjacent substitution: 2 half-steps
+            if (e + 2 <= k) nv[e + 2] = nv[e + 2] or ((bits and nonAdjMask) shl 1)
+
+            // Deletion: 2 half-steps (skip trie char, stay at same query position)
+            if (e + 2 <= k) nv[e + 2] = nv[e + 2] or bits
         }
 
-        // Clamp all entries to valid position range
         for (e in 0..k) nv[e] = nv[e] and posMask
 
-        // Insertion propagation: from each reachable position, skip additional
-        // query chars at 1 error per char.
+        // Insertion propagation: skip query chars at 2 half-steps per char.
         for (e in 0 until k) {
             var spread = nv[e]
-            for (skip in 1..(k - e)) {
+            var remaining = k - e
+            var skip = 2
+            while (skip <= remaining) {
                 spread = (spread shl 1) and posMask
                 nv[e + skip] = nv[e + skip] or spread
+                skip += 2
             }
         }
 

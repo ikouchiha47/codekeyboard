@@ -65,7 +65,7 @@ class WordDictionary(private val pack: LanguagePack) : PrefixDictionary {
     override fun correct(word: String, maxResults: Int): List<FuzzyResult> {
         val threshold = FuzzyThreshold.forLength(word.length)
         if (threshold == 0) return emptyList()
-        val results = BevaTrieSearch.search(adapter, word, threshold, maxResults)
+        val results = BevaTrieSearch.search(adapter, word, threshold, maxResults, proximityScorer.adjacency)
         return proximityScorer.rank(word, results)
     }
 }

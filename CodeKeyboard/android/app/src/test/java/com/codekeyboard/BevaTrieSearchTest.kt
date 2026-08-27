@@ -163,6 +163,25 @@ class BevaTrieSearchTest {
         }
     }
 
+    // ── Proximity (adjacent-key slide errors) ─────────────────────────────────
+    // These FAIL with uniform-cost BEVA (threshold 2, dist=3).
+    // They will pass once KeyAdjacency is injected into transition() with half-step costs.
+
+    @Test fun `srwach finds search - multi-key slide dist 3 adjacent keys`() {
+        insert("search" to 10)
+        // srwach→search: s=s, r→e(adj), w→a(adj), a→r(adj), c=c, h=h — 3 adjacent subs
+        // With half-step costs: 3×0.5 = 1.5, within threshold 2. Requires QwertyAdjacency.
+        val results = BevaTrieSearch.search(adapter, "srwach", 2, 10, QwertyAdjacency())
+        assertTrue("search not found for 'srwach' — proximity injection missing", results.any { it.word == "search" })
+    }
+
+    @Test fun `swsrch finds search - dist 2 already caught by uniform BEVA`() {
+        insert("search" to 10)
+        // swsrch→search: s=s, w→e(sub), s→a(sub), r=r, c=c, h=h — exactly 2 subs, within threshold 2.
+        val results = search("swsrch", threshold = 2)
+        assertTrue("search not found for 'swsrch'", results.any { it.word == "search" })
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private fun levenshtein(a: String, b: String): Int {
