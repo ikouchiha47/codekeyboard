@@ -58,13 +58,17 @@ class MergedSuggestionStrategy(
         // pruning cuts dead subtrees so this is efficient. Early-exit on count
         // produces wrong results because DFS order is alphabetical, not by quality.
         val userFuzzy = BevaTrieSearch.search(userAdapter, word, threshold, Int.MAX_VALUE)
-        val baseFuzzy = BevaTrieSearch.search(baseAdapter, word, threshold, Int.MAX_VALUE)
-        // ADR-013: also pull layout-aware SymSpell corrections from the base dict
-        // (WordDictionary.correct merges Beva + SymSpell, reranked by proximity).
-        val baseCorrections = baseDict.correct(word, limit)
+        // baseFuzzy ran uniform-cost BEVA — superseded by baseCorrections (proximity-weighted).
+        // val baseFuzzy = BevaTrieSearch.search(baseAdapter, word, threshold, Int.MAX_VALUE)
+        val baseCorrections = baseDict.correct(word, Int.MAX_VALUE)
         val userWords = userFuzzy.map { it.word }.toSet()
-        return (userFuzzy + baseFuzzy + baseCorrections)
-            .distinctBy { it.word }
+        // Keep lowest editDistance per word so proximity-weighted score wins over uniform.
+        val byWord = LinkedHashMap<String, FuzzyResult>()
+        for (r in userFuzzy + baseCorrections) {
+            val existing = byWord[r.word]
+            if (existing == null || r.editDistance < existing.editDistance) byWord[r.word] = r
+        }
+        return byWord.values.toList()
             .filterNot { it.word in userWords }
             .sortedWith(compareBy(
                 { it.editDistance },

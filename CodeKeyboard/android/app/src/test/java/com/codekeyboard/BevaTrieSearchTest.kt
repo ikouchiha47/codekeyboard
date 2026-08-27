@@ -175,6 +175,14 @@ class BevaTrieSearchTest {
         assertTrue("search not found for 'srwach' — proximity injection missing", results.any { it.word == "search" })
     }
 
+    @Test fun `sesrcg finds search - dist 2 two adjacent subs`() {
+        insert("search" to 10)
+        // sesrcg→search: s=s, e=e, s→a(adj), r=r, c=c, g→h(adj) — 2 adjacent subs = dist 2
+        // Should be found by uniform BEVA without proximity.
+        val results = search("sesrcg", threshold = 2)
+        assertTrue("search not found for 'sesrcg'", results.any { it.word == "search" })
+    }
+
     @Test fun `swsrch finds search - dist 2 already caught by uniform BEVA`() {
         insert("search" to 10)
         // swsrch→search: s=s, w→e(sub), s→a(sub), r=r, c=c, h=h — exactly 2 subs, within threshold 2.
