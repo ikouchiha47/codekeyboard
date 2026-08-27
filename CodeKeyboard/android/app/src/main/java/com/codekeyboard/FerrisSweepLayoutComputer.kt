@@ -35,8 +35,8 @@ class FerrisSweepLayoutComputer(
 
     internal fun halfGap(screenW: Int): Float = screenW * 0.02f
 
-    override fun maxSafeSnapPx(screenW: Int): Float {
-        val halfGapPx    = halfGap(screenW) / 2f
+    override fun maxSafeSnapPx(screenWidthPx: Int): Float {
+        val halfGapPx    = halfGap(screenWidthPx) / 2f
         val marginPx     = 1f * density
         val geometricMax = halfGapPx - marginPx
         val capPx        = 8f * density

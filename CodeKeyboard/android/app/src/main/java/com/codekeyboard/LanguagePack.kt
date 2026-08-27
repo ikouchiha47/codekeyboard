@@ -230,7 +230,7 @@ class LanguagePack private constructor(private val buf: ByteBuffer) {
         val prefixChars = lower.toCharArray()
         // Copy prefix into buffer
         for (i in prefixChars.indices) {
-            charBuffer[i] = prefixChars[i].toInt()
+            charBuffer[i] = prefixChars[i].code
         }
         collectCharTrieWords(nodeIdx, charBuffer, prefixChars.size, results)
 
