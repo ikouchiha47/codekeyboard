@@ -194,7 +194,8 @@ class BevaTrieSearchTest {
 
     @Test fun `BEVA with QwertyAdjacency matches brute-force weighted scan`() {
         val words = listOf("help" to 4, "helm" to 2, "hero" to 5, "here" to 1,
-                           "herd" to 3, "her" to 7, "search" to 10, "seraph" to 3)
+                           "herd" to 3, "her" to 7, "search" to 10, "seraph" to 3,
+                           "seaver" to 5, "desert" to 8, "decry" to 3)
         words.forEach { (w, n) -> repeat(n) { trie.insert(w) } }
         val adjacency = QwertyAdjacency()
 
