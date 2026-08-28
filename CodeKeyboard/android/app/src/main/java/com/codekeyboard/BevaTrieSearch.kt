@@ -51,8 +51,7 @@ object BevaTrieSearch {
         }
         val results = mutableListOf<FuzzyResult>()
         dfs(adapter, adapter.root, StringBuilder(), initialEv, q, k, adjacency, results, maxResults)
-        // Convert half-step distances back to whole-step for FuzzyResult.editDistance.
-        return results.sortedWith(compareBy({ it.editDistance }, { -it.frequency }))
+        return results.sortedWith(compareBy({ it.weightedDistance }, { -it.frequency }))
     }
 
     private fun <Node> dfs(
@@ -71,9 +70,8 @@ object BevaTrieSearch {
         if (adapter.isTerminal(node) && prefix.isNotEmpty()) {
             val halfDist = editDist(ev, q.length)
             if (halfDist <= k) {
-                // Round up half-steps to whole edit distance for external consumers.
                 val dist = (halfDist + 1) / 2
-                results += FuzzyResult(prefix.toString(), dist, adapter.frequency(node))
+                results += FuzzyResult(prefix.toString(), dist, adapter.frequency(node), halfDist / 2f)
             }
         }
 

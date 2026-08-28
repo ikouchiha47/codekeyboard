@@ -1,6 +1,11 @@
 package com.codekeyboard
 
-data class FuzzyResult(val word: String, val editDistance: Int, val frequency: Int)
+data class FuzzyResult(
+    val word: String,
+    val editDistance: Int,
+    val frequency: Int,
+    val weightedDistance: Float = editDistance.toFloat(),
+)
 
 // ── TrieAdapter — DI seam between FuzzyTrieSearch and concrete trie types ────
 

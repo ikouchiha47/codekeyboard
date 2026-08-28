@@ -65,11 +65,12 @@ class MergedSuggestionStrategy(
         val byWord = LinkedHashMap<String, FuzzyResult>()
         for (r in userFuzzy + baseCorrections) {
             val existing = byWord[r.word]
-            if (existing == null || r.editDistance < existing.editDistance) byWord[r.word] = r
+            if (existing == null || r.weightedDistance < existing.weightedDistance) byWord[r.word] = r
         }
         return byWord.values.toList()
             .sortedWith(compareBy(
-                { it.editDistance },
+                { it.weightedDistance },
+                // { Math.abs(it.word.length - word.length) },
                 { -commonPrefixLength(word, it.word) },
                 { -it.frequency },
             ))

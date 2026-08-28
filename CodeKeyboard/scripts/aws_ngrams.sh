@@ -30,6 +30,11 @@ elif [ "$variant" = "swiftkey" ]; then
   SCRIPT="$(cd "$(dirname "$0")" && pwd)/build_ngrams_swiftkey.py"
   USERDATA="$(cd "$(dirname "$0")" && pwd)/ng-userdata-swiftkey.sh"
   S3_SCRIPT="build_ngrams_swiftkey.py"
+elif [ "$variant" = "4gram-full" ]; then
+  SCRIPT="$(cd "$(dirname "$0")" && pwd)/build_ngrams.py"
+  USERDATA="$(cd "$(dirname "$0")" && pwd)/ng-userdata-4gram-full.sh"
+  S3_SCRIPT="build_ngrams.py"
+  INSTANCE_TYPE="c5.4xlarge"
 else
   SCRIPT="$(cd "$(dirname "$0")" && pwd)/build_ngrams.py"
   USERDATA="$(cd "$(dirname "$0")" && pwd)/ng-userdata-fast.sh"

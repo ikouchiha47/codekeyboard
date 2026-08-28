@@ -101,6 +101,19 @@ class FuzzyIntegrationTest {
         println("sescrg: search found=" + ("search" in words))
     }
 
+    @Test fun `awarxh finds search — Sofle column-shift with 3 matches`() {
+        // awarxh could be intended as "search" (3 adjacent subs, weighted 1.5) or "award" (2 uniform edits, weighted 2.0).
+        // Both must be findable; search must rank above award because its weighted distance is lower.
+        // Uses LayoutAdjacency built from real Sofle-approximate coordinates, same path as CodeKeyboardIME.
+        val results = BevaTrieSearch.search(adapter, "awarxh", 2, Int.MAX_VALUE, sofleLayoutAdjacency())
+        val words = results.map { it.word }
+        println("awarxh top-15 (t=2): ${results.take(15).map { "${it.word}(d=${it.editDistance},w=${it.weightedDistance})" }}")
+        assertTrue("search must be found for Sofle column-shift 'awarxh'", "search" in words.toSet())
+        assertTrue("award must also be found for 'awarxh'", "award" in words.toSet())
+        assertTrue("search (weighted 1.5) must rank above award (weighted 2.0)",
+            words.indexOf("search") < words.indexOf("award"))
+    }
+
     @Test fun `adwrxg finds search — QWERTY adjacent shift with one match`() {
         // adwrxg→search: a→s(adj) d→e(adj) w→a(adj) r→r(match) x→c(adj) g→h(adj)
         // 5 adjacent subs × 0.5 = 2.5 edit distance = 5 half-steps, within threshold 3 (k=6).
@@ -142,6 +155,52 @@ class FuzzyIntegrationTest {
     }
 
     // ── Helpers ────────────────────────────────────────────────────────────────
+
+    /**
+     * Builds a LayoutAdjacency from Sofle-approximate key coordinates.
+     * Left half: 5 columns × 3 alpha rows, 60×60 keys, column stagger 5px per step.
+     * Right half: mirror. This exercises the same geometric code path as CodeKeyboardIME.
+     */
+    private fun sofleLayoutAdjacency(): LayoutAdjacency {
+        val keyW = 60f
+        val keyH = 60f
+        // Left half — col stagger drops 5px each column rightward
+        val leftCols = listOf(
+            listOf('q','a','z'),
+            listOf('w','s','x'),
+            listOf('e','d','c'),
+            listOf('r','f','v'),
+            listOf('t','g','b'),
+        )
+        // Right half starts at x=360, stagger mirrors (rises 5px each column)
+        val rightCols = listOf(
+            listOf('y','h','n'),
+            listOf('u','j','m'),
+            listOf('i','k',','),
+            listOf('o','l','.'),
+            listOf('p',';','/'),
+        )
+        val keys = mutableListOf<PositionedKey>()
+        for ((ci, col) in leftCols.withIndex()) {
+            val x = ci * keyW
+            val staggerY = ci * 5f
+            for ((ri, ch) in col.withIndex()) {
+                if (!ch.isLetter()) continue
+                val top = ri * keyH + staggerY
+                keys += PositionedKey(KeyDef(ch.toString()), KeyRect(x, top, x + keyW, top + keyH))
+            }
+        }
+        for ((ci, col) in rightCols.withIndex()) {
+            val x = 360f + ci * keyW
+            val staggerY = (4 - ci) * 5f
+            for ((ri, ch) in col.withIndex()) {
+                if (!ch.isLetter()) continue
+                val top = ri * keyH + staggerY
+                keys += PositionedKey(KeyDef(ch.toString()), KeyRect(x, top, x + keyW, top + keyH))
+            }
+        }
+        return LayoutAdjacency(keys)
+    }
 
     private fun commonPrefixLength(a: String, b: String): Int {
         var i = 0
