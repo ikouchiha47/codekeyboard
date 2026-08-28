@@ -904,62 +904,6 @@ def write_cklm(
         f.write(followers_temp.read())
 
 
-def pass4_build_symspell(vocab: List[str], max_dist: int = 3) -> bytes:
-    """
-    Build SymSpell delete-variant index as a sorted binary blob.
-
-    For each vocab word (len >= 4), generates all distinct strings reachable by
-    deleting 1..max_dist characters, maps each variant -> set of word IDs.
-
-    Binary layout (little-endian):
-      u32  variant_count
-      u32  offsets[variant_count]   (byte offset from start of entries block)
-      -- entries block --
-      for each variant (sorted lexicographically):
-        u8   variant_len
-        u8[] variant_bytes (UTF-8, no NUL)
-        u16  word_count
-        u16  word_ids[word_count]  (sorted ascending)
-    """
-    from itertools import combinations
-
-    variant_map: Dict[str, Set[int]] = {}
-    for word_id, word in enumerate(vocab):
-        if len(word) < 4:
-            continue
-        # Exact word maps to itself (dist 0 — so exact input finds itself).
-        variant_map.setdefault(word, set()).add(word_id)
-        # All delete-variants up to max_dist.
-        for dist in range(1, max_dist + 1):
-            for positions in combinations(range(len(word)), dist):
-                pos_set = set(positions)
-                variant = ''.join(c for i, c in enumerate(word) if i not in pos_set)
-                if len(variant) >= 2:
-                    variant_map.setdefault(variant, set()).add(word_id)
-
-    sorted_variants = sorted(variant_map.keys())
-    variant_count = len(sorted_variants)
-
-    import io
-    entries_buf = io.BytesIO()
-    offsets: List[int] = []
-
-    for variant in sorted_variants:
-        offsets.append(entries_buf.tell())
-        vb = variant.encode('utf-8')
-        word_ids = sorted(variant_map[variant])
-        entries_buf.write(struct.pack('B', len(vb)))
-        entries_buf.write(vb)
-        entries_buf.write(struct.pack('<H', len(word_ids)))
-        for wid in word_ids:
-            entries_buf.write(struct.pack('<H', wid))
-
-    entries_data = entries_buf.getvalue()
-    header_blob = struct.pack('<I', variant_count)
-    offset_table = struct.pack(f'<{variant_count}I', *offsets) if variant_count else b''
-    return header_blob + offset_table + entries_data
-
-
 def verify_cklm(output_path: str, vocab: List[str], nodes: List[NodeMeta], log10_min: float, log10_max: float, char_trie_node_count: int = 0):
     """Verify the written CKLM file by reading it back."""
     with open(output_path, 'rb') as f:
