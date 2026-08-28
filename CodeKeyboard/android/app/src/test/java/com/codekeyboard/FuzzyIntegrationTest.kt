@@ -94,6 +94,31 @@ class FuzzyIntegrationTest {
         assertFalse("decry must NOT be found", "decry" in words)
     }
 
+    @Test fun `sescrg probe — does proximity BEVA find search at threshold 3`() {
+        val results = BevaTrieSearch.search(adapter, "sescrg", 3, Int.MAX_VALUE, QwertyAdjacency())
+        val words = results.map { it.word }.toSet()
+        println("sescrg top-15 (t=3): ${results.sortedBy { it.editDistance }.take(15).map { "${it.word}(d=${it.editDistance})" }}")
+        println("sescrg: search found=" + ("search" in words))
+    }
+
+    @Test fun `adwrxg finds search — QWERTY adjacent shift with one match`() {
+        // adwrxg→search: a→s(adj) d→e(adj) w→a(adj) r→r(match) x→c(adj) g→h(adj)
+        // 5 adjacent subs × 0.5 = 2.5 edit distance = 5 half-steps, within threshold 3 (k=6).
+        val results = BevaTrieSearch.search(adapter, "adwrxg", 3, Int.MAX_VALUE, QwertyAdjacency())
+        val words = results.map { it.word }.toSet()
+        println("adwrxg top-15 (t=3): ${results.sortedBy { it.editDistance }.take(15).map { "${it.word}(d=${it.editDistance})" }}")
+        assertTrue("search must be found for QWERTY shift 'adwrxg'", "search" in words)
+    }
+
+    @Test fun `drstvj finds search — QWERTY right-shift of all 6 keys`() {
+        // search right-shifted one column on QWERTY: s→d e→r a→s r→t c→v h→j
+        // All 6 subs are adjacent → 6×0.5 = 3.0 edit distance, exactly at threshold 3.
+        val results = BevaTrieSearch.search(adapter, "drstvj", 3, Int.MAX_VALUE, QwertyAdjacency())
+        val words = results.map { it.word }.toSet()
+        println("drstvj top-15 (t=3): ${results.sortedBy { it.editDistance }.take(15).map { "${it.word}(d=${it.editDistance})" }}")
+        assertTrue("search must be found for QWERTY right-shift 'drstvj'", "search" in words)
+    }
+
     // ── Performance ────────────────────────────────────────────────────────────
 
     @Test fun `benchmark raiming k=2 no cap`() {

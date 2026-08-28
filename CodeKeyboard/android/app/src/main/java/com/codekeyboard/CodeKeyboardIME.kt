@@ -208,7 +208,9 @@ class CodeKeyboardIME : InputMethodService() {
         // view has real dimensions.
         val w = resources.displayMetrics.widthPixels
         val c = keyboardView.computer!!
-        keyboardView.setKeys(c.compute(w, kbState.effectiveLayer), kbState, c.heightPx(w))
+        val positionedKeys = c.compute(w, kbState.effectiveLayer)
+        wordDict.updateAdjacency(LayoutAdjacency(positionedKeys))
+        keyboardView.setKeys(positionedKeys, kbState, c.heightPx(w))
 
         return wrapper
     }

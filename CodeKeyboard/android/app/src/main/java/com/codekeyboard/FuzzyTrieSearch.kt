@@ -30,7 +30,7 @@ object FuzzyThreshold {
     fun forLength(len: Int): Int = when {
         len <= 3 -> 0
         len == 4 -> 1
-        else     -> 2
+        else     -> 3
     }
 }
 

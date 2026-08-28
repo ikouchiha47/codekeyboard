@@ -74,9 +74,9 @@ class BevaTrieSearchTest {
         assertEquals(1, FuzzyThreshold.forLength(4))
     }
 
-    @Test fun `FuzzyThreshold returns 2 for len 5 and above`() {
-        assertEquals(2, FuzzyThreshold.forLength(5))
-        assertEquals(2, FuzzyThreshold.forLength(10))
+    @Test fun `FuzzyThreshold returns 3 for len 5 and above`() {
+        assertEquals(3, FuzzyThreshold.forLength(5))
+        assertEquals(3, FuzzyThreshold.forLength(10))
     }
 
     // ── Result ordering ───────────────────────────────────────────────────────
@@ -136,7 +136,7 @@ class BevaTrieSearchTest {
         for (q in queries) {
             val threshold = FuzzyThreshold.forLength(q.length)
             if (threshold == 0) continue
-            val beva  = search(q, threshold).map { it.word }.toSet()
+            val beva  = search(q, threshold, Int.MAX_VALUE).map { it.word }.toSet()
             val brute = words.map { it.first }
                 .filter { levenshtein(q, it) <= threshold }
                 .toSet()
@@ -155,7 +155,7 @@ class BevaTrieSearchTest {
         for (q in queries) {
             val threshold = FuzzyThreshold.forLength(q.length)
             if (threshold == 0) continue
-            val beva  = search(q, threshold).map { it.word }.toSet()
+            val beva  = search(q, threshold, Int.MAX_VALUE).map { it.word }.toSet()
             val brute = words.map { it.first }
                 .filter { levenshtein(q, it) <= threshold }
                 .toSet()

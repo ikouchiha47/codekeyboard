@@ -77,7 +77,7 @@ object BevaTrieSearch {
             }
         }
 
-        if (ev[k] == 0) return
+        if (ev.none { it != 0 }) return
 
         adapter.iterateChildren(node) { ch, child ->
             if (results.size >= maxResults) return@iterateChildren

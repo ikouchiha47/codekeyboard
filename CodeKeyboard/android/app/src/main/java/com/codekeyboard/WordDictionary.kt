@@ -60,7 +60,11 @@ class WordDictionary(private val pack: LanguagePack) : PrefixDictionary {
     // the substitution weight. SymSpell pre-built index is planned for the next
     // .cklm compiler pass (offline build, mmap at startup).
 
-    private val proximityScorer = ProximityScorer(QwertyAdjacency())
+    private var proximityScorer = ProximityScorer(NoAdjacency)
+
+    fun updateAdjacency(adjacency: KeyAdjacency) {
+        proximityScorer = ProximityScorer(adjacency)
+    }
 
     override fun correct(word: String, maxResults: Int): List<FuzzyResult> {
         val threshold = FuzzyThreshold.forLength(word.length)
