@@ -60,7 +60,19 @@ def main():
     p.add_argument("--min-count", type=int, default=20, help="Min count floor")
     p.add_argument("--min-pmi", type=float, default=2.0, help="Min PMI")
     p.add_argument("--max-len", type=int, default=4, help="Max phrase length")
+    p.add_argument("--english-vocab", help="Optional English word list (word-per-line); "
+                   "phrases containing any word not in this set are dropped. Filters "
+                   "non-English subtitle text out of the phrase list.")
     args = p.parse_args()
+
+    # English-valid vocabulary set (if provided): drop any phrase that contains a
+    # word outside this set. OpenSubtitles samples contain non-English subtitles,
+    # and PMI favors rare distinctive sequences — exactly the foreign-language /
+    # gibberish phrases that pollute the list ("aku wo saegiru kabe").
+    english = None
+    if args.english_vocab:
+        with open(args.english_vocab, encoding="utf-8", errors="ignore") as f:
+            english = {line.split()[0].strip().lower() for line in f if line.strip()}
 
     conn = sqlite3.connect(f"file:{args.counts}?mode=ro", uri=True)
 
@@ -89,6 +101,11 @@ def main():
             # "ha ha ha ha") — high PMI but not useful phrases.
             if len(set(words)) < len(words):
                 continue
+            # Drop non-English phrases (if an English vocab was provided):
+            # OpenSubtitles samples contain foreign-language subtitles, and PMI
+            # favors those rare distinctive sequences.
+            if english is not None and not all(w in english for w in words):
+                continue
             phrases.append((phrase, c, words))
 
     if not phrases:
@@ -115,8 +132,11 @@ def main():
         tscore = (p_seq - prod_p) / (math.sqrt(p_seq) + 1e-12)
         scored.append((pmi, tscore, count, phrase))
 
-    # Sort by PMI desc
-    scored.sort(key=lambda x: (-x[0], -x[2]))
+    # Sort by t-score desc — t-score combines frequency AND distinctiveness, so
+    # common idioms ("as a matter of fact", count 23K) rank above rare
+    # distinctive documentary phrases ("detects hydrogen sulphide excreted",
+    # count 24). Sorting by PMI alone over-weights rare sequences.
+    scored.sort(key=lambda x: (-x[1], -x[2]))
 
     # Dedupe: drop phrases that are substrings of a longer kept phrase.
     # Group kept phrases by token length so a candidate only checks kept
