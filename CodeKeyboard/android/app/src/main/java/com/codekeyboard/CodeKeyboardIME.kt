@@ -235,9 +235,14 @@ class CodeKeyboardIME : InputMethodService() {
             android.util.Log.d("CKB_COMPOSE", "onUpdateSelection: IME-driven update, skip clear")
             return
         }
+        // ComposingBuffer only supports editing at its own tail (append/backspace),
+        // so composing may only survive a selection change if the cursor is still
+        // parked at the END of the composing region. A click that lands inside the
+        // region but before its end (e.g. correcting a letter mid-word) must also
+        // abandon composing — otherwise the next keystroke's setComposingText(word, 1)
+        // snaps the real cursor back to the end of the whole buffer, ignoring the tap.
         val cursorOutsideComposing = candidatesStart == -1 || candidatesEnd == -1 ||
-            newSelStart < candidatesStart || newSelStart > candidatesEnd ||
-            newSelEnd   < candidatesStart || newSelEnd   > candidatesEnd
+            newSelStart != candidatesEnd || newSelEnd != candidatesEnd
         android.util.Log.d("CKB_COMPOSE", "onUpdateSelection: cursorOutsideComposing=$cursorOutsideComposing")
         if (cursorOutsideComposing) {
             android.util.Log.d("CKB_COMPOSE", "onUpdateSelection: CLEARING composing buffer (was='${composing.text}')")
