@@ -282,6 +282,13 @@ class CodeKeyboardIME : InputMethodService() {
         evaluateSentenceCase()
     }
 
+    override fun onCommitCorrection(info: android.view.inputmethod.CorrectionInfo) {
+        super.onCommitCorrection(info)
+        val corrected = info.newText?.toString()?.trim() ?: return
+        if (corrected.isBlank() || !::wordLearner.isInitialized) return
+        wordLearner.learnFromCorrection(corrected)
+    }
+
     override fun onFinishInput() {
         super.onFinishInput()
         currentInputConnection?.finishComposingText()
