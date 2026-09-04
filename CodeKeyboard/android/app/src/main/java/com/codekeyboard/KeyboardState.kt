@@ -31,6 +31,10 @@ class KeyboardState {
     // exactly like cancelling a manually-latched Shift.
     var sentenceCaseEnabled: Boolean = true
 
+    // Set when sentence-ending punctuation (. ! ?) is committed; cleared on next char.
+    // If the next char is a space, we arm Sentence Case shift.
+    private var _pendingSentenceArm: Boolean = false
+
     // ── Generic modifier storage ──────────────────────────────────────────
     private val _latch = mutableMapOf(
         "shift" to LatchState.NONE,
@@ -196,6 +200,12 @@ class KeyboardState {
         val committedChar = committedText?.lastOrNull()
         val isLetter = committedChar?.isLetter() == true
         val clearShift = committedText == null || isLetter
+
+        // Sentence Case: ". " / "! " / "? " sequence arms shift for the next letter.
+        if (committedChar == ' ' && _pendingSentenceArm) {
+            armSentenceCaseShift()
+        }
+        _pendingSentenceArm = committedChar == '.' || committedChar == '!' || committedChar == '?'
 
         if (clearShift && _latch["shift"] == LatchState.LATCHED) {
             _latch["shift"] = LatchState.NONE

@@ -62,7 +62,7 @@ jobs:
 
       - name: Run Kotlin unit tests
         working-directory: CodeKeyboard/android
-        run: ./gradlew testDebugUnitTest --console=plain -PskipFlakyTests
+        run: ./gradlew testDebugUnitTest --console=plain
 
       - name: TypeScript check
         working-directory: CodeKeyboard

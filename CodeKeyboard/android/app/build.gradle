@@ -91,8 +91,8 @@ android {
         applicationId "com.codekeyboard"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 25
-        versionName "1.15.2"
+        versionCode 26
+        versionName "1.15.3"
 
         // Ship only the arm64-v8a native libs. The x86/x86_64 ABIs are
         // emulator-only and armeabi-v7a is for legacy 32-bit devices — none
@@ -168,9 +168,6 @@ dependencies {
 tasks.withType(Test) {
     maxHeapSize = "2g"
     jvmArgs '-XX:+UseG1GC'
-    if (project.hasProperty('skipFlakyTests')) {
-        exclude '**/KeyboardStateTest.class'
-    }
 }
 
 // Integration tests: load real assets (en.trie) and run correctness + perf checks.
