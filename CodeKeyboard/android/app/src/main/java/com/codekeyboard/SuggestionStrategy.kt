@@ -17,6 +17,23 @@ interface PrefixDictionary {
 }
 
 /**
+ * Configuration for one language pack within [MergedSuggestionStrategy].
+ *
+ * @param lang     BCP-47 language tag (e.g. "en", "hi") — matches the .cklm asset name.
+ * @param dict     Loaded dictionary for prefix completion and fuzzy correction.
+ * @param weight   Relative ranking weight (1.0 = normal; <1.0 de-prioritises this pack).
+ * @param maxOrder Highest n-gram order to use for this pack's Ngram cascade (1=unigram,
+ *                 2=bigram, 3=trigram). Consumed by the IME at load time; not used
+ *                 inside MergedSuggestionStrategy itself.
+ */
+data class PackConfig(
+    val lang: String,
+    val dict: PrefixDictionary,
+    val weight: Float = 1.0f,
+    val maxOrder: Int = 3,
+)
+
+/**
  * Interface for bigram next-word prediction with context.
  * Implemented by [BigramModel] (legacy) and [PackBackedBigramModel] (pack-backed).
  */
@@ -31,7 +48,7 @@ interface SuggestionStrategy {
 class MergedSuggestionStrategy(
     private val userAdapter: UserTrieAdapter,
     private val baseAdapter: TrieAdapter<Int>,
-    private val baseDict: PrefixDictionary,
+    private val packs: List<PackConfig>,
     private val correctionStore: UserCorrectionStore? = null,
 ) : SuggestionStrategy {
 
@@ -56,29 +73,36 @@ class MergedSuggestionStrategy(
 
     private fun exactSuggest(prefix: String, k: Int): List<String> {
         val userResults = userAdapter.suggest(prefix, k)
-        val baseResults = baseDict.suggest(prefix, k)
-        val userWords = userResults.toSet()
-        return (userResults + baseResults.filter { it !in userWords }).take(k)
+        val seen = userResults.toMutableSet()
+        val merged = userResults.toMutableList()
+        // Packs ordered by weight descending; higher-weight results appear first.
+        for (pack in packs.sortedByDescending { it.weight }) {
+            val packResults = pack.dict.suggest(prefix, k)
+            for (w in packResults) {
+                if (seen.add(w)) merged.add(w)
+                if (merged.size >= k) return merged
+            }
+        }
+        return merged.take(k)
     }
 
     private fun fuzzyFill(word: String, threshold: Int, limit: Int): List<String> {
-        // Collect ALL words within threshold from both tries — BEVA's edit-vector
-        // pruning cuts dead subtrees so this is efficient. Early-exit on count
-        // produces wrong results because DFS order is alphabetical, not by quality.
         val userFuzzy = BevaTrieSearch.search(userAdapter, word, threshold, Int.MAX_VALUE)
-        // baseFuzzy ran uniform-cost BEVA — superseded by baseCorrections (proximity-weighted).
-        // val baseFuzzy = BevaTrieSearch.search(baseAdapter, word, threshold, Int.MAX_VALUE)
-        val baseCorrections = baseDict.correct(word, Int.MAX_VALUE)
-        // Merge by word keeping lowest editDistance; proximity-weighted beats uniform.
+        // Collect corrections from all packs; weight adjusts effective distance.
+        val allCorrections = packs.flatMap { pack ->
+            pack.dict.correct(word, Int.MAX_VALUE).map { r ->
+                if (pack.weight >= 1.0f) r
+                else r.copy(weightedDistance = r.weightedDistance / pack.weight)
+            }
+        }
         val byWord = LinkedHashMap<String, FuzzyResult>()
-        for (r in userFuzzy + baseCorrections) {
+        for (r in userFuzzy + allCorrections) {
             val existing = byWord[r.word]
             if (existing == null || r.weightedDistance < existing.weightedDistance) byWord[r.word] = r
         }
         return byWord.values.toList()
             .sortedWith(compareBy(
                 { it.weightedDistance },
-                // { Math.abs(it.word.length - word.length) },
                 { -commonPrefixLength(word, it.word) },
                 { -it.frequency },
             ))
@@ -86,8 +110,6 @@ class MergedSuggestionStrategy(
             .take(limit)
     }
 
-    // Words that share a longer common prefix with the query are ranked higher
-    // within the same edit distance bucket (handles base trie with no frequency).
     private fun commonPrefixLength(a: String, b: String): Int {
         var i = 0
         while (i < a.length && i < b.length && a[i] == b[i]) i++

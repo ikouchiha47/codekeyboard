@@ -15,7 +15,7 @@ class UserCorrectionStoreTest {
 
     @Before fun setUp() {
         file = tmp.newFile("corrections.tsv")
-        store = UserCorrectionStore(file)
+        store = UserCorrectionStore(file) // default: TwoQueueCache(20_000)
     }
 
     // ── basic record + lookup ─────────────────────────────────────────────────
@@ -84,6 +84,75 @@ class UserCorrectionStoreTest {
         assertEquals(0L, file.length())
     }
 
+    // ── LRUCache unit tests ───────────────────────────────────────────────────
+
+    @Test fun `LRUCache basic put and get`() {
+        val lru = LRUCache<String, String>(3)
+        lru.put("a", "1"); lru.put("b", "2"); lru.put("c", "3")
+        assertEquals("1", lru.get("a"))
+        assertEquals("2", lru.get("b"))
+        assertEquals("3", lru.get("c"))
+    }
+
+    @Test fun `LRUCache evicts least recently used`() {
+        val lru = LRUCache<String, String>(3)
+        lru.put("a", "1"); lru.put("b", "2"); lru.put("c", "3")
+        lru.get("a") // access a → b is now LRU
+        lru.put("d", "4") // should evict b
+        assertNull(lru.get("b"))
+        assertEquals("1", lru.get("a"))
+        assertEquals("3", lru.get("c"))
+        assertEquals("4", lru.get("d"))
+    }
+
+    @Test fun `LRUCache entries returns all live entries`() {
+        val lru = LRUCache<String, String>(10)
+        lru.put("x", "1"); lru.put("y", "2")
+        val e = lru.entries()
+        assertEquals("1", e["x"])
+        assertEquals("2", e["y"])
+    }
+
+    @Test fun `UserCorrectionStore works with LRUCache`() {
+        val lruStore = UserCorrectionStore(tmp.newFile("lru.tsv"), LRUCache(100))
+        lruStore.record("teh", "the")
+        assertEquals("the", lruStore.lookup("teh"))
+    }
+
+    // ── TwoQueueCache unit tests ──────────────────────────────────────────────
+
+    @Test fun `TwoQueueCache basic put and get`() {
+        val tq = TwoQueueCache<String, String>(10)
+        tq.put("a", "1"); tq.put("b", "2")
+        assertEquals("1", tq.get("a"))
+        assertEquals("2", tq.get("b"))
+    }
+
+    @Test fun `TwoQueueCache promotes repeated access to MAIN`() {
+        val tq = TwoQueueCache<String, String>(10)
+        tq.put("hot", "value")
+        // Second access via OUT promotes to MAIN — force eviction from IN first
+        repeat(3) { i -> tq.put("fill$i", "v") } // push "hot" out of IN into OUT
+        tq.put("hot", "value") // second access → should promote to MAIN
+        assertEquals("value", tq.get("hot"))
+    }
+
+    @Test fun `TwoQueueCache entries returns all live entries`() {
+        val tq = TwoQueueCache<String, String>(10)
+        tq.put("x", "1"); tq.put("y", "2")
+        val e = tq.entries()
+        assertEquals("1", e["x"])
+        assertEquals("2", e["y"])
+    }
+
+    @Test fun `TwoQueueCache evicts when full`() {
+        val tq = TwoQueueCache<String, Int>(5)
+        repeat(10) { i -> tq.put("k$i", i) }
+        val surviving = (0 until 10).count { tq.get("k$it") != null }
+        assertTrue("should have evicted some", surviving < 10)
+        assertTrue("should retain some", surviving > 0)
+    }
+
     // ── MergedSuggestionStrategy integration ──────────────────────────────────
 
     private val emptyBaseAdapter = object : TrieAdapter<Int> {
@@ -109,7 +178,7 @@ class UserCorrectionStoreTest {
         }
 
         val strategy = MergedSuggestionStrategy(
-            UserTrieAdapter(UserTrie()), emptyBaseAdapter, baseDict, store,
+            UserTrieAdapter(UserTrie()), emptyBaseAdapter, listOf(PackConfig("en", baseDict)), store,
         )
 
         val results = strategy.suggest("sescrg", 5)
@@ -126,7 +195,7 @@ class UserCorrectionStoreTest {
         }
 
         val strategy = MergedSuggestionStrategy(
-            UserTrieAdapter(UserTrie()), emptyBaseAdapter, baseDict, store,
+            UserTrieAdapter(UserTrie()), emptyBaseAdapter, listOf(PackConfig("en", baseDict)), store,
         )
 
         val results = strategy.suggest("sescrg", 5)
@@ -159,5 +228,16 @@ class UserCorrectionStoreTest {
         // File should be well under 5MB, load under 500ms
         assertTrue("file too large: ${sizeMb}MB", sizeMb < 5.0)
         assertTrue("load too slow: ${loadMs}ms", loadMs < 500)
+    }
+
+    @Test fun `LRU 20K stress comparable to 2Q`() {
+        val lruFile = tmp.newFile("lru_stress.tsv")
+        val lruStore = UserCorrectionStore(lruFile, LRUCache(20_000))
+        repeat(20_000) { i -> lruStore.record("typo$i", "correction$i") }
+        lruStore.save()
+
+        val sizeMb = lruFile.length().toDouble() / (1024 * 1024)
+        println("LRU 20K entries — file size: %.2f MB".format(sizeMb))
+        assertTrue("LRU file too large: ${sizeMb}MB", sizeMb < 5.0)
     }
 }

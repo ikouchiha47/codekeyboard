@@ -103,7 +103,7 @@ class SuggestionStrategyTest {
             override fun frequency(node: Int) = 0
             override fun iterateChildren(node: Int, block: (Char, Int) -> Unit) {}
         }
-        val strategy = MergedSuggestionStrategy(userAdapter, emptyBaseAdapter, baseDict)
+        val strategy = MergedSuggestionStrategy(userAdapter, emptyBaseAdapter, listOf(PackConfig("en", baseDict)))
         val suggestions = strategy.suggest(word, 5)
         println("\n=== Final suggestions for '$word' ===")
         suggestions.forEach { println("  $it") }

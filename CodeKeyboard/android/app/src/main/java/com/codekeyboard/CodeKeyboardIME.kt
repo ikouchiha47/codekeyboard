@@ -147,8 +147,9 @@ class CodeKeyboardIME : InputMethodService() {
         val baseAdapter = wordDict.adapter
         correctionStore = UserCorrectionStore(File(filesDir, "user_corrections.tsv"))
 
+        val packs = buildPackList(locale, pack, wordDict)
         suggestionStrategy = BigramAwareSuggestionStrategy(
-            MergedSuggestionStrategy(userAdapter, baseAdapter, wordDict, correctionStore), packBigram)
+            MergedSuggestionStrategy(userAdapter, baseAdapter, packs, correctionStore), packBigram)
         wordLearner = WordLearner(userTrie) { word -> wordDict.suggest(word, 1).firstOrNull() == word }
         Metrics.client = LogMetrics
     }
@@ -292,6 +293,47 @@ class CodeKeyboardIME : InputMethodService() {
         composing.clear()
         if (::suggestionBar.isInitialized) suggestionBar.clear()
         scheduleUserTrieFlush()
+    }
+
+    /**
+     * Builds the ordered list of [PackConfig] for [MergedSuggestionStrategy].
+     *
+     * The primary pack (matching [primaryLocale]) is always weight=1.0 / maxOrder=3.
+     * Additional packs come from the "secondary_languages" SharedPreferences setting —
+     * a JSON array of objects: [{"lang":"hi","weight":0.8,"maxOrder":1}, ...].
+     * Packs whose .cklm asset is missing are silently skipped.
+     */
+    private fun buildPackList(
+        primaryLocale: String,
+        primaryPack: LanguagePack,
+        primaryDict: WordDictionary,
+    ): List<PackConfig> {
+        val result = mutableListOf(PackConfig(primaryLocale, primaryDict, weight = 1.0f, maxOrder = 3))
+
+        val secondaryJson = KeyboardSettings.getString("secondary_languages", "[]")
+        val entries = try {
+            org.json.JSONArray(secondaryJson)
+        } catch (_: Exception) { return result }
+
+        for (i in 0 until entries.length()) {
+            val obj = entries.optJSONObject(i) ?: continue
+            val lang = obj.optString("lang").takeIf { it.isNotBlank() } ?: continue
+            if (lang == primaryLocale) continue
+            val weight = obj.optDouble("weight", 0.8).toFloat().coerceIn(0.01f, 2.0f)
+            val maxOrder = obj.optInt("maxOrder", 1).coerceIn(1, 3)
+            try {
+                val assetName = "$lang.cklm"
+                val packFile = File(filesDir, assetName)
+                val assetSize = assets.openFd(assetName).use { it.length }
+                if (!packFile.exists() || packFile.length() != assetSize) {
+                    assets.open(assetName).use { it.copyTo(packFile.outputStream()) }
+                }
+                val secPack = LanguagePack.open(packFile)
+                val secDict = WordDictionary(secPack)
+                result.add(PackConfig(lang, secDict, weight, maxOrder))
+            } catch (_: Exception) { /* asset missing — skip */ }
+        }
+        return result
     }
 
     private fun scheduleUserTrieFlush() {

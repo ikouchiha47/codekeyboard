@@ -23,17 +23,32 @@ class UserFuzzyIntegrationTest {
     }
 
     private val strategy: MergedSuggestionStrategy by lazy {
-        val userTrie = UserTrie.load(userTrieFile)
+        val userTrie = if (userTrieFile.exists()) UserTrie.load(userTrieFile) else UserTrie()
         val userAdapter = UserTrieAdapter(userTrie)
         val wordDict = WordDictionary(LanguagePack.open(packFile))
-        MergedSuggestionStrategy(userAdapter, wordDict.adapter, wordDict)
+        MergedSuggestionStrategy(userAdapter, wordDict.adapter, listOf(PackConfig("en", wordDict)))
     }
 
     @Test fun `sesrcg suggests search and not garbage words`() {
+        val suggestions = strategy.suggest("sesrcg", 5)
+        println("sesrcg suggestions (empty user trie): $suggestions")
+
+        assertTrue("search must appear", "search" in suggestions)
+        assertFalse("seaver must NOT appear", "seaver" in suggestions)
+        assertFalse("desert must NOT appear", "desert" in suggestions)
+        assertFalse("decry must NOT appear", "decry" in suggestions)
+    }
+
+    @Test fun `sesrcg suggests search with real user trie from device`() {
         assumeTrue("user.trie not present — pull from device first", userTrieFile.exists())
 
-        val suggestions = strategy.suggest("sesrcg", 5)
-        println("sesrcg suggestions: $suggestions")
+        val userTrie = UserTrie.load(userTrieFile)
+        val userAdapter = UserTrieAdapter(userTrie)
+        val wordDict = WordDictionary(LanguagePack.open(packFile))
+        val deviceStrategy = MergedSuggestionStrategy(userAdapter, wordDict.adapter, listOf(PackConfig("en", wordDict)))
+
+        val suggestions = deviceStrategy.suggest("sesrcg", 5)
+        println("sesrcg suggestions (device user trie): $suggestions")
 
         assertTrue("search must appear", "search" in suggestions)
         assertFalse("seaver must NOT appear", "seaver" in suggestions)

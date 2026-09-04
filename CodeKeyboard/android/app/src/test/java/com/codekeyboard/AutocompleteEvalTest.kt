@@ -96,7 +96,7 @@ class AutocompleteEvalTest {
         )
         userBigram.loadUserLayer()
         val packBigram = PackBackedBigramModel(PackNgramModel(pack, order = 2), userBigram)
-        return BigramAwareSuggestionStrategy(MergedSuggestionStrategy(userAdapter, baseAdapter, wordDict), packBigram)
+        return BigramAwareSuggestionStrategy(MergedSuggestionStrategy(userAdapter, baseAdapter, listOf(PackConfig("en", wordDict))), packBigram)
     }
 
     private fun runEval(strategy: SuggestionStrategy, cases: List<Case>): List<Result> =
