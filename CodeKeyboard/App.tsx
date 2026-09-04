@@ -9,6 +9,7 @@ import {
   ScrollView,
   KeyboardAvoidingView,
   Platform,
+  Switch,
   useColorScheme,
   NativeModules,
 } from 'react-native';
@@ -603,6 +604,67 @@ function ThemesScreen() {
   );
 }
 
+// ── Languages screen ──────────────────────────────────────────────────────────
+
+type SecondaryPack = {lang: string; weight: number; maxOrder: number};
+
+const AVAILABLE_SECONDARY_PACKS: {lang: string; label: string; maxOrder: number}[] = [
+  {lang: 'hi', label: 'Hinglish (hi)', maxOrder: 1},
+];
+
+function LanguagesScreen() {
+  const [enabled, setEnabled] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    NativeModules.SettingsModule?.getString('secondary_languages', (val: string) => {
+      if (!val) return;
+      try {
+        const packs: SecondaryPack[] = JSON.parse(val);
+        const map: Record<string, boolean> = {};
+        packs.forEach(p => { map[p.lang] = true; });
+        setEnabled(map);
+      } catch (_) {}
+    });
+  }, []);
+
+  const toggle = useCallback((lang: string, maxOrder: number) => {
+    setEnabled(prev => {
+      const next = {...prev, [lang]: !prev[lang]};
+      const packs: SecondaryPack[] = AVAILABLE_SECONDARY_PACKS
+        .filter(p => next[p.lang])
+        .map(p => ({lang: p.lang, weight: 0.8, maxOrder: p.maxOrder}));
+      NativeModules.SettingsModule?.setString('secondary_languages', JSON.stringify(packs));
+      return next;
+    });
+  }, []);
+
+  return (
+    <ScrollView style={styles.settingsScroll} contentContainerStyle={styles.settingsContainer}>
+      <Text style={styles.settingsTitle}>Primary Language</Text>
+      <View style={styles.langRow}>
+        <Text style={styles.langLabel}>English (en)</Text>
+        <Text style={styles.langBadge}>Always on</Text>
+      </View>
+
+      <Text style={[styles.settingsTitle, {marginTop: 24}]}>Secondary Languages</Text>
+      <Text style={styles.settingsHint}>
+        Secondary packs are merged alongside English. Restart the keyboard after toggling.
+      </Text>
+      {AVAILABLE_SECONDARY_PACKS.map(({lang, label}) => (
+        <View key={lang} style={styles.langRow}>
+          <Text style={styles.langLabel}>{label}</Text>
+          <Switch
+            value={!!enabled[lang]}
+            onValueChange={() => toggle(lang, 1)}
+            trackColor={{false: '#444', true: '#4a90e2'}}
+            thumbColor={enabled[lang] ? '#fff' : '#aaa'}
+          />
+        </View>
+      ))}
+    </ScrollView>
+  );
+}
+
 function PlaceholderScreen({tab}: {tab: Tab}) {
   return (
     <View style={styles.placeholder}>
@@ -657,6 +719,8 @@ function App() {
             <ThemesScreen />
           ) : activeTab === 'layouts' ? (
             <LayoutsScreen />
+          ) : activeTab === 'languages' ? (
+            <LanguagesScreen />
           ) : (
             <PlaceholderScreen tab={activeTab} />
           )}
@@ -733,6 +797,23 @@ const styles = StyleSheet.create({
     marginTop: 16,
     lineHeight: 20,
     maxWidth: 300,
+  },
+  langRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#222',
+  },
+  langLabel: {
+    color: '#ddd',
+    fontSize: 15,
+  },
+  langBadge: {
+    color: '#555',
+    fontSize: 13,
   },
   placeholder: {
     flex: 1,
