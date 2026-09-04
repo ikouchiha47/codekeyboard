@@ -56,76 +56,71 @@ class MergedSuggestionStrategy(
 ) : SuggestionStrategy {
 
     override fun suggest(prefix: String, k: Int, context: String): List<String> {
-        val exact = exactSuggest(prefix, k)
-        if (exact.size >= k) return exact
+        val merged = mutableListOf<String>()
+        val seen = mutableSetOf<String>()
 
-        val threshold = FuzzyThreshold.forLength(prefix.length)
-        if (threshold == 0) return exact
+        fun add(word: String) { if (seen.add(word)) merged.add(word) }
+        fun addAll(words: List<String>) { words.forEach { add(it) } }
+        fun remaining() = k - merged.size
 
-        val fuzzy = fuzzyFill(prefix, threshold, k - exact.size)
-        val exactSet = exact.toSet()
-        val candidates = exact + fuzzy.filter { it !in exactSet }
+        // Tier 1: user stored correction for this exact typo
+        correctionStore?.lookup(prefix)?.let { add(it) }
 
-        // Prepend any stored correction for this exact typo (highest confidence).
-        val stored = correctionStore?.lookup(prefix)
-        return if (stored != null && stored !in exactSet)
-            listOf(stored) + candidates.filter { it != stored }.take(k - 1)
-        else
-            candidates
-    }
+        // Tier 2: user learned words (exact prefix)
+        addAll(userAdapter.suggest(prefix, k))
 
-    private fun exactSuggest(prefix: String, k: Int): List<String> {
-        val userResults = userAdapter.suggest(prefix, k)
-        val seen = userResults.toMutableSet()
-        val merged = userResults.toMutableList()
-        if (merged.size >= k) return merged.take(k)
-
-        // Each secondary pack's share is a direct fraction of k (e.g. 0.3 = 30% of k slots).
-        // Primary gets whatever remains after secondaries. Changing k auto-scales everything.
+        val primary = packs.firstOrNull()
         val secondaries = packs.drop(1)
-        val primary = packs.firstOrNull() ?: return merged.take(k)
+        val threshold = FuzzyThreshold.forLength(prefix.length)
 
-        val secondarySlots = secondaries.map { pack ->
-            pack to (pack.share * k).roundToInt().coerceAtLeast(if (pack.share > 0f) 1 else 0)
-        }
-        val primarySlots = (k - secondarySlots.sumOf { it.second }).coerceAtLeast(1)
-
-        // Fill primary slots first, then each secondary's slots.
-        fun fillSlots(dict: PrefixDictionary, slots: Int) {
-            var filled = 0
-            for (w in dict.suggest(prefix, slots + 2)) {
-                if (filled >= slots || merged.size >= k) break
-                if (seen.add(w)) { merged.add(w); filled++ }
-            }
+        // Tier 3: primary (en) exact prefix
+        if (primary != null && remaining() > 0) {
+            val primarySlots = if (secondaries.isEmpty()) remaining()
+                else (k - secondaries.sumOf { (it.share * k).roundToInt().coerceAtLeast(1) }).coerceAtLeast(1)
+            addAll(primary.dict.suggest(prefix, primarySlots + 2).take(primarySlots + 2))
         }
 
-        fillSlots(primary.dict, primarySlots)
-        for ((pack, slots) in secondarySlots) fillSlots(pack.dict, slots)
-
-        // Backfill any unused slots from all packs (primary first).
-        if (merged.size < k) {
-            for (pack in packs) {
-                if (merged.size >= k) break
-                for (w in pack.dict.suggest(prefix, k)) {
-                    if (merged.size >= k) break
-                    if (seen.add(w)) merged.add(w)
-                }
-            }
+        // Tier 4: secondary (hi) exact prefix — before fuzzy so hi words aren't crowded out
+        for (pack in secondaries) {
+            if (remaining() <= 0) break
+            val slots = (pack.share * k).roundToInt().coerceAtLeast(1).coerceAtMost(remaining())
+            addAll(pack.dict.suggest(prefix, slots + 2).take(slots + 2))
         }
+
+        // Tier 5: primary (en) fuzzy/proximity
+        if (primary != null && remaining() > 0 && threshold > 0) {
+            val enFuzzy = primaryFuzzy(prefix, threshold, primary)
+            addAll(enFuzzy.take(remaining()))
+        }
+
+        // Tier 6: secondary (hi) fuzzy/proximity
+        if (remaining() > 0 && threshold > 0) {
+            val secFuzzy = secondaryFuzzy(prefix, threshold, secondaries)
+            addAll(secFuzzy.take(remaining()))
+        }
+
         return merged.take(k)
     }
 
-    private fun fuzzyFill(word: String, threshold: Int, limit: Int): List<String> {
+    private fun primaryFuzzy(word: String, threshold: Int, primary: PackConfig): List<String> {
         val userFuzzy = BevaTrieSearch.search(userAdapter, word, threshold, Int.MAX_VALUE)
-        // Collect corrections from all packs; weight adjusts effective distance.
-        val allCorrections = packs.flatMap { pack ->
+        val enCorrections = primary.dict.correct(word, Int.MAX_VALUE)
+        return mergeByDistance(word, userFuzzy + enCorrections)
+    }
+
+    private fun secondaryFuzzy(word: String, threshold: Int, secondaries: List<PackConfig>): List<String> {
+        val corrections = secondaries.flatMap { pack ->
             pack.dict.correct(word, Int.MAX_VALUE).map { r ->
                 if (pack.weight >= 1.0f) r
                 else r.copy(weightedDistance = r.weightedDistance / pack.weight)
             }
         }
+        return mergeByDistance(word, corrections)
+    }
+
+    private fun mergeByDistance(word: String, results: List<FuzzyResult>): List<String> {
         val byWord = LinkedHashMap<String, FuzzyResult>()
-        for (r in userFuzzy + allCorrections) {
+        for (r in results) {
             val existing = byWord[r.word]
             if (existing == null || r.weightedDistance < existing.weightedDistance) byWord[r.word] = r
         }
@@ -136,7 +131,6 @@ class MergedSuggestionStrategy(
                 { -it.frequency },
             ))
             .map { it.word }
-            .take(limit)
     }
 
     private fun commonPrefixLength(a: String, b: String): Int {
