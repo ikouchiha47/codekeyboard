@@ -413,7 +413,7 @@ class CodeKeyboardIME : InputMethodService() {
                         val suggestions = if (word.startsWith(";")) {
                             SnippetStore.matching(word.drop(1))
                         } else {
-                            suggestionStrategy.suggest(word, 5, context = prevCommittedWord)
+                            suggestionStrategy.suggest(word, SuggestionStrategy.DEFAULT_SUGGESTION_COUNT, context = prevCommittedWord)
                         }
                         suggestionBar.update(word, suggestions)
                     }
@@ -537,7 +537,7 @@ class CodeKeyboardIME : InputMethodService() {
                         val suggestions = if (word.startsWith(";")) {
                             SnippetStore.matching(word.drop(1))
                         } else {
-                            suggestionStrategy.suggest(word, 5, context = prevCommittedWord)
+                            suggestionStrategy.suggest(word, SuggestionStrategy.DEFAULT_SUGGESTION_COUNT, context = prevCommittedWord)
                         }
                         suggestionBar.update(word, suggestions)
                     } else {
@@ -661,7 +661,7 @@ class CodeKeyboardIME : InputMethodService() {
         composing.setText(fragment)
         android.util.Log.d("CKB_COMPOSE", "recomposeWordAtCursor: composing.setText('$fragment') done, endBatchEdit next")
         ic.endBatchEdit()
-        val suggestions = suggestionStrategy.suggest(fragment, 5, context = prevCommittedWord)
+        val suggestions = suggestionStrategy.suggest(fragment, SuggestionStrategy.DEFAULT_SUGGESTION_COUNT, context = prevCommittedWord)
         suggestionBar.update(fragment, suggestions)
     }
 

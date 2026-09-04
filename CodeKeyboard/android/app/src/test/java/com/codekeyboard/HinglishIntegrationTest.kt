@@ -117,7 +117,7 @@ class HinglishIntegrationTest {
         )
         println("\n=== English fuzzy correction with en+hi strategy ===")
         for ((expected, typo) in cases) {
-            val suggestions = strategy.suggest(typo, 5)
+            val suggestions = strategy.suggest(typo, SuggestionStrategy.DEFAULT_SUGGESTION_COUNT)
             val found = expected in suggestions
             println("%-6s → %-6s  %s  %s".format(typo, expected, if (found) "✓" else "MISS", suggestions))
             assertTrue("'$expected' not found for typo '$typo': $suggestions", found)

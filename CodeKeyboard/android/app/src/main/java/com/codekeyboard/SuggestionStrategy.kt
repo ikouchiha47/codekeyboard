@@ -45,7 +45,10 @@ interface BigramProvider {
 }
 
 interface SuggestionStrategy {
-    fun suggest(prefix: String, k: Int, context: String = ""): List<String>
+    companion object {
+        const val DEFAULT_SUGGESTION_COUNT = 7
+    }
+    fun suggest(prefix: String, k: Int = DEFAULT_SUGGESTION_COUNT, context: String = ""): List<String>
 }
 
 class MergedSuggestionStrategy(
@@ -122,6 +125,7 @@ class MergedSuggestionStrategy(
         val byWord = LinkedHashMap<String, FuzzyResult>()
         for (r in results) {
             if (r.word in seen) continue
+            if (r.word.equals(word, ignoreCase = true)) continue
             // Skip prefix-extension relationships — exact suggest already covers these
             if (r.word.startsWith(word) || word.startsWith(r.word)) continue
             val existing = byWord[r.word]
