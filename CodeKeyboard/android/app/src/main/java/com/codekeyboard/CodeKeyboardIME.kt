@@ -49,6 +49,7 @@ class CodeKeyboardIME : InputMethodService() {
     private lateinit var packBigram: PackBackedBigramModel
     private lateinit var ngram: Ngram
     private var prevCommittedWord = ""
+    private var lastCommitTimeMs = 0L
     // Rolling window of recently committed words, sized off the cascade's
     // highest order (ADR-008) — feeds the trigram tier's 2-word context.
     private val recentContext = ArrayDeque<String>()
@@ -284,13 +285,6 @@ class CodeKeyboardIME : InputMethodService() {
         evaluateSentenceCase()
     }
 
-    override fun onCommitCorrection(info: android.view.inputmethod.CorrectionInfo) {
-        super.onCommitCorrection(info)
-        val typo = info.oldText?.toString()?.trim() ?: return
-        val correction = info.newText?.toString()?.trim() ?: return
-        if (!::correctionStore.isInitialized) return
-        correctionStore.record(typo, correction)
-    }
 
     override fun onFinishInput() {
         super.onFinishInput()
@@ -673,8 +667,12 @@ if (prevCommittedWord.isNotEmpty()) packBigram.recordTransition(prevCommittedWor
             LatchState.LATCHED -> rawWord.replaceFirstChar { it.uppercase() }
             LatchState.NONE    -> rawWord
         }
+        val typedRaw = composing.text.toString()
         ic.commitText("$word ", 1)
         composing.clear()
+        if (typedRaw.isNotBlank() && typedRaw.lowercase() != word.lowercase() && ::correctionStore.isInitialized) {
+            correctionStore.record(typedRaw, word)
+        }
         wordLearner.learnFromTap(word)
         kbState.onCharCommitted(word)
         evaluateSentenceCase()
