@@ -89,46 +89,49 @@ class MergedSuggestionStrategy(
 
         // Tier 5: primary (en) fuzzy/proximity
         if (primary != null && remaining() > 0 && threshold > 0) {
-            val enFuzzy = primaryFuzzy(prefix, threshold, primary)
+            val enFuzzy = primaryFuzzy(prefix, threshold, primary, seen)
             addAll(enFuzzy.take(remaining()))
         }
 
         // Tier 6: secondary (hi) fuzzy/proximity
         if (remaining() > 0 && threshold > 0) {
-            val secFuzzy = secondaryFuzzy(prefix, threshold, secondaries)
+            val secFuzzy = secondaryFuzzy(prefix, threshold, secondaries, seen)
             addAll(secFuzzy.take(remaining()))
         }
 
         return merged.take(k)
     }
 
-    private fun primaryFuzzy(word: String, threshold: Int, primary: PackConfig): List<String> {
+    private fun primaryFuzzy(word: String, threshold: Int, primary: PackConfig, seen: Set<String>): List<String> {
         val userFuzzy = BevaTrieSearch.search(userAdapter, word, threshold, Int.MAX_VALUE)
         val enCorrections = primary.dict.correct(word, Int.MAX_VALUE)
-        return mergeByDistance(word, userFuzzy + enCorrections)
+        return mergeByDistance(word, userFuzzy + enCorrections, seen)
     }
 
-    private fun secondaryFuzzy(word: String, threshold: Int, secondaries: List<PackConfig>): List<String> {
+    private fun secondaryFuzzy(word: String, threshold: Int, secondaries: List<PackConfig>, seen: Set<String>): List<String> {
         val corrections = secondaries.flatMap { pack ->
             pack.dict.correct(word, Int.MAX_VALUE).map { r ->
                 if (pack.weight >= 1.0f) r
                 else r.copy(weightedDistance = r.weightedDistance / pack.weight)
             }
         }
-        return mergeByDistance(word, corrections)
+        return mergeByDistance(word, corrections, seen)
     }
 
-    private fun mergeByDistance(word: String, results: List<FuzzyResult>): List<String> {
+    private fun mergeByDistance(word: String, results: List<FuzzyResult>, seen: Set<String> = emptySet()): List<String> {
         val byWord = LinkedHashMap<String, FuzzyResult>()
         for (r in results) {
+            if (r.word in seen) continue
+            // Skip prefix-extension relationships — exact suggest already covers these
+            if (r.word.startsWith(word) || word.startsWith(r.word)) continue
             val existing = byWord[r.word]
             if (existing == null || r.weightedDistance < existing.weightedDistance) byWord[r.word] = r
         }
         return byWord.values.toList()
             .sortedWith(compareBy(
                 { it.weightedDistance },
-                { -commonPrefixLength(word, it.word) },
                 { -it.frequency },
+                { -commonPrefixLength(word, it.word) },
             ))
             .map { it.word }
     }

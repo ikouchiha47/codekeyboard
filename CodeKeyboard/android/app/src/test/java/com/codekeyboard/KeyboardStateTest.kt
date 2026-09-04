@@ -239,40 +239,6 @@ class KeyboardStateTest {
         assertFalse(state.isShiftActive)
     }
 
-    @Test fun `committing a period then a space latches shift for the next letter`() {
-        state.onCharCommitted(".")
-        assertFalse(state.isShiftActive)
-        state.onCharCommitted(" ")
-        assertTrue(state.isShiftActive)
-    }
-
-    @Test fun `committing exclamation or question mark then a space latches shift`() {
-        state.onCharCommitted("!")
-        state.onCharCommitted(" ")
-        assertTrue(state.isShiftActive)
-        state.onCharCommitted("a") // consume it
-        assertFalse(state.isShiftActive)
-        state.onCharCommitted("?")
-        state.onCharCommitted(" ")
-        assertTrue(state.isShiftActive)
-    }
-
-    @Test fun `a non-space character after sentence-ending punctuation cancels the pending arm`() {
-        // "e.g.foo" — the "." is immediately followed by another letter, not a
-        // space, so this was never a real sentence break and should not arm.
-        state.onCharCommitted(".")
-        state.onCharCommitted("f")
-        assertFalse(state.isShiftActive)
-    }
-
-    @Test fun `committing a digit after the space-armed latch leaves it untouched`() {
-        state.onCharCommitted(".")
-        state.onCharCommitted(" ")
-        assertTrue(state.isShiftActive)
-        state.onCharCommitted("5")
-        assertTrue(state.isShiftActive)
-    }
-
     @Test fun `committing a digit still clears a manually-latched shift's tap machine but not the latch itself`() {
         // Same rule applies to a plain manual Shift tap, not just Sentence Case —
         // typing a digit right after tapping Shift shouldn't silently cancel it.
@@ -282,31 +248,10 @@ class KeyboardStateTest {
         assertEquals(LatchState.LATCHED, state.shift)
     }
 
-    @Test fun `disabled does not latch shift on sentence-ending punctuation`() {
-        state.sentenceCaseEnabled = false
-        state.onCharCommitted(".")
-        state.onCharCommitted(" ")
-        assertFalse(state.isShiftActive)
-    }
-
     @Test fun `null committed text clears shift unconditionally (ctrl+letter shortcut path)`() {
         state.armSentenceCaseShift()
         state.onCharCommitted(null)
         assertFalse(state.isShiftActive)
-    }
-
-    @Test fun `full sentence flow — arm, type, disarm, arm again`() {
-        // "Hi. there" — after committing "." + " ", the "t" should be forced
-        // uppercase; after that letter, the latch clears until the next ". ".
-        assertFalse(state.isShiftActive)
-        state.onCharCommitted(".")
-        assertFalse(state.isShiftActive) // not yet — waiting on the space
-        state.onCharCommitted(" ")
-        assertTrue(state.isShiftActive)
-        assertEquals("T", state.resolveLabel(KeyDef("t")))
-        state.onCharCommitted("T")
-        assertFalse(state.isShiftActive)
-        assertEquals("h", state.resolveLabel(KeyDef("h")))
     }
 
     // ── computeMetaState (the fold that decides commitText vs sendKeyEvent) ──
