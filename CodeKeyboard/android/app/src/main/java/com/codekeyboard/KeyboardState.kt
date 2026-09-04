@@ -180,8 +180,6 @@ class KeyboardState {
     // itself would capitalize text typed right after "." with no space
     // (e.g. mid-word in "e.g.foo") and made the Shift key visibly light up
     // before the sentence had actually ended.
-    private var pendingSentenceEnd = false
-
     /**
      * [committedText] is what was just sent to the input field (a single
      * character, or a whole flushed word). Pass null for commits that aren't
@@ -212,13 +210,6 @@ class KeyboardState {
         }
         _tap.values.forEach { it.reset() }
         layerTap.reset()
-
-        if (sentenceCaseEnabled && pendingSentenceEnd && committedChar == ' ' &&
-            _latch["shift"] == LatchState.NONE) {
-            _latch["shift"] = LatchState.LATCHED
-        }
-        pendingSentenceEnd = sentenceCaseEnabled && committedChar != null &&
-            (committedChar == '.' || committedChar == '!' || committedChar == '?')
     }
 
     /**
@@ -252,7 +243,6 @@ class KeyboardState {
         _hold.clear()
         _tap.values.forEach { it.reset() }
         layerTap.reset()
-        pendingSentenceEnd = false
     }
 
     // Layer tap machine (separate from modifier tap machines)

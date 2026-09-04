@@ -22,7 +22,6 @@ class CodeKeyboardIME : InputMethodService() {
         private const val IME_SELECTION_GUARD_MS = 200L
         // How far back to look for a sentence-ending "." "!" "?" when a field
         // gains focus, to decide whether Sentence Case should start armed.
-        private const val SENTENCE_CASE_SCAN_CHARS = 8
     }
 
     private lateinit var keyboardView: NativeKeyboardView
@@ -227,6 +226,7 @@ class CodeKeyboardIME : InputMethodService() {
         super.onUpdateSelection(oldSelStart, oldSelEnd, newSelStart, newSelEnd, candidatesStart, candidatesEnd)
         val imedriven = android.os.SystemClock.uptimeMillis() < expectSelectionUpdateBy
         android.util.Log.d("CKB_COMPOSE", "onUpdateSelection: composing='${composing.text}' sel=[$newSelStart,$newSelEnd] candidates=[$candidatesStart,$candidatesEnd] imeDriven=$imedriven")
+        if (!imedriven) evaluateSentenceCase()
         if (composing.text.isEmpty()) {
             android.util.Log.d("CKB_COMPOSE", "onUpdateSelection: composing empty, skip")
             return
@@ -279,15 +279,7 @@ class CodeKeyboardIME : InputMethodService() {
         if (::suggestionBar.isInitialized) suggestionBar.clear()
 
         kbState.sentenceCaseEnabled = KeyboardSettings.getBoolean("sentenceCase", true)
-        if (kbState.sentenceCaseEnabled && supportsComposing) {
-            val before = currentInputConnection?.getTextBeforeCursor(SENTENCE_CASE_SCAN_CHARS, 0)?.toString()
-            val atSentenceStart = when {
-                before == null -> true // no field content available — treat as start
-                before.isEmpty() -> true
-                else -> before.trimEnd().lastOrNull()?.let { it == '.' || it == '!' || it == '?' } ?: false
-            }
-            if (atSentenceStart) kbState.armSentenceCaseShift()
-        }
+        evaluateSentenceCase()
     }
 
     override fun onFinishInput() {
@@ -453,7 +445,9 @@ class CodeKeyboardIME : InputMethodService() {
 
             // ── Character keys ────────────────────────────────────────────────
             else -> {
-                val text = kbState.resolveLabel(key) ?: key.label
+                // Shortcodes (composing starts with ";") must never be capitalized.
+                val text = if (composing.text.startsWith(";")) key.label
+                           else kbState.resolveLabel(key) ?: key.label
                 if (text.isNotEmpty()) {
                     val metaState = kbState.computeMetaState(MODIFIER_META_FLAGS)
                     if (text.length == 1 && metaState != 0) {
@@ -509,9 +503,19 @@ class CodeKeyboardIME : InputMethodService() {
     // to commit directly via ic.commitText and skip this entirely, which
     // silently broke Sentence Case's arm-on-space logic since kbState never
     // even saw the space.
+    private fun evaluateSentenceCase() {
+        if (!kbState.sentenceCaseEnabled || !supportsComposing) return
+        val caps = currentInputConnection
+            ?.getCursorCapsMode(android.text.InputType.TYPE_TEXT_FLAG_CAP_SENTENCES) ?: 0
+        if (caps != 0) kbState.armSentenceCaseShift()
+        else if (kbState.shift == LatchState.LATCHED) kbState.onCharCommitted(null)
+        if (::keyboardView.isInitialized) keyboardView.notifyStateChanged(kbState)
+    }
+
     private fun commitCharAndNotify(ic: InputConnection?, text: String) {
         ic?.commitText(text, 1)
         kbState.onCharCommitted(text)
+        evaluateSentenceCase()
         keyboardView.notifyStateChanged(kbState)
     }
 
@@ -611,6 +615,7 @@ class CodeKeyboardIME : InputMethodService() {
             ic?.commitText(word, 1)
             wordLearner.learnFromFlush(word)
             kbState.onCharCommitted(word)
+            evaluateSentenceCase()
             keyboardView.notifyStateChanged(kbState)
             Metrics.histogram("keyboard.word.keystrokes", keystrokesSinceCommit.toDouble(),
                 "method" to "typed")
@@ -647,6 +652,7 @@ if (prevCommittedWord.isNotEmpty()) packBigram.recordTransition(prevCommittedWor
         composing.clear()
         wordLearner.learnFromTap(word)
         kbState.onCharCommitted(word)
+        evaluateSentenceCase()
         keyboardView.notifyStateChanged(kbState)
         Metrics.histogram("keyboard.word.keystrokes", keystrokesSinceCommit.toDouble(),
             "method" to "suggestion")
