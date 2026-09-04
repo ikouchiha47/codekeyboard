@@ -288,7 +288,8 @@ class EmojiPanelView(
             layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, barH + navPaddingPx)
             // Bottom padding = navBarHeight so ABC/backspace stay above the zone where
             // Android draws its system IME controls (globe, minimize/close).
-            setPadding((8 * dp).toInt(), 0, (8 * dp).toInt(), navPaddingPx)
+            // Top padding adds visual separation from the emoji grid.
+            setPadding((8 * dp).toInt(), 0, (16 * dp).toInt(), navPaddingPx)
         }
 
         // ABC button
@@ -315,7 +316,7 @@ class EmojiPanelView(
         val bkspBtn = TextView(context).apply {
             text = "⌫" // ⌫
             textSize = 20f
-            setTextColor(TEXT_GRAY)
+            setTextColor(theme.label)
             gravity = Gravity.CENTER
             isClickable = true
             isFocusable = false

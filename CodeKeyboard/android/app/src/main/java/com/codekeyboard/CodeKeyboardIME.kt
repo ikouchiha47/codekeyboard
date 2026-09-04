@@ -63,7 +63,7 @@ class CodeKeyboardIME : InputMethodService() {
             val wrapper = keyboardView.parent as? android.view.View
             val kbHeight = wrapper?.height
                 ?: (keyboardView.height + suggestionBar.height + getNavBarHeight())
-            val navPad = getNavBarHeight() + (12 * resources.displayMetrics.density).toInt()
+            val navPad = getNavBarHeight() + (32 * resources.displayMetrics.density).toInt()
 
             if (emojiPanel == null || emojiPanel?.tag != kbHeight) {
                 emojiPanel = EmojiPanelView(this, kbHeight, navPad).apply {
@@ -73,7 +73,7 @@ class CodeKeyboardIME : InputMethodService() {
                     }
                     onBackToKeyboard = { hideEmojiPanel() }
                     onDeletePressed = {
-                        currentInputConnection?.deleteSurroundingText(1, 0)
+                        deleteGraphemeClusterBefore(currentInputConnection)
                     }
                 }
             }
@@ -359,7 +359,7 @@ class CodeKeyboardIME : InputMethodService() {
                     }
                     else -> {
                         android.util.Log.d("CKB_COMPOSE", "backspace: composing empty → deleteSurroundingText then recompose")
-                        if (ic?.deleteSurroundingText(1, 0) != true) sendDownUp(ic, KeyEvent.KEYCODE_DEL)
+                        deleteGraphemeClusterBefore(ic)
                         recomposeWordAtCursor(ic)
                     }
                 }
@@ -510,6 +510,18 @@ class CodeKeyboardIME : InputMethodService() {
         if (caps != 0) kbState.armSentenceCaseShift()
         else if (kbState.shift == LatchState.LATCHED) kbState.onCharCommitted(null)
         if (::keyboardView.isInitialized) keyboardView.notifyStateChanged(kbState)
+    }
+
+    private fun deleteGraphemeClusterBefore(ic: InputConnection?) {
+        ic ?: return
+        val before = ic.getTextBeforeCursor(8, 0) ?: return
+        if (before.isEmpty()) { ic.deleteSurroundingText(1, 0); return }
+        val iter = java.text.BreakIterator.getCharacterInstance()
+        iter.setText(before.toString())
+        val end = before.length
+        val start = iter.preceding(end)
+        val count = if (start == java.text.BreakIterator.DONE) 1 else end - start
+        if (!ic.deleteSurroundingText(count, 0)) sendDownUp(ic, KeyEvent.KEYCODE_DEL)
     }
 
     private fun commitCharAndNotify(ic: InputConnection?, text: String) {
