@@ -32,6 +32,7 @@ class MergedSuggestionStrategy(
     private val userAdapter: UserTrieAdapter,
     private val baseAdapter: TrieAdapter<Int>,
     private val baseDict: PrefixDictionary,
+    private val correctionStore: UserCorrectionStore? = null,
 ) : SuggestionStrategy {
 
     override fun suggest(prefix: String, k: Int, context: String): List<String> {
@@ -43,7 +44,14 @@ class MergedSuggestionStrategy(
 
         val fuzzy = fuzzyFill(prefix, threshold, k - exact.size)
         val exactSet = exact.toSet()
-        return exact + fuzzy.filter { it !in exactSet }
+        val candidates = exact + fuzzy.filter { it !in exactSet }
+
+        // Prepend any stored correction for this exact typo (highest confidence).
+        val stored = correctionStore?.lookup(prefix)
+        return if (stored != null && stored !in exactSet)
+            listOf(stored) + candidates.filter { it != stored }.take(k - 1)
+        else
+            candidates
     }
 
     private fun exactSuggest(prefix: String, k: Int): List<String> {

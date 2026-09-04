@@ -26,12 +26,6 @@ class WordLearner(
         userTrie.insert(word)
     }
 
-    // Called when Android's spell checker applies a correction via onCommitCorrection.
-    // The corrected form is high-confidence so we learn it unconditionally.
-    fun learnFromCorrection(word: String) {
-        if (isLearnable(word)) userTrie.insert(word)
-    }
-
     private fun isLearnable(word: String) =
         word.length > 1 && !word.startsWith(";")
 }

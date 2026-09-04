@@ -30,6 +30,7 @@ class CodeKeyboardIME : InputMethodService() {
     private lateinit var userTrie: UserTrie
     private lateinit var suggestionStrategy: SuggestionStrategy
     private lateinit var wordLearner: WordLearner
+    private lateinit var correctionStore: UserCorrectionStore
     private val kbState = KeyboardState()
     private val composing = ComposingBuffer()
     // Captured from kbState.shift the moment the CURRENT composing word's
@@ -143,9 +144,10 @@ class CodeKeyboardIME : InputMethodService() {
         // Create adapters for fuzzy search
         val userAdapter = UserTrieAdapter(userTrie)
         val baseAdapter = wordDict.adapter
+        correctionStore = UserCorrectionStore(File(filesDir, "user_corrections.tsv"))
 
         suggestionStrategy = BigramAwareSuggestionStrategy(
-            MergedSuggestionStrategy(userAdapter, baseAdapter, wordDict), packBigram)
+            MergedSuggestionStrategy(userAdapter, baseAdapter, wordDict, correctionStore), packBigram)
         wordLearner = WordLearner(userTrie) { word -> wordDict.suggest(word, 1).firstOrNull() == word }
         Metrics.client = LogMetrics
     }
@@ -284,9 +286,10 @@ class CodeKeyboardIME : InputMethodService() {
 
     override fun onCommitCorrection(info: android.view.inputmethod.CorrectionInfo) {
         super.onCommitCorrection(info)
-        val corrected = info.newText?.toString()?.trim() ?: return
-        if (corrected.isBlank() || !::wordLearner.isInitialized) return
-        wordLearner.learnFromCorrection(corrected)
+        val typo = info.oldText?.toString()?.trim() ?: return
+        val correction = info.newText?.toString()?.trim() ?: return
+        if (!::correctionStore.isInitialized) return
+        correctionStore.record(typo, correction)
     }
 
     override fun onFinishInput() {
@@ -305,6 +308,9 @@ class CodeKeyboardIME : InputMethodService() {
         // Also persist the user-learned bigram layer
         if (::packBigram.isInitialized) {
             flushExecutor.submit { packBigram.persistUserLayer() }
+        }
+        if (::correctionStore.isInitialized) {
+            flushExecutor.submit { correctionStore.save() }
         }
     }
 
