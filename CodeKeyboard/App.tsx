@@ -632,7 +632,7 @@ function LanguagesScreen() {
       const next = {...prev, [lang]: !prev[lang]};
       const packs: SecondaryPack[] = AVAILABLE_SECONDARY_PACKS
         .filter(p => next[p.lang])
-        .map(p => ({lang: p.lang, maxOrder: p.maxOrder}));
+        .map(p => ({lang: p.lang, maxOrder: p.maxOrder, share: 0.3}));
       NativeModules.SettingsModule?.setString('secondary_languages', JSON.stringify(packs));
       return next;
     });

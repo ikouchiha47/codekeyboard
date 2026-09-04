@@ -1,5 +1,7 @@
 package com.codekeyboard
 
+import kotlin.math.roundToInt
+
 /**
  * Minimal interface for prefix-based word lookup.
  * Implemented by both [Trie] (legacy) and [WordDictionary] (pack-backed).
@@ -76,24 +78,31 @@ class MergedSuggestionStrategy(
         val userResults = userAdapter.suggest(prefix, k)
         val seen = userResults.toMutableSet()
         val merged = userResults.toMutableList()
+        if (merged.size >= k) return merged.take(k)
 
-        val remaining = (k - userResults.size).coerceAtLeast(0)
-        if (remaining == 0) return merged.take(k)
+        // Each secondary pack's share is a direct fraction of k (e.g. 0.3 = 30% of k slots).
+        // Primary gets whatever remains after secondaries. Changing k auto-scales everything.
+        val secondaries = packs.drop(1)
+        val primary = packs.firstOrNull() ?: return merged.take(k)
 
-        val totalShare = packs.sumOf { it.share.toDouble() }.toFloat().coerceAtLeast(0.001f)
-        // Collect results per pack with their slot allocation.
-        val slotted = packs.map { pack ->
-            val slots = ((pack.share / totalShare) * remaining).toInt().coerceAtLeast(if (pack.share > 0f) 1 else 0)
-            pack.dict.suggest(prefix, slots + 2) to slots
+        val secondarySlots = secondaries.map { pack ->
+            pack to (pack.share * k).roundToInt().coerceAtLeast(if (pack.share > 0f) 1 else 0)
         }
-        for ((results, slots) in slotted) {
+        val primarySlots = (k - secondarySlots.sumOf { it.second }).coerceAtLeast(1)
+
+        // Fill primary slots first, then each secondary's slots.
+        fun fillSlots(dict: PrefixDictionary, slots: Int) {
             var filled = 0
-            for (w in results) {
-                if (filled >= slots) break
+            for (w in dict.suggest(prefix, slots + 2)) {
+                if (filled >= slots || merged.size >= k) break
                 if (seen.add(w)) { merged.add(w); filled++ }
             }
         }
-        // Backfill to k from all packs (primary first) if slots weren't fully used.
+
+        fillSlots(primary.dict, primarySlots)
+        for ((pack, slots) in secondarySlots) fillSlots(pack.dict, slots)
+
+        // Backfill any unused slots from all packs (primary first).
         if (merged.size < k) {
             for (pack in packs) {
                 if (merged.size >= k) break
