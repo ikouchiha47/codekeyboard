@@ -31,8 +31,8 @@ class HinglishIntegrationTest {
             UserTrieAdapter(UserTrie()),
             enDict.adapter,
             listOf(
-                PackConfig("en", enDict, weight = 1.0f, maxOrder = 3),
-                PackConfig("hi", hiDict, weight = 0.8f, maxOrder = 1),
+                PackConfig("en", enDict, weight = 1.0f, share = 1.0f, maxOrder = 3),
+                PackConfig("hi", hiDict, weight = 0.8f, share = 0.3f, maxOrder = 1),
             ),
         )
     }

@@ -30,6 +30,7 @@ data class PackConfig(
     val lang: String,
     val dict: PrefixDictionary,
     val weight: Float = 1.0f,
+    val share: Float = 1.0f,
     val maxOrder: Int = 3,
 )
 
@@ -75,12 +76,31 @@ class MergedSuggestionStrategy(
         val userResults = userAdapter.suggest(prefix, k)
         val seen = userResults.toMutableSet()
         val merged = userResults.toMutableList()
-        // Packs ordered by weight descending; higher-weight results appear first.
-        for (pack in packs.sortedByDescending { it.weight }) {
-            val packResults = pack.dict.suggest(prefix, k)
-            for (w in packResults) {
-                if (seen.add(w)) merged.add(w)
-                if (merged.size >= k) return merged
+
+        val remaining = (k - userResults.size).coerceAtLeast(0)
+        if (remaining == 0) return merged.take(k)
+
+        val totalShare = packs.sumOf { it.share.toDouble() }.toFloat().coerceAtLeast(0.001f)
+        // Collect results per pack with their slot allocation.
+        val slotted = packs.map { pack ->
+            val slots = ((pack.share / totalShare) * remaining).toInt().coerceAtLeast(if (pack.share > 0f) 1 else 0)
+            pack.dict.suggest(prefix, slots + 2) to slots
+        }
+        for ((results, slots) in slotted) {
+            var filled = 0
+            for (w in results) {
+                if (filled >= slots) break
+                if (seen.add(w)) { merged.add(w); filled++ }
+            }
+        }
+        // Backfill to k from all packs (primary first) if slots weren't fully used.
+        if (merged.size < k) {
+            for (pack in packs) {
+                if (merged.size >= k) break
+                for (w in pack.dict.suggest(prefix, k)) {
+                    if (merged.size >= k) break
+                    if (seen.add(w)) merged.add(w)
+                }
             }
         }
         return merged.take(k)

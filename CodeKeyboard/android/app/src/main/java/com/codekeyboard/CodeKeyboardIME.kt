@@ -17,6 +17,12 @@ class CodeKeyboardIME : InputMethodService() {
     companion object {
         // Longest plausible English word is 45 chars; 50 gives a safe margin.
         private const val RECOMPOSE_SCAN_CHARS = 50
+        // Default fuzzy-correction ranking weight for secondary packs (vs primary=1.0).
+        // Lower = secondary corrections ranked below primary when edit distances tie.
+        const val SECONDARY_DEFAULT_WEIGHT = 0.8f
+        // Default fraction of exact suggestion slots for secondary packs.
+        // e.g. 0.3 = 1-2 of 5 slots reserved for secondary; rest filled by primary.
+        const val SECONDARY_DEFAULT_SHARE = 0.3f
         // Guard window: onUpdateSelection arrivals within this many ms of a
         // recompose are treated as IME-driven, not user cursor moves.
         private const val IME_SELECTION_GUARD_MS = 200L
@@ -300,7 +306,11 @@ class CodeKeyboardIME : InputMethodService() {
      *
      * The primary pack (matching [primaryLocale]) is always weight=1.0 / maxOrder=3.
      * Additional packs come from the "secondary_languages" SharedPreferences setting —
-     * a JSON array of objects: [{"lang":"hi","weight":0.8,"maxOrder":1}, ...].
+     * a JSON array of objects: [{"lang":"hi","weight":0.8,"share":0.3,"maxOrder":1}, ...].
+     *
+     * Defaults when a field is absent from the JSON:
+     *   SECONDARY_DEFAULT_WEIGHT — fuzzy correction ranking relative to primary
+     *   SECONDARY_DEFAULT_SHARE  — fraction of exact suggestion slots reserved for this pack
      * Packs whose .cklm asset is missing are silently skipped.
      */
     private fun buildPackList(
@@ -319,7 +329,8 @@ class CodeKeyboardIME : InputMethodService() {
             val obj = entries.optJSONObject(i) ?: continue
             val lang = obj.optString("lang").takeIf { it.isNotBlank() } ?: continue
             if (lang == primaryLocale) continue
-            val weight = obj.optDouble("weight", 0.8).toFloat().coerceIn(0.01f, 2.0f)
+            val weight   = obj.optDouble("weight", SECONDARY_DEFAULT_WEIGHT.toDouble()).toFloat().coerceIn(0.01f, 2.0f)
+            val share    = obj.optDouble("share",  SECONDARY_DEFAULT_SHARE.toDouble()).toFloat().coerceIn(0.01f, 1.0f)
             val maxOrder = obj.optInt("maxOrder", 1).coerceIn(1, 3)
             try {
                 val assetName = "$lang.cklm"
@@ -330,7 +341,7 @@ class CodeKeyboardIME : InputMethodService() {
                 }
                 val secPack = LanguagePack.open(packFile)
                 val secDict = WordDictionary(secPack)
-                result.add(PackConfig(lang, secDict, weight, maxOrder))
+                result.add(PackConfig(lang, secDict, weight, share, maxOrder))
             } catch (_: Exception) { /* asset missing — skip */ }
         }
         return result
