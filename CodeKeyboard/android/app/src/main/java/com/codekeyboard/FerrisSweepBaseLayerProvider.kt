@@ -91,7 +91,7 @@ class FerrisSweepBaseLayerProvider : BaseLayerProvider<FerrisSweepLayerData> {
             // route, same pattern as !@#$ getting bare-tap copies below.
             // The duplicate ' that used to sit here (also at left row-2) is gone.
             listOf(k("/", shift="?"), k(":", shift=";"), k("?"), k("<", shift=","), k(">", shift=".")),
-            listOf(k("!"), k("@"), k("#"), k("$"), k("Del","delete")),
+            listOf(k("!"), k("@"), k("#"), k("$"), k("Bksp","backspace", shift="delete")),
         ),
         thumbL = listOf(k("Spc","space"), k("LWR","lower", hold="lower")),
         thumbR = listOf(k("RSE","raise", hold="raise"), k("Enter","enter")),

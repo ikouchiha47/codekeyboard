@@ -78,7 +78,7 @@ object SofleKeyData {
                    k("9", shift="("), k("0", shift=")")),
             listOf(k("/", shift="?"), k(":", shift=";"), k("'", shift="\""),
                    k("<", shift=","), k(">", shift=".")),
-            listOf(k("!"), k("@"), k("#"), k("$"), k("Del","delete")),
+            listOf(k("!"), k("@"), k("#"), k("$"), k("Bksp","backspace", shift="delete")),
             listOf(k("RSE","raise", hold="raise"), k("Enter","enter"), k("Spc","space"),
                    k("FUNC","func", hold="func"),  k("ADJ","adj", hold="adj"))
         )
