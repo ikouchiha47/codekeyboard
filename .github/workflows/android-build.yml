@@ -23,8 +23,10 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
+      # v3 pins cmdline-tools pre-20 and tries to repair a version mismatch with
+      # `sdkmanager tools`, which Google removed — failing the job before build.
       - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4
 
       - name: Cache Gradle (wrapper + dependencies)
         uses: actions/cache@v4
