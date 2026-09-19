@@ -606,7 +606,12 @@ function ThemesScreen() {
 
 // ── Languages screen ──────────────────────────────────────────────────────────
 
-type SecondaryPack = {lang: string; weight: number; maxOrder: number};
+// Field set and defaults must match the native reader in
+// CodeKeyboardIME.buildPackList() — SECONDARY_DEFAULT_WEIGHT / SECONDARY_DEFAULT_SHARE.
+type SecondaryPack = {lang: string; weight: number; share: number; maxOrder: number};
+
+const SECONDARY_DEFAULT_WEIGHT = 0.8;
+const SECONDARY_DEFAULT_SHARE = 0.3;
 
 const AVAILABLE_SECONDARY_PACKS: {lang: string; label: string; maxOrder: number}[] = [
   {lang: 'hi', label: 'Hinglish (hi)', maxOrder: 1},
@@ -632,7 +637,12 @@ function LanguagesScreen() {
       const next = {...prev, [lang]: !prev[lang]};
       const packs: SecondaryPack[] = AVAILABLE_SECONDARY_PACKS
         .filter(p => next[p.lang])
-        .map(p => ({lang: p.lang, maxOrder: p.maxOrder, share: 0.3}));
+        .map(p => ({
+          lang: p.lang,
+          weight: SECONDARY_DEFAULT_WEIGHT,
+          maxOrder: p.maxOrder,
+          share: SECONDARY_DEFAULT_SHARE,
+        }));
       NativeModules.SettingsModule?.setString('secondary_languages', JSON.stringify(packs));
       return next;
     });

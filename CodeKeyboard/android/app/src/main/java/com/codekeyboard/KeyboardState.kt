@@ -38,6 +38,9 @@ class KeyboardState {
         "alt"   to LatchState.NONE,
     )
     private val _hold = mutableSetOf<String>()
+    // True only when the current shift latch was set by the user (tap/double-tap),
+    // not auto-armed by Sentence Case. Guards Shift+Enter from firing on auto-cap.
+    private var shiftExplicitlySet = false
     private val _tap  = mapOf(
         "shift" to TapMachine(),
         "ctrl"  to TapMachine(),
@@ -59,6 +62,9 @@ class KeyboardState {
         (_latch[name] ?: LatchState.NONE) != LatchState.NONE || name in _hold
 
     val isShiftActive: Boolean get() = isModifierActive("shift")
+    /** Shift active AND user-set — auto-armed Sentence Case Shift does not count. */
+    val isExplicitShiftActive: Boolean
+        get() = shiftHeld || (_latch["shift"] != LatchState.NONE && shiftExplicitlySet)
     val isCtrlActive:  Boolean get() = isModifierActive("ctrl")
     val isAltActive:   Boolean get() = isModifierActive("alt")
     val isMetaActive:  Boolean get() = "meta" in _hold
@@ -105,6 +111,7 @@ class KeyboardState {
                 }
             }
         }
+        if (name == "shift") shiftExplicitlySet = _latch["shift"] != LatchState.NONE
     }
 
     // ── Layer cycling (stays special — layers switch, not just toggle) ──
@@ -199,6 +206,7 @@ class KeyboardState {
 
         if (clearShift && _latch["shift"] == LatchState.LATCHED) {
             _latch["shift"] = LatchState.NONE
+            shiftExplicitlySet = false
         }
         for (name in CYCLE_MODIFIERS) {
             if (name == "shift") continue
@@ -221,6 +229,7 @@ class KeyboardState {
     fun armSentenceCaseShift() {
         if (sentenceCaseEnabled && _latch["shift"] == LatchState.NONE) {
             _latch["shift"] = LatchState.LATCHED
+            shiftExplicitlySet = false
         }
     }
 
@@ -239,6 +248,7 @@ class KeyboardState {
         layerState = LatchState.NONE
         layerHeld  = null
         heldKeyLabel = null
+        shiftExplicitlySet = false
         for (key in _latch.keys) _latch[key] = LatchState.NONE
         _hold.clear()
         _tap.values.forEach { it.reset() }

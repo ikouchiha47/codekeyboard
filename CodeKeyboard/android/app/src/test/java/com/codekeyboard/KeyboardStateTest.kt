@@ -254,6 +254,47 @@ class KeyboardStateTest {
         assertFalse(state.isShiftActive)
     }
 
+    // ── Explicit (user-set) shift vs auto-armed Sentence Case shift ────────────
+
+    @Test fun `sentence-case armed shift is not explicit`() {
+        state.armSentenceCaseShift()
+        assertTrue(state.isShiftActive)
+        assertFalse(state.isExplicitShiftActive)
+    }
+
+    @Test fun `user tap of shift is explicit`() {
+        state.cycleModifier("shift")
+        assertTrue(state.isExplicitShiftActive)
+    }
+
+    @Test fun `null committed text clears a latched explicit shift`() {
+        state.cycleModifier("shift")
+        assertTrue(state.isExplicitShiftActive)
+        state.onCharCommitted(null)
+        assertFalse(state.isExplicitShiftActive)
+    }
+
+    @Test fun `locked shift stays explicit after char committed`() {
+        state.cycleModifier("shift") // LATCHED
+        state.cycleModifier("shift") // double-tap -> LOCKED
+        state.onCharCommitted("a")
+        assertTrue(state.isExplicitShiftActive)
+    }
+
+    @Test fun `held shift is explicit`() {
+        state.applyHold("shift")
+        assertTrue(state.isExplicitShiftActive)
+        state.releaseHold("shift")
+        assertFalse(state.isExplicitShiftActive)
+    }
+
+    @Test fun `reset clears explicit shift`() {
+        state.cycleModifier("shift")
+        assertTrue(state.isExplicitShiftActive)
+        state.reset()
+        assertFalse(state.isExplicitShiftActive)
+    }
+
     // ── computeMetaState (the fold that decides commitText vs sendKeyEvent) ──
 
     // Use arbitrary bit flags so the test stays pure-Kotlin (no Android import).

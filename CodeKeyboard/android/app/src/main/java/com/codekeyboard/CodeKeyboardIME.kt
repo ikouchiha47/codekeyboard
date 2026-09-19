@@ -432,14 +432,26 @@ class CodeKeyboardIME : InputMethodService() {
 
             // ── Other action keys ─────────────────────────────────────────────
             "enter" -> {
+                // Capture Shift before flushComposing — its onCharCommitted can clear a
+                // latched Shift before the Enter logic reads it.
+                val explicitShift = kbState.isExplicitShiftActive
                 flushComposing(ic)
-                val editorInfo = currentInputEditorInfo
-                val action = editorInfo?.let { it.imeOptions and EditorInfo.IME_MASK_ACTION } ?: EditorInfo.IME_ACTION_UNSPECIFIED
-                val noEnterAction = editorInfo?.let { it.imeOptions and EditorInfo.IME_FLAG_NO_ENTER_ACTION } ?: 0
-                if (noEnterAction != 0 || action == EditorInfo.IME_ACTION_UNSPECIFIED || action == EditorInfo.IME_ACTION_NONE) {
-                    sendDownUp(ic, KeyEvent.KEYCODE_ENTER)
-                } else {
-                    if (ic?.performEditorAction(action) != true) sendDownUp(ic, KeyEvent.KEYCODE_ENTER)
+                val info = currentInputEditorInfo
+                val inputType = info?.inputType ?: 0
+                val imeOptions = info?.imeOptions ?: 0
+                val action = imeOptions and EditorInfo.IME_MASK_ACTION
+                when (resolveEnterIntent(inputType, imeOptions, explicitShift)) {
+                    EnterIntent.LINE_BREAK -> {
+                        ic?.commitText("\n", 1)
+                        // Consume the one-shot Shift, then re-arm Sentence Case for the new line.
+                        kbState.onCharCommitted(null)
+                        evaluateSentenceCase()
+                        keyboardView.notifyStateChanged(kbState)
+                    }
+                    EnterIntent.EDITOR_ACTION -> {
+                        if (ic?.performEditorAction(action) != true) sendDownUp(ic, KeyEvent.KEYCODE_ENTER)
+                    }
+                    EnterIntent.KEY_ENTER -> sendDownUp(ic, KeyEvent.KEYCODE_ENTER)
                 }
             }
             "tab"         -> { flushComposing(ic); sendDownUp(ic, KeyEvent.KEYCODE_TAB) }
